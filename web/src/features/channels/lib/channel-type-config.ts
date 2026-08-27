@@ -46,41 +46,13 @@ export interface ChannelTypeConfig {
  * Configuration for each channel type
  */
 export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
-  1: {
-    id: 1,
-    name: CHANNEL_TYPES[1],
-    icon: 'openai',
-    defaultBaseUrl: 'https://api.openai.com',
-    requiresOrganization: true,
+  17: {
+    id: 17,
+    name: CHANNEL_TYPES[17],
+    icon: 'alibaba',
     hints: {
-      baseUrl: 'Default: https://api.openai.com',
-      key: 'Format: sk-...',
-      models: 'gpt-4,gpt-4-turbo,gpt-3.5-turbo',
-    },
-    validation: {
-      keyFormat: /^sk-/,
-      keyMinLength: 20,
-    },
-  },
-  3: {
-    id: 3,
-    name: CHANNEL_TYPES[3],
-    icon: 'azure',
-    requiresRegion: true,
-    hints: {
-      baseUrl: 'Azure OpenAI Endpoint',
-      key: 'Azure API Key',
-      models: 'Deployment names',
-    },
-  },
-  14: {
-    id: 14,
-    name: CHANNEL_TYPES[14],
-    icon: 'anthropic',
-    defaultBaseUrl: 'https://api.anthropic.com',
-    hints: {
-      key: 'Format: sk-ant-...',
-      models: 'claude-3-opus,claude-3-sonnet,claude-3-haiku',
+      key: 'DashScope API Key',
+      models: 'Wanxiang / video task models',
     },
   },
   24: {
@@ -89,7 +61,25 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
     icon: 'google',
     hints: {
       key: 'Google API Key',
-      models: 'gemini-pro,gemini-pro-vision',
+      models: 'Veo / Gemini video task models',
+    },
+  },
+  35: {
+    id: 35,
+    name: CHANNEL_TYPES[35],
+    icon: 'minimax',
+    hints: {
+      key: 'MiniMax API Key',
+      models: 'Hailuo video models',
+    },
+  },
+  36: {
+    id: 36,
+    name: CHANNEL_TYPES[36],
+    icon: 'suno',
+    hints: {
+      key: 'Suno API Key',
+      models: 'Suno music models',
     },
   },
   41: {
@@ -99,69 +89,27 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
     requiresRegion: true,
     hints: {
       key: 'Service account JSON or API key',
-      models: 'gemini-pro,gemini-1.5-pro',
+      models: 'Vertex video models',
       other: 'Region config: {"default": "us-central1"}',
     },
   },
-  43: {
-    id: 43,
-    name: CHANNEL_TYPES[43],
-    icon: 'deepseek',
-    defaultBaseUrl: 'https://api.deepseek.com',
+  45: {
+    id: 45,
+    name: CHANNEL_TYPES[45],
+    icon: 'volcengine',
     hints: {
-      key: 'DeepSeek API Key',
-      models: 'deepseek-chat,deepseek-coder',
+      key: 'VolcEngine API Key',
+      models: 'Doubao video models',
     },
   },
-  20: {
-    id: 20,
-    name: CHANNEL_TYPES[20],
-    icon: 'openrouter',
-    defaultBaseUrl: 'https://openrouter.ai/api',
+  61: {
+    id: 61,
+    name: CHANNEL_TYPES[61],
+    icon: 'OpenAI',
     hints: {
-      key: 'OpenRouter API Key',
-      models: 'Use model IDs from OpenRouter',
-    },
-  },
-  56: {
-    id: 56,
-    name: CHANNEL_TYPES[56],
-    icon: 'replicate',
-    defaultBaseUrl: 'https://api.replicate.com',
-    hints: {
-      key: 'Replicate API Token',
-      models: 'Replicate model IDs',
-      baseUrl: 'Default: https://api.replicate.com',
-    },
-  },
-  58: {
-    id: 58,
-    name: CHANNEL_TYPES[58],
-    icon: 'newapi',
-    hints: {
-      baseUrl: 'Fallback base URL',
-      key: 'Used by route auth templates',
-      models: 'Models exposed by this channel',
-    },
-  },
-  59: {
-    id: 59,
-    name: CHANNEL_TYPES[59],
-    icon: 'Sub2API',
-    hints: {
-      baseUrl: 'Sub2API gateway base URL',
-      key: 'Sub2API API Key',
-      models: 'Models fetched from upstream /v1/models',
-    },
-  },
-  60: {
-    id: 60,
-    name: CHANNEL_TYPES[60],
-    icon: 'NewAPI',
-    hints: {
-      baseUrl: 'Base URL is required for this channel type',
-      key: 'Enter API key for this channel',
-      models: 'Models',
+      baseUrl: 'Bifrost gateway base URL, without a trailing /v1',
+      key: 'Bifrost API Key',
+      models: 'Models from upstream /v1/models',
     },
   },
 }

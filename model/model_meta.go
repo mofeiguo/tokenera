@@ -1,6 +1,8 @@
 package model
 
 import (
+	"database/sql/driver"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -17,23 +19,129 @@ const (
 )
 
 type BoundChannel struct {
-	Name string `json:"name"`
-	Type int    `json:"type"`
+	Id            int    `json:"id"`
+	Name          string `json:"name"`
+	Type          int    `json:"type"`
+	UpstreamModel string `json:"upstream_model"`
+	Enabled       bool   `json:"enabled"`
+}
+
+type CatalogStringList []string
+
+var allowedInputModalities = map[string]struct{}{
+	"text": {}, "image": {}, "audio": {}, "video": {}, "file": {},
+}
+
+var allowedOutputModalities = map[string]struct{}{
+	"text": {}, "image": {}, "audio": {}, "video": {}, "file": {},
+}
+
+var allowedModelCapabilities = map[string]struct{}{
+	"function_calling": {}, "streaming": {}, "json_mode": {}, "structured_output": {},
+	"reasoning": {}, "tools": {}, "system_prompt": {}, "web_search": {},
+	"code_interpreter": {}, "caching": {}, "embeddings": {},
+}
+
+func (list *CatalogStringList) Scan(value any) error {
+	if value == nil {
+		*list = CatalogStringList{}
+		return nil
+	}
+	var data []byte
+	switch v := value.(type) {
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
+		return fmt.Errorf("unsupported catalog list type %T", value)
+	}
+	if len(data) == 0 {
+		*list = CatalogStringList{}
+		return nil
+	}
+	return common.Unmarshal(data, list)
+}
+
+func (list CatalogStringList) Value() (driver.Value, error) {
+	if list == nil {
+		list = CatalogStringList{}
+	}
+	data, err := common.Marshal(list)
+	return string(data), err
+}
+
+func normalizeCatalogStringList(values CatalogStringList, allowed map[string]struct{}, field string) (CatalogStringList, error) {
+	seen := make(map[string]struct{}, len(values))
+	normalized := make(CatalogStringList, 0, len(values))
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value == "" {
+			continue
+		}
+		if _, ok := allowed[value]; !ok {
+			return nil, fmt.Errorf("%s contains unsupported value %q", field, value)
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	return normalized, nil
+}
+
+func (mi *Model) NormalizeCatalogMetadata() error {
+	var err error
+	mi.InputModalities, err = normalizeCatalogStringList(mi.InputModalities, allowedInputModalities, "input_modalities")
+	if err != nil {
+		return err
+	}
+	mi.OutputModalities, err = normalizeCatalogStringList(mi.OutputModalities, allowedOutputModalities, "output_modalities")
+	if err != nil {
+		return err
+	}
+	mi.Capabilities, err = normalizeCatalogStringList(mi.Capabilities, allowedModelCapabilities, "capabilities")
+	if err != nil {
+		return err
+	}
+	if mi.ContextLength < 0 {
+		return fmt.Errorf("context_length must be non-negative")
+	}
+	if mi.MaxOutputTokens < 0 {
+		return fmt.Errorf("max_output_tokens must be non-negative")
+	}
+	return nil
 }
 
 type Model struct {
-	Id           int            `json:"id"`
-	ModelName    string         `json:"model_name" gorm:"size:128;not null;uniqueIndex:uk_model_name_delete_at,priority:1"`
-	Description  string         `json:"description,omitempty" gorm:"type:text"`
-	Icon         string         `json:"icon,omitempty" gorm:"type:varchar(128)"`
-	Tags         string         `json:"tags,omitempty" gorm:"type:varchar(255)"`
-	VendorID     int            `json:"vendor_id,omitempty" gorm:"index"`
-	Endpoints    string         `json:"endpoints,omitempty" gorm:"type:text"`
-	Status       int            `json:"status" gorm:"default:1"`
-	SyncOfficial int            `json:"sync_official" gorm:"default:1"`
-	CreatedTime  int64          `json:"created_time" gorm:"bigint"`
-	UpdatedTime  int64          `json:"updated_time" gorm:"bigint"`
-	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index;uniqueIndex:uk_model_name_delete_at,priority:2"`
+	Id                   int               `json:"id"`
+	ModelName            string            `json:"model_name" gorm:"size:128;not null;uniqueIndex:uk_model_name_delete_at,priority:1"`
+	Description          string            `json:"description,omitempty" gorm:"type:text"`
+	Icon                 string            `json:"icon,omitempty" gorm:"type:varchar(128)"`
+	Tags                 string            `json:"tags,omitempty" gorm:"type:varchar(255)"`
+	VendorID             int               `json:"vendor_id,omitempty" gorm:"index"`
+	Endpoints            string            `json:"endpoints,omitempty" gorm:"type:text"`
+	InputModalities      CatalogStringList `json:"input_modalities" gorm:"type:text"`
+	OutputModalities     CatalogStringList `json:"output_modalities" gorm:"type:text"`
+	Capabilities         CatalogStringList `json:"capabilities" gorm:"type:text"`
+	ContextLength        int               `json:"context_length"`
+	MaxOutputTokens      int               `json:"max_output_tokens"`
+	PricingMode          string            `json:"pricing_mode,omitempty" gorm:"type:varchar(32)"`
+	PricingSource        string            `json:"-" gorm:"type:varchar(32)"`
+	ModelPrice           *float64          `json:"model_price,omitempty"`
+	ModelRatio           *float64          `json:"model_ratio,omitempty"`
+	CompletionRatio      *float64          `json:"completion_ratio,omitempty"`
+	CacheRatio           *float64          `json:"cache_ratio,omitempty"`
+	CreateCacheRatio     *float64          `json:"create_cache_ratio,omitempty"`
+	ImageRatio           *float64          `json:"image_ratio,omitempty"`
+	AudioRatio           *float64          `json:"audio_ratio,omitempty"`
+	AudioCompletionRatio *float64          `json:"audio_completion_ratio,omitempty"`
+	Status               int               `json:"status" gorm:"default:1"`
+	SyncOfficial         int               `json:"sync_official" gorm:"default:1"`
+	CreatedTime          int64             `json:"created_time" gorm:"bigint"`
+	UpdatedTime          int64             `json:"updated_time" gorm:"bigint"`
+	DeletedAt            gorm.DeletedAt    `json:"-" gorm:"index;uniqueIndex:uk_model_name_delete_at,priority:2"`
 
 	BoundChannels []BoundChannel `json:"bound_channels,omitempty" gorm:"-"`
 	EnableGroups  []string       `json:"enable_groups,omitempty" gorm:"-"`
@@ -76,14 +184,77 @@ func IsModelNameDuplicated(id int, name string) (bool, error) {
 
 func (mi *Model) Update() error {
 	mi.UpdatedTime = common.GetTimestamp()
-	// 使用 Select 强制更新所有字段，包括零值
-	return DB.Model(&Model{}).Where("id = ?", mi.Id).
-		Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "updated_time").
-		Updates(mi).Error
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var previous Model
+		if err := tx.Select("model_name").First(&previous, mi.Id).Error; err != nil {
+			return err
+		}
+		if mi.NameRule != NameRuleExact {
+			var bindingCount int64
+			if err := tx.Model(&ModelBinding{}).Where("model_id = ? AND deleted = ?", mi.Id, false).Count(&bindingCount).Error; err != nil {
+				return err
+			}
+			if bindingCount > 0 {
+				return fmt.Errorf("only exact catalog models can have channel bindings")
+			}
+		}
+		// 使用 Select 强制更新所有字段，包括零值
+		if err := tx.Model(&Model{}).Where("id = ?", mi.Id).
+			Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "input_modalities", "output_modalities", "capabilities", "context_length", "max_output_tokens", "pricing_mode", "pricing_source", "model_price", "model_ratio", "completion_ratio", "cache_ratio", "create_cache_ratio", "image_ratio", "audio_ratio", "audio_completion_ratio", "status", "sync_official", "name_rule", "updated_time").
+			Updates(mi).Error; err != nil {
+			return err
+		}
+		if previous.ModelName == mi.ModelName {
+			return nil
+		}
+		var channelIDs []int
+		if err := tx.Model(&ModelBinding{}).
+			Where("model_id = ? AND deleted = ?", mi.Id, false).
+			Distinct("channel_id").
+			Pluck("channel_id", &channelIDs).Error; err != nil {
+			return err
+		}
+		if len(channelIDs) == 0 {
+			return nil
+		}
+		var channels []Channel
+		if err := tx.Select("id", "models").Where("id IN ?", channelIDs).Find(&channels).Error; err != nil {
+			return err
+		}
+		for i := range channels {
+			modelNames := strings.Split(channels[i].Models, ",")
+			changed := false
+			for j := range modelNames {
+				if strings.TrimSpace(modelNames[j]) == previous.ModelName {
+					modelNames[j] = mi.ModelName
+					changed = true
+				}
+			}
+			if changed {
+				if err := tx.Model(&Channel{}).Where("id = ?", channels[i].Id).
+					Update("models", strings.Join(modelNames, ",")).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func (mi *Model) Delete() error {
-	return DB.Delete(mi).Error
+	var boundCount int64
+	if err := DB.Model(&ModelBinding{}).Where("model_id = ? AND deleted = ?", mi.Id, false).Count(&boundCount).Error; err != nil {
+		return err
+	}
+	if boundCount > 0 {
+		return fmt.Errorf("model %s is still bound to %d channel models", mi.ModelName, boundCount)
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("model_id = ?", mi.Id).Delete(&ModelBinding{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(mi).Error
+	})
 }
 
 func GetVendorModelCounts() (map[int64]int64, error) {
@@ -109,28 +280,96 @@ func GetAllModels(offset int, limit int) ([]*Model, error) {
 	return models, err
 }
 
+func GetExactCatalogModelNames() ([]string, error) {
+	var modelNames []string
+	err := DB.Model(&Model{}).
+		Where("name_rule = ?", NameRuleExact).
+		Order("model_name ASC").
+		Pluck("model_name", &modelNames).Error
+	return modelNames, err
+}
+
+func EnsureCatalogModels(modelNames []string) ([]string, error) {
+	modelNames = normalizeLookupValues(modelNames)
+	if len(modelNames) == 0 {
+		return nil, nil
+	}
+
+	var existing []string
+	if err := DB.Model(&Model{}).Where("model_name IN ?", modelNames).Pluck("model_name", &existing).Error; err != nil {
+		return nil, err
+	}
+	existingSet := make(map[string]struct{}, len(existing))
+	for _, modelName := range existing {
+		existingSet[modelName] = struct{}{}
+	}
+
+	missing := make([]string, 0)
+	for _, modelName := range modelNames {
+		if _, ok := existingSet[modelName]; !ok {
+			missing = append(missing, modelName)
+		}
+	}
+	if len(missing) == 0 {
+		return nil, nil
+	}
+
+	now := common.GetTimestamp()
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		for _, modelName := range missing {
+			catalogModel := Model{
+				ModelName:        modelName,
+				Status:           1,
+				SyncOfficial:     1,
+				CreatedTime:      now,
+				UpdatedTime:      now,
+				InputModalities:  CatalogStringList{},
+				OutputModalities: CatalogStringList{},
+				Capabilities:     CatalogStringList{},
+			}
+			if err := tx.Create(&catalogModel).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return missing, nil
+}
+
 func GetBoundChannelsByModelsMap(modelNames []string) (map[string][]BoundChannel, error) {
 	result := make(map[string][]BoundChannel)
 	if len(modelNames) == 0 {
 		return result, nil
 	}
 	type row struct {
-		Model string
-		Name  string
-		Type  int
+		Model         string
+		Id            int
+		Name          string
+		Type          int
+		UpstreamModel string
+		Enabled       bool
 	}
 	var rows []row
-	err := DB.Table("channels").
-		Select("abilities.model as model, channels.name as name, channels.type as type").
-		Joins("JOIN abilities ON abilities.channel_id = channels.id").
-		Where("abilities.model IN ? AND abilities.enabled = ?", modelNames, true).
+	err := DB.Table("model_bindings").
+		Select("models.model_name AS model, channels.id, channels.name, channels.type, model_bindings.upstream_model, model_bindings.enabled").
+		Joins("JOIN models ON models.id = model_bindings.model_id").
+		Joins("JOIN channels ON channels.id = model_bindings.channel_id").
+		Where("models.model_name IN ? AND model_bindings.deleted = ?", modelNames, false).
 		Distinct().
 		Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range rows {
-		result[r.Model] = append(result[r.Model], BoundChannel{Name: r.Name, Type: r.Type})
+		result[r.Model] = append(result[r.Model], BoundChannel{
+			Id:            r.Id,
+			Name:          r.Name,
+			Type:          r.Type,
+			UpstreamModel: r.UpstreamModel,
+			Enabled:       r.Enabled,
+		})
 	}
 	return result, nil
 }
@@ -162,31 +401,46 @@ func GetPreferredModelOwnerChannelTypes(modelNames []string, groups []string) (m
 	type row struct {
 		Model       string
 		ChannelType int
+		Groups      string
 	}
 	var rows []row
 
-	query := DB.Table("abilities").
-		Select("abilities.model as model, channels.type as channel_type").
-		Joins("JOIN channels ON abilities.channel_id = channels.id").
-		Where("abilities.model IN ? AND abilities.enabled = ? AND channels.status = ?", modelNames, true, common.ChannelStatusEnabled).
-		Order("COALESCE(abilities.priority, 0) DESC").
-		Order("abilities.weight DESC").
-		Order("abilities.channel_id ASC")
-
-	groups = normalizeLookupValues(groups)
-	if len(groups) > 0 {
-		query = query.Where("abilities."+commonGroupCol+" IN ?", groups)
-	}
-
-	if err := query.Scan(&rows).Error; err != nil {
+	err := DB.Table("model_bindings").
+		Select("models.model_name as model, channels.type as channel_type, channels."+commonGroupCol+" as groups").
+		Joins("JOIN models ON models.id = model_bindings.model_id").
+		Joins("JOIN channels ON channels.id = model_bindings.channel_id").
+		Where("models.model_name IN ? AND model_bindings.enabled = ? AND model_bindings.deleted = ? AND channels.status = ?", modelNames, true, false, common.ChannelStatusEnabled).
+		Order("COALESCE(model_bindings.priority, 0) DESC").
+		Order("model_bindings.weight DESC").
+		Order("channels.id ASC").
+		Scan(&rows).Error
+	if err != nil {
 		return nil, err
 	}
 
-	for _, r := range rows {
-		if _, ok := result[r.Model]; ok {
+	groups = normalizeLookupValues(groups)
+	groupSet := make(map[string]struct{}, len(groups))
+	for _, group := range groups {
+		groupSet[group] = struct{}{}
+	}
+
+	for _, row := range rows {
+		if _, ok := result[row.Model]; ok {
 			continue
 		}
-		result[r.Model] = r.ChannelType
+		if len(groupSet) > 0 {
+			matched := false
+			for _, group := range servingGroupsFromRaw(row.Groups) {
+				if _, ok := groupSet[group]; ok {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+		result[row.Model] = row.ChannelType
 	}
 	return result, nil
 }

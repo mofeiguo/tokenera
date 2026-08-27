@@ -16,11 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+
+import { DASHBOARD_PANEL_FRAME } from './panel-surface'
 
 interface PanelWrapperProps {
   title: ReactNode
@@ -41,20 +43,22 @@ function PanelHeader(props: {
   actions?: ReactNode
 }) {
   const heading = (
-    <div className='flex flex-col gap-1'>
-      <div className='text-sm font-semibold'>{props.title}</div>
+    <div className='flex min-w-0 flex-col gap-0.5'>
+      <div className='text-sm leading-snug font-semibold'>{props.title}</div>
       {props.description != null && (
-        <div className='text-muted-foreground text-xs'>{props.description}</div>
+        <div className='text-muted-foreground text-xs leading-relaxed'>
+          {props.description}
+        </div>
       )}
     </div>
   )
 
   return (
-    <div className='border-b px-4 py-3 sm:px-5'>
+    <div className='border-border/70 border-b px-3 py-2.5 sm:px-4 sm:py-3'>
       {props.actions != null ? (
         <div className='flex items-start justify-between gap-2'>
           {heading}
-          {props.actions}
+          <div className='shrink-0'>{props.actions}</div>
         </div>
       ) : (
         heading
@@ -67,17 +71,14 @@ export function PanelWrapper(props: PanelWrapperProps) {
   const { t } = useTranslation()
   const resolvedEmptyMessage = props.emptyMessage ?? t('No data available')
   const height = props.height ?? 'h-64'
-  const frameClassName = cn(
-    'overflow-hidden rounded-2xl border bg-card shadow-xs',
-    props.className
-  )
+  const frameClassName = cn(DASHBOARD_PANEL_FRAME, props.className)
 
   if (props.loading) {
     return (
-      <div className={frameClassName}>
+      <div className={frameClassName} aria-busy='true'>
         <PanelHeader title={props.title} description={props.description} />
-        <div className={cn('p-4 sm:p-5', props.contentClassName)}>
-          <Skeleton className={`w-full ${height}`} />
+        <div className={cn('p-3 sm:p-4', props.contentClassName)}>
+          <Skeleton className={cn('w-full rounded-lg', height)} />
         </div>
       </div>
     )
@@ -93,6 +94,7 @@ export function PanelWrapper(props: PanelWrapperProps) {
             height,
             props.contentClassName
           )}
+          role='status'
         >
           {resolvedEmptyMessage}
         </div>
@@ -107,7 +109,7 @@ export function PanelWrapper(props: PanelWrapperProps) {
         description={props.description}
         actions={props.headerActions}
       />
-      <div className={cn('p-4 sm:p-5', props.contentClassName)}>
+      <div className={cn('p-3 sm:p-4', props.contentClassName)}>
         {props.children}
       </div>
     </div>

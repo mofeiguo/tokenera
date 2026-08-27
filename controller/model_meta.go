@@ -86,6 +86,61 @@ func GetModelMeta(c *gin.Context) {
 	common.ApiSuccess(c, &m)
 }
 
+func GetModelBindings(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	bindings, err := model.GetModelBindings(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, bindings)
+}
+
+type replaceModelBindingsRequest struct {
+	Bindings []model.ModelBindingInput `json:"bindings"`
+}
+
+func ReplaceModelBindings(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var request replaceModelBindingsRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.ReplaceModelBindings(id, request.Bindings); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	bindings, err := model.GetModelBindings(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, bindings)
+}
+
+func GetChannelModelBindings(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	bindings, err := model.GetChannelModelBindings(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, bindings)
+}
+
 // CreateModelMeta 新建模型
 func CreateModelMeta(c *gin.Context) {
 	var m model.Model
@@ -95,6 +150,14 @@ func CreateModelMeta(c *gin.Context) {
 	}
 	if m.ModelName == "" {
 		common.ApiErrorMsg(c, "模型名称不能为空")
+		return
+	}
+	if err := m.NormalizeCatalogMetadata(); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
+	if err := m.NormalizePricing(); err != nil {
+		common.ApiErrorMsg(c, err.Error())
 		return
 	}
 	// 名称冲突检查
@@ -114,6 +177,35 @@ func CreateModelMeta(c *gin.Context) {
 	common.ApiSuccess(c, &m)
 }
 
+type ensureCatalogModelsRequest struct {
+	ModelNames []string `json:"model_names"`
+}
+
+// EnsureCatalogModels 为渠道绑定补建对外模型目录，已存在的名称保持不变。
+func EnsureCatalogModels(c *gin.Context) {
+	var req ensureCatalogModelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	created, err := model.EnsureCatalogModels(req.ModelNames)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if len(created) > 0 {
+		if err := model.MigrateCatalogPricingFromSettings(); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		model.RefreshPricing()
+	}
+	common.ApiSuccess(c, gin.H{
+		"created":       created,
+		"created_count": len(created),
+	})
+}
+
 // UpdateModelMeta 更新模型
 func UpdateModelMeta(c *gin.Context) {
 	statusOnly := c.Query("status_only") == "true"
@@ -126,6 +218,16 @@ func UpdateModelMeta(c *gin.Context) {
 	if m.Id == 0 {
 		common.ApiErrorMsg(c, "缺少模型 ID")
 		return
+	}
+	if !statusOnly {
+		if err := m.NormalizeCatalogMetadata(); err != nil {
+			common.ApiErrorMsg(c, err.Error())
+			return
+		}
+		if err := m.NormalizePricing(); err != nil {
+			common.ApiErrorMsg(c, err.Error())
+			return
+		}
 	}
 
 	if statusOnly {
@@ -148,6 +250,7 @@ func UpdateModelMeta(c *gin.Context) {
 			common.ApiError(c, err)
 			return
 		}
+		model.InitChannelCache()
 	}
 	model.RefreshPricing()
 	common.ApiSuccess(c, &m)
@@ -161,7 +264,12 @@ func DeleteModelMeta(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if err := model.DB.Delete(&model.Model{}, id).Error; err != nil {
+	var catalogModel model.Model
+	if err := model.DB.First(&catalogModel, id).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := catalogModel.Delete(); err != nil {
 		common.ApiError(c, err)
 		return
 	}

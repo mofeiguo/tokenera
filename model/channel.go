@@ -294,14 +294,7 @@ func (channel *Channel) GetModels() []string {
 }
 
 func (channel *Channel) GetGroups() []string {
-	if channel.Group == "" {
-		return []string{}
-	}
-	groups := strings.Split(strings.Trim(channel.Group, ","), ",")
-	for i, group := range groups {
-		groups[i] = strings.TrimSpace(group)
-	}
-	return groups
+	return servingGroupsFromRaw(channel.Group)
 }
 
 func (channel *Channel) GetOtherInfo() map[string]interface{} {
@@ -388,13 +381,6 @@ func GetChannelsByTag(tag string, idSort bool, selectAll bool, sortOptions ...Ch
 
 func SearchChannels(keyword string, group string, model string, idSort bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
 	var channels []*Channel
-	modelsCol := "`models`"
-
-	// 如果是 PostgreSQL，使用双引号
-	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
-		modelsCol = `"models"`
-	}
-
 	baseURLCol := "`base_url`"
 	// 如果是 PostgreSQL，使用双引号
 	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
@@ -405,10 +391,17 @@ func SearchChannels(keyword string, group string, model string, idSort bool, sor
 
 	// 构造基础查询
 	baseQuery := DB.Model(&Channel{}).Omit("key")
+	if strings.TrimSpace(model) != "" {
+		baseQuery = baseQuery.
+			Joins("JOIN model_bindings ON model_bindings.channel_id = channels.id").
+			Joins("JOIN models AS catalog_models ON catalog_models.id = model_bindings.model_id").
+			Where("catalog_models.model_name LIKE ? AND model_bindings.deleted = ?", "%"+model+"%", false).
+			Distinct()
+	}
 
 	// 构造WHERE子句
-	whereClause := "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
-	args := []any{common.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%", "%" + model + "%"}
+	whereClause := "(channels.id = ? OR channels.name LIKE ? OR channels." + commonKeyCol + " = ? OR channels." + baseURLCol + " LIKE ?)"
+	args := []any{common.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%"}
 	baseQuery = ApplyChannelGroupFilter(baseQuery.Where(whereClause, args...), group)
 
 	// 执行查询
@@ -452,12 +445,6 @@ func BatchInsertChannels(channels []Channel) error {
 			tx.Rollback()
 			return err
 		}
-		for _, channel_ := range chunk {
-			if err := channel_.AddAbilities(tx); err != nil {
-				tx.Rollback()
-				return err
-			}
-		}
 	}
 	return tx.Commit().Error
 }
@@ -466,7 +453,7 @@ func BatchDeleteChannels(ids []int) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	// 使用事务 分批删除channel表和abilities表
+	// 使用事务分批删除 channel 表与 model_bindings 表
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return 0, tx.Error
@@ -479,7 +466,7 @@ func BatchDeleteChannels(ids []int) (int64, error) {
 			return 0, result.Error
 		}
 		deletedCount += result.RowsAffected
-		if err := tx.Where("channel_id in (?)", chunk).Delete(&Ability{}).Error; err != nil {
+		if err := tx.Where("channel_id in (?)", chunk).Delete(&ModelBinding{}).Error; err != nil {
 			tx.Rollback()
 			return 0, err
 		}
@@ -530,13 +517,7 @@ func (channel *Channel) GetStatusCodeMapping() string {
 }
 
 func (channel *Channel) Insert() error {
-	var err error
-	err = DB.Create(channel).Error
-	if err != nil {
-		return err
-	}
-	err = channel.AddAbilities(nil)
-	return err
+	return DB.Create(channel).Error
 }
 
 func (channel *Channel) Update() error {
@@ -584,8 +565,7 @@ func (channel *Channel) Update() error {
 		return err
 	}
 	DB.Model(channel).First(channel, "id = ?", channel.Id)
-	err = channel.UpdateAbilities(nil)
-	return err
+	return nil
 }
 
 func (channel *Channel) UpdateResponseTime(responseTime int64) {
@@ -609,13 +589,12 @@ func (channel *Channel) UpdateBalance(balance float64) {
 }
 
 func (channel *Channel) Delete() error {
-	var err error
-	err = DB.Delete(channel).Error
-	if err != nil {
-		return err
-	}
-	err = channel.DeleteAbilities()
-	return err
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("channel_id = ?", channel.Id).Delete(&ModelBinding{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(channel).Error
+	})
 }
 
 var channelStatusLock sync.Mutex
@@ -755,13 +734,10 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 		}
 	}
 
-	shouldUpdateAbilities := false
+	shouldRefreshCache := false
 	defer func() {
-		if shouldUpdateAbilities {
-			err := UpdateAbilityStatus(channelId, status == common.ChannelStatusEnabled)
-			if err != nil {
-				common.SysLog(fmt.Sprintf("failed to update ability status: channel_id=%d, error=%v", channelId, err))
-			}
+		if shouldRefreshCache && common.MemoryCacheEnabled {
+			InitChannelCache()
 		}
 	}()
 	channel, err := GetChannelById(channelId, true)
@@ -776,7 +752,7 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 			beforeStatus := channel.Status
 			handlerMultiKeyUpdate(channel, usingKey, status, reason)
 			if beforeStatus != channel.Status {
-				shouldUpdateAbilities = true
+				shouldRefreshCache = true
 			}
 		} else {
 			info := channel.GetOtherInfo()
@@ -784,7 +760,7 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 			info["status_time"] = common.GetTimestamp()
 			channel.SetOtherInfo(info)
 			channel.Status = status
-			shouldUpdateAbilities = true
+			shouldRefreshCache = true
 		}
 		err = channel.saveStatusState()
 		if err != nil {
@@ -800,8 +776,10 @@ func EnableChannelByTag(tag string) error {
 	if err != nil {
 		return err
 	}
-	err = UpdateAbilityStatusByTag(tag, true)
-	return err
+	if common.MemoryCacheEnabled {
+		InitChannelCache()
+	}
+	return nil
 }
 
 func DisableChannelByTag(tag string) error {
@@ -809,28 +787,24 @@ func DisableChannelByTag(tag string) error {
 	if err != nil {
 		return err
 	}
-	err = UpdateAbilityStatusByTag(tag, false)
-	return err
+	if common.MemoryCacheEnabled {
+		InitChannelCache()
+	}
+	return nil
 }
 
 func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *string, group *string, priority *int64, weight *uint, paramOverride *string, headerOverride *string) error {
 	updateData := Channel{}
-	shouldReCreateAbilities := false
-	updatedTag := tag
-	// 如果 newTag 不为空且不等于 tag，则更新 tag
 	if newTag != nil && *newTag != tag {
 		updateData.Tag = newTag
-		updatedTag = *newTag
 	}
 	if modelMapping != nil {
 		updateData.ModelMapping = modelMapping
 	}
 	if models != nil && *models != "" {
-		shouldReCreateAbilities = true
 		updateData.Models = *models
 	}
 	if group != nil && *group != "" {
-		shouldReCreateAbilities = true
 		updateData.Group = *group
 	}
 	if priority != nil {
@@ -850,21 +824,8 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 	if err != nil {
 		return err
 	}
-	if shouldReCreateAbilities {
-		channels, err := GetChannelsByTag(updatedTag, false, false)
-		if err == nil {
-			for _, channel := range channels {
-				err = channel.UpdateAbilities(nil)
-				if err != nil {
-					common.SysLog(fmt.Sprintf("failed to update abilities: channel_id=%d, tag=%s, error=%v", channel.Id, channel.GetTag(), err))
-				}
-			}
-		}
-	} else {
-		err := UpdateAbilityByTag(tag, newTag, priority, weight)
-		if err != nil {
-			return err
-		}
+	if common.MemoryCacheEnabled {
+		InitChannelCache()
 	}
 	return nil
 }
@@ -885,13 +846,21 @@ func updateChannelUsedQuota(id int, quota int) {
 }
 
 func DeleteChannelByStatus(status int64) (int64, error) {
-	result := DB.Where("status = ?", status).Delete(&Channel{})
-	return result.RowsAffected, result.Error
+	var ids []int
+	if err := DB.Model(&Channel{}).Where("status = ?", status).Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
+	return BatchDeleteChannels(ids)
 }
 
 func DeleteDisabledChannel() (int64, error) {
-	result := DB.Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Delete(&Channel{})
-	return result.RowsAffected, result.Error
+	var ids []int
+	if err := DB.Model(&Channel{}).
+		Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).
+		Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
+	return BatchDeleteChannels(ids)
 }
 
 func GetPaginatedTags(offset int, limit int) ([]*string, error) {
@@ -912,13 +881,6 @@ func GetPaginatedChannelTags(query *gorm.DB, offset int, limit int) ([]*string, 
 
 func SearchTags(keyword string, group string, model string, idSort bool) ([]*string, error) {
 	var tags []*string
-	modelsCol := "`models`"
-
-	// 如果是 PostgreSQL，使用双引号
-	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
-		modelsCol = `"models"`
-	}
-
 	baseURLCol := "`base_url`"
 	// 如果是 PostgreSQL，使用双引号
 	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
@@ -932,10 +894,17 @@ func SearchTags(keyword string, group string, model string, idSort bool) ([]*str
 
 	// 构造基础查询
 	baseQuery := DB.Model(&Channel{}).Omit("key")
+	if strings.TrimSpace(model) != "" {
+		baseQuery = baseQuery.
+			Joins("JOIN model_bindings ON model_bindings.channel_id = channels.id").
+			Joins("JOIN models AS catalog_models ON catalog_models.id = model_bindings.model_id").
+			Where("catalog_models.model_name LIKE ? AND model_bindings.deleted = ?", "%"+model+"%", false).
+			Distinct()
+	}
 
 	// 构造WHERE子句
-	whereClause := "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
-	args := []any{common.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%", "%" + model + "%"}
+	whereClause := "(channels.id = ? OR channels.name LIKE ? OR channels." + commonKeyCol + " = ? OR channels." + baseURLCol + " LIKE ?)"
+	args := []any{common.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%"}
 	baseQuery = ApplyChannelGroupFilter(baseQuery.Where(whereClause, args...), group)
 
 	subQuery := baseQuery.
@@ -1077,21 +1046,6 @@ func BatchSetChannelTag(ids []int, tag *string) error {
 	if err != nil {
 		tx.Rollback()
 		return err
-	}
-
-	// update ability status
-	channels, err := GetChannelsByIds(ids)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	for _, channel := range channels {
-		err = channel.UpdateAbilities(tx)
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
 	}
 
 	// 提交事务

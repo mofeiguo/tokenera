@@ -11,7 +11,8 @@ import (
 
 func clearPreferredOwnerTables(t *testing.T) {
 	t.Helper()
-	require.NoError(t, DB.Exec("DELETE FROM abilities").Error)
+	require.NoError(t, DB.Exec("DELETE FROM model_bindings").Error)
+	require.NoError(t, DB.Exec("DELETE FROM models").Error)
 	require.NoError(t, DB.Exec("DELETE FROM channels").Error)
 }
 
@@ -24,23 +25,36 @@ func insertPreferredOwnerCandidate(
 	priority int64,
 	weight uint,
 	channelStatus int,
-	abilityEnabled bool,
+	bindingEnabled bool,
 ) {
 	t.Helper()
 	require.NoError(t, DB.Create(&Channel{
-		Id:     channelID,
-		Type:   channelType,
-		Key:    fmt.Sprintf("key-%d", channelID),
-		Status: channelStatus,
-		Name:   fmt.Sprintf("channel-%d", channelID),
+		Id:       channelID,
+		Type:     channelType,
+		Key:      fmt.Sprintf("key-%d", channelID),
+		Status:   channelStatus,
+		Name:     fmt.Sprintf("channel-%d", channelID),
+		Group:    group,
+		Priority: &priority,
+		Weight:   &weight,
 	}).Error)
-	require.NoError(t, DB.Create(&Ability{
-		Group:     group,
-		Model:     modelName,
-		ChannelId: channelID,
-		Enabled:   abilityEnabled,
-		Priority:  &priority,
-		Weight:    weight,
+	var catalogModel Model
+	require.NoError(t, DB.FirstOrCreate(&catalogModel, Model{
+		ModelName: modelName,
+		Status:    1,
+		NameRule:  NameRuleExact,
+	}).Error)
+	if !bindingEnabled {
+		return
+	}
+	require.NoError(t, DB.Create(&ModelBinding{
+		ModelId:       catalogModel.Id,
+		ChannelId:     channelID,
+		UpstreamModel: modelName,
+		Priority:      priority,
+		Weight:        int(weight),
+		Enabled:       true,
+		GroupsRaw:     group,
 	}).Error)
 }
 
@@ -48,29 +62,29 @@ func TestGetPreferredModelOwnerChannelTypes(t *testing.T) {
 	const modelName = "gpt-5.4"
 
 	tests := []struct {
-		name     string
-		setup    func(t *testing.T)
-		groups   []string
-		expected int
-		found    bool
+		name           string
+		setup          func(t *testing.T)
+		groups         []string
+		wantChannelTyp int
+		wantOK         bool
 	}{
 		{
 			name: "openai only",
 			setup: func(t *testing.T) {
 				insertPreferredOwnerCandidate(t, 1, modelName, "default", constant.ChannelTypeOpenAI, 0, 0, common.ChannelStatusEnabled, true)
 			},
-			groups:   []string{"default"},
-			expected: constant.ChannelTypeOpenAI,
-			found:    true,
+			groups:         []string{"default"},
+			wantChannelTyp: constant.ChannelTypeOpenAI,
+			wantOK:         true,
 		},
 		{
 			name: "codex only",
 			setup: func(t *testing.T) {
 				insertPreferredOwnerCandidate(t, 1, modelName, "default", constant.ChannelTypeCodex, 0, 0, common.ChannelStatusEnabled, true)
 			},
-			groups:   []string{"default"},
-			expected: constant.ChannelTypeCodex,
-			found:    true,
+			groups:         []string{"default"},
+			wantChannelTyp: constant.ChannelTypeCodex,
+			wantOK:         true,
 		},
 		{
 			name: "priority wins",
@@ -78,9 +92,9 @@ func TestGetPreferredModelOwnerChannelTypes(t *testing.T) {
 				insertPreferredOwnerCandidate(t, 1, modelName, "default", constant.ChannelTypeOpenAI, 1, 100, common.ChannelStatusEnabled, true)
 				insertPreferredOwnerCandidate(t, 2, modelName, "default", constant.ChannelTypeCodex, 2, 0, common.ChannelStatusEnabled, true)
 			},
-			groups:   []string{"default"},
-			expected: constant.ChannelTypeCodex,
-			found:    true,
+			groups:         []string{"default"},
+			wantChannelTyp: constant.ChannelTypeCodex,
+			wantOK:         true,
 		},
 		{
 			name: "weight wins when priority is equal",
@@ -88,9 +102,9 @@ func TestGetPreferredModelOwnerChannelTypes(t *testing.T) {
 				insertPreferredOwnerCandidate(t, 1, modelName, "default", constant.ChannelTypeOpenAI, 1, 10, common.ChannelStatusEnabled, true)
 				insertPreferredOwnerCandidate(t, 2, modelName, "default", constant.ChannelTypeCodex, 1, 20, common.ChannelStatusEnabled, true)
 			},
-			groups:   []string{"default"},
-			expected: constant.ChannelTypeCodex,
-			found:    true,
+			groups:         []string{"default"},
+			wantChannelTyp: constant.ChannelTypeCodex,
+			wantOK:         true,
 		},
 		{
 			name: "channel id stabilizes exact ties",
@@ -98,9 +112,9 @@ func TestGetPreferredModelOwnerChannelTypes(t *testing.T) {
 				insertPreferredOwnerCandidate(t, 2, modelName, "default", constant.ChannelTypeCodex, 1, 10, common.ChannelStatusEnabled, true)
 				insertPreferredOwnerCandidate(t, 1, modelName, "default", constant.ChannelTypeOpenAI, 1, 10, common.ChannelStatusEnabled, true)
 			},
-			groups:   []string{"default"},
-			expected: constant.ChannelTypeOpenAI,
-			found:    true,
+			groups:         []string{"default"},
+			wantChannelTyp: constant.ChannelTypeOpenAI,
+			wantOK:         true,
 		},
 		{
 			name: "group filter excludes other groups",
@@ -108,9 +122,9 @@ func TestGetPreferredModelOwnerChannelTypes(t *testing.T) {
 				insertPreferredOwnerCandidate(t, 1, modelName, "vip", constant.ChannelTypeCodex, 10, 100, common.ChannelStatusEnabled, true)
 				insertPreferredOwnerCandidate(t, 2, modelName, "default", constant.ChannelTypeOpenAI, 1, 0, common.ChannelStatusEnabled, true)
 			},
-			groups:   []string{"default"},
-			expected: constant.ChannelTypeOpenAI,
-			found:    true,
+			groups:         []string{"default"},
+			wantChannelTyp: constant.ChannelTypeOpenAI,
+			wantOK:         true,
 		},
 		{
 			name: "disabled candidates are ignored",
@@ -119,7 +133,7 @@ func TestGetPreferredModelOwnerChannelTypes(t *testing.T) {
 				insertPreferredOwnerCandidate(t, 2, modelName, "default", constant.ChannelTypeOpenAI, 1, 0, common.ChannelStatusManuallyDisabled, true)
 			},
 			groups: []string{"default"},
-			found:  false,
+			wantOK: false,
 		},
 	}
 
@@ -128,14 +142,15 @@ func TestGetPreferredModelOwnerChannelTypes(t *testing.T) {
 			clearPreferredOwnerTables(t)
 			tt.setup(t)
 
-			owners, err := GetPreferredModelOwnerChannelTypes([]string{modelName}, tt.groups)
+			got, err := GetPreferredModelOwnerChannelTypes([]string{modelName}, tt.groups)
 			require.NoError(t, err)
-
-			got, ok := owners[modelName]
-			require.Equal(t, tt.found, ok)
-			if tt.found {
-				require.Equal(t, tt.expected, got)
+			if !tt.wantOK {
+				require.NotContains(t, got, modelName)
+				return
 			}
+			channelType, ok := got[modelName]
+			require.True(t, ok)
+			require.Equal(t, tt.wantChannelTyp, channelType)
 		})
 	}
 }

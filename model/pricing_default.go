@@ -69,9 +69,9 @@ var defaultVendorIcons = map[string]string{
 }
 
 // initDefaultVendorMapping 简化的默认供应商映射
-func initDefaultVendorMapping(metaMap map[string]*Model, vendorMap map[int]*Vendor, enableAbilities []AbilityWithChannel) {
-	for _, ability := range enableAbilities {
-		modelName := ability.Model
+func initDefaultVendorMapping(metaMap map[string]*Model, vendorMap map[int]*Vendor, enabledBindings []BindingWithChannel) {
+	for _, binding := range enabledBindings {
+		modelName := binding.Model
 		if _, exists := metaMap[modelName]; exists {
 			continue
 		}

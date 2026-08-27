@@ -22,6 +22,46 @@ import i18next from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import { afterEach, beforeAll } from 'vitest'
 
+function installMemoryStorage(): void {
+  const store = new Map<string, string>()
+  const memoryStorage: Storage = {
+    get length() {
+      return store.size
+    },
+    clear() {
+      store.clear()
+    },
+    getItem(key) {
+      return store.has(key) ? (store.get(key) ?? null) : null
+    },
+    key(index) {
+      return [...store.keys()].at(index) ?? null
+    },
+    removeItem(key) {
+      store.delete(key)
+    },
+    setItem(key, value) {
+      store.set(String(key), String(value))
+    },
+  }
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: memoryStorage,
+  })
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: memoryStorage,
+  })
+}
+
+if (
+  typeof localStorage === 'undefined' ||
+  typeof localStorage.clear !== 'function' ||
+  typeof localStorage.setItem !== 'function'
+) {
+  installMemoryStorage()
+}
+
 beforeAll(async () => {
   await i18next.use(initReactI18next).init({
     lng: 'en',

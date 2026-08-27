@@ -21,7 +21,6 @@ import React, { createContext, useContext, useState } from 'react'
 
 import type {
   Model,
-  ModelTabCategory,
   Vendor,
   SyncDiffData,
   SyncLocale,
@@ -37,10 +36,8 @@ type DialogType =
   | 'update-model'
   | 'create-vendor'
   | 'update-vendor'
-  | 'missing-models'
   | 'sync-wizard'
   | 'upstream-conflict'
-  | 'prefill-groups'
   | 'description'
   | null
 
@@ -63,8 +60,6 @@ type ModelsContextType = {
   setSyncWizardOptions: React.Dispatch<
     React.SetStateAction<{ locale: SyncLocale; source: SyncSource }>
   >
-  tabCategory: ModelTabCategory
-  setTabCategory: (category: ModelTabCategory) => void
 }
 
 // ============================================================================
@@ -96,8 +91,6 @@ export function ModelsProvider({ children }: { children: React.ReactNode }) {
     locale: 'zh',
     source: 'official',
   })
-  const [tabCategory, setTabCategory] = useState<ModelTabCategory>('metadata')
-
   return (
     <ModelsContext.Provider
       value={{
@@ -115,8 +108,6 @@ export function ModelsProvider({ children }: { children: React.ReactNode }) {
         setUpstreamConflicts,
         syncWizardOptions,
         setSyncWizardOptions,
-        tabCategory,
-        setTabCategory,
       }}
     >
       {children}

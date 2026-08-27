@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
 import { Construction } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -24,6 +23,7 @@ import { PublicLayout } from '@/components/layout'
 import { RichContent } from '@/components/rich-content'
 import { Skeleton } from '@/components/ui/skeleton'
 import { isHttpUrl, isLikelyHtml } from '@/lib/content-format'
+import { useQuery } from '@/lib/query'
 
 import { getAboutContent } from './api'
 
@@ -32,20 +32,22 @@ function EmptyAboutState() {
   const currentYear = new Date().getFullYear()
 
   return (
-    <div className='flex min-h-[60vh] items-center justify-center p-8'>
-      <div className='max-w-2xl space-y-6 text-center'>
-        <div className='flex justify-center'>
-          <Construction className='text-muted-foreground h-24 w-24' />
+    <div className='flex min-h-[60vh] items-center justify-center px-4 py-16'>
+      <div className='border-border max-w-2xl border-l pl-6 sm:pl-10'>
+        <div className='mb-6'>
+          <Construction className='text-muted-foreground size-10' />
         </div>
-        <div className='space-y-2'>
-          <h2 className='text-2xl font-bold'>{t('No About Content Set')}</h2>
+        <div className='space-y-3'>
+          <h2 className='text-2xl font-semibold tracking-tight'>
+            {t('No About Content Set')}
+          </h2>
           <p className='text-muted-foreground'>
             {t(
               'The administrator has not configured any about content yet. You can set it in the settings page, supporting HTML or URL.'
             )}
           </p>
         </div>
-        <div className='space-y-4 text-sm'>
+        <div className='mt-8 space-y-4 text-sm'>
           <p>
             {t('New API Project Repository:')}{' '}
             <a
@@ -173,7 +175,7 @@ export function About() {
 
   return (
     <PublicLayout>
-      <div className='mx-auto max-w-6xl px-4 py-8'>
+      <div className='mx-auto max-w-4xl px-4 py-12'>
         <RichContent
           mode='markdown'
           content={rawContent}

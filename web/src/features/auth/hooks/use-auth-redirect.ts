@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useNavigate } from '@tanstack/react-router'
 import i18n from 'i18next'
 
 import {
@@ -24,6 +23,7 @@ import {
   sanitizeAuthRedirect,
 } from '@/features/auth/lib/auth-redirect'
 import { applyAuthBundle } from '@/lib/api'
+import { useNavigate } from '@/lib/router'
 import type { AuthBundle } from '@/stores/auth-store'
 
 /**

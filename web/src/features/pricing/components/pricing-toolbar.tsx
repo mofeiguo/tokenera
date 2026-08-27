@@ -16,15 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ArrowUpDown, Check, Filter, Grid2X2, Table2 } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { ArrowUpDown, Check, Filter, Grid2X2, Table2, X } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import {
-  sideDrawerContentClassName,
-  sideDrawerFormClassName,
-  sideDrawerHeaderClassName,
-} from '@/components/drawer-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -49,6 +44,11 @@ import { cn } from '@/lib/utils'
 
 import {
   VIEW_MODES,
+  ENDPOINT_TYPES,
+  FILTER_ALL,
+  QUOTA_TYPES,
+  getEndpointTypeLabels,
+  getQuotaTypeLabels,
   getSortLabels,
   type SortOption,
   type ViewMode,
@@ -104,7 +104,7 @@ function SegmentedControl(props: {
     <div
       role='group'
       aria-label={props.ariaLabel}
-      className='bg-muted/60 inline-flex h-8 items-center rounded-lg border p-0.5'
+      className='bg-muted/50 border-border/60 inline-flex h-11 items-center rounded-md border p-0.5 sm:h-8'
     >
       {props.options.map((option) => {
         const Icon = option.icon
@@ -116,10 +116,10 @@ function SegmentedControl(props: {
             onClick={() => props.onChange(option.value)}
             aria-pressed={isActive}
             className={cn(
-              'inline-flex h-full items-center justify-center rounded-md text-xs font-medium transition-all',
-              Icon && !option.label ? 'w-7' : 'gap-1.5 px-3',
+              'inline-flex h-full items-center justify-center rounded-sm text-xs font-medium transition-colors',
+              Icon && !option.label ? 'w-10 sm:w-7' : 'gap-1.5 px-3',
               isActive
-                ? 'bg-primary text-primary-foreground shadow-sm'
+                ? 'bg-background text-foreground shadow-xs'
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
@@ -134,7 +134,7 @@ function SegmentedControl(props: {
 
         return (
           <Tooltip key={option.value}>
-            <TooltipTrigger render={button}></TooltipTrigger>
+            <TooltipTrigger render={button} />
             <TooltipContent side='bottom' className='text-xs'>
               {option.tooltip}
             </TooltipContent>
@@ -149,6 +149,57 @@ export function PricingToolbar(props: PricingToolbarProps) {
   const { t } = useTranslation()
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const sortLabels = getSortLabels(t)
+  const quotaLabels = getQuotaTypeLabels(t)
+  const endpointLabels = getEndpointTypeLabels(t)
+
+  const activeFilters = useMemo(
+    () =>
+      [
+        props.vendorFilter !== FILTER_ALL
+          ? {
+              key: 'vendor',
+              label: `${t('Vendor')}: ${props.vendorFilter}`,
+              clear: () => props.onVendorChange(FILTER_ALL),
+            }
+          : null,
+        props.groupFilter !== FILTER_ALL
+          ? {
+              key: 'group',
+              label: `${t('Group')}: ${props.groupFilter}`,
+              clear: () => props.onGroupChange(FILTER_ALL),
+            }
+          : null,
+        props.tagFilter !== FILTER_ALL
+          ? {
+              key: 'tag',
+              label: `${t('Tag')}: ${props.tagFilter}`,
+              clear: () => props.onTagChange(FILTER_ALL),
+            }
+          : null,
+        props.quotaTypeFilter !== QUOTA_TYPES.ALL
+          ? {
+              key: 'quota',
+              label:
+                quotaLabels[props.quotaTypeFilter as keyof typeof quotaLabels],
+              clear: () => props.onQuotaTypeChange(QUOTA_TYPES.ALL),
+            }
+          : null,
+        props.endpointTypeFilter !== ENDPOINT_TYPES.ALL
+          ? {
+              key: 'endpoint',
+              label:
+                endpointLabels[
+                  props.endpointTypeFilter as keyof typeof endpointLabels
+                ],
+              clear: () => props.onEndpointTypeChange(ENDPOINT_TYPES.ALL),
+            }
+          : null,
+      ].filter(
+        (item): item is { key: string; label: string; clear: () => void } =>
+          Boolean(item)
+      ),
+    [endpointLabels, props, quotaLabels, t]
+  )
 
   const handleTokenUnitChange = useCallback(
     (value: string) => props.onTokenUnitChange(value as TokenUnit),
@@ -166,7 +217,7 @@ export function PricingToolbar(props: PricingToolbarProps) {
   )
 
   return (
-    <div className='rounded-xl border p-3'>
+    <div className='bg-background/80 ring-foreground/10 rounded-xl p-3 ring-1'>
       <div className='flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between'>
         <div className='flex items-center gap-2'>
           <Button
@@ -174,7 +225,7 @@ export function PricingToolbar(props: PricingToolbarProps) {
             variant='outline'
             size='sm'
             onClick={() => setMobileFiltersOpen(true)}
-            className='gap-1.5 xl:hidden'
+            className='h-11 gap-1.5 sm:h-8 xl:hidden'
           >
             <Filter className='size-4' />
             {t('Filter')}
@@ -199,7 +250,7 @@ export function PricingToolbar(props: PricingToolbarProps) {
         </div>
 
         <div className='flex flex-wrap items-center gap-2'>
-          <div className='hidden items-center gap-2 sm:flex'>
+          <div className='flex items-center gap-2'>
             <SegmentedControl
               options={[
                 { value: 'standard', label: t('Standard') },
@@ -227,7 +278,7 @@ export function PricingToolbar(props: PricingToolbarProps) {
                   type='button'
                   variant='outline'
                   size='sm'
-                  className='h-8 gap-1.5 px-3 text-xs'
+                  className='h-11 gap-1.5 px-3 text-xs sm:h-8'
                 />
               }
             >
@@ -273,18 +324,49 @@ export function PricingToolbar(props: PricingToolbarProps) {
         </div>
       </div>
 
+      {activeFilters.length > 0 && (
+        <div className='border-border/60 mt-3 flex flex-wrap items-center gap-1.5 border-t pt-3'>
+          {activeFilters.map((filter) => (
+            <Badge
+              key={filter.key}
+              variant='secondary'
+              className='h-7 gap-1 rounded-full pr-1 pl-2.5 font-normal'
+            >
+              <span className='max-w-48 truncate'>{filter.label}</span>
+              <button
+                type='button'
+                onClick={filter.clear}
+                aria-label={`${t('Remove filter')}: ${filter.label}`}
+                className='hover:bg-foreground/10 flex size-5 items-center justify-center rounded-full'
+              >
+                <X className='size-3' />
+              </button>
+            </Badge>
+          ))}
+          <Button
+            type='button'
+            variant='ghost'
+            size='sm'
+            onClick={props.onClearFilters}
+            className='h-7 rounded-full px-2.5 text-xs'
+          >
+            {t('Clear all filters')}
+          </Button>
+        </div>
+      )}
+
       <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
         <SheetContent
-          side='right'
-          className={sideDrawerContentClassName('sm:max-w-md')}
+          side='bottom'
+          className='max-h-[88dvh] overflow-hidden rounded-t-2xl p-0'
         >
-          <SheetHeader className={sideDrawerHeaderClassName()}>
+          <SheetHeader className='border-border/70 border-b px-5 py-4 text-left'>
             <SheetTitle>{t('Filter')}</SheetTitle>
             <SheetDescription>
               {t('Filter models by provider, group, type, endpoint, and tags.')}
             </SheetDescription>
           </SheetHeader>
-          <div className={sideDrawerFormClassName('gap-0')}>
+          <div className='hover-scrollbar overflow-y-auto px-4 py-4'>
             <PricingSidebar
               quotaTypeFilter={props.quotaTypeFilter}
               endpointTypeFilter={props.endpointTypeFilter}

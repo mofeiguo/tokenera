@@ -66,11 +66,6 @@ var auditRouteActions = map[string]string{
 	"DELETE /api/redemption/:id":     "redemption.delete",
 	"DELETE /api/redemption/invalid": "redemption.delete_invalid",
 
-	// 预填组
-	"POST /api/prefill_group/":      "prefill_group.create",
-	"PUT /api/prefill_group/":       "prefill_group.update",
-	"DELETE /api/prefill_group/:id": "prefill_group.delete",
-
 	// 供应商
 	"POST /api/vendors/":      "vendor.create",
 	"PUT /api/vendors/":       "vendor.update",
@@ -81,11 +76,6 @@ var auditRouteActions = map[string]string{
 	"PUT /api/models/":               "model.update",
 	"DELETE /api/models/:id":         "model.delete",
 	"POST /api/models/sync_upstream": "model.sync_upstream",
-
-	// 部署
-	"POST /api/deployments/":      "deployment.create",
-	"PUT /api/deployments/:id":    "deployment.update",
-	"DELETE /api/deployments/:id": "deployment.delete",
 
 	// 订阅（管理员）
 	"POST /api/subscription/admin/plans":    "subscription.plan_create",

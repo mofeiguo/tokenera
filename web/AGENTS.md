@@ -8,19 +8,19 @@
 
 ### 技术栈
 
-| 类别       | 技术                                                              |
-| ---------- | ----------------------------------------------------------------- |
-| 包管理     | Bun                                                               |
-| 框架       | React 19、TypeScript                                              |
-| 数据与请求 | @tanstack/react-query、axios、Zustand                             |
-| 路由       | @tanstack/react-router                                            |
-| 表格与列表 | @tanstack/react-table、@tanstack/react-virtual                    |
-| 国际化     | i18next、react-i18next、i18next-browser-languagedetector          |
-| 日期       | Day.js                                                            |
-| UI 与样式  | Base UI、Hugeicons、Tailwind CSS、clsx / class-variance-authority |
-| 表单       | React Hook Form、Zod                                              |
-| 图表       | @visactor/vchart、@visactor/react-vchart                          |
-| 工具       | qrcode.react、oxfmt、oxlint、vitest（可选）                       |
+| 类别       | 技术                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------ |
+| 包管理     | Bun                                                                                        |
+| 框架       | React 19、TypeScript                                                                       |
+| 数据与请求 | swr、axios、Zustand                                                                        |
+| 路由       | react-router                                                                               |
+| 表格与列表 | @tanstack/react-table、@tanstack/react-virtual                                             |
+| 国际化     | i18next、react-i18next、i18next-browser-languagedetector                                   |
+| 日期       | Day.js                                                                                     |
+| UI 与样式  | shadcn/ui（base-nova / Base UI）、Hugeicons、Tailwind CSS、clsx / class-variance-authority |
+| 表单       | React Hook Form、Zod                                                                       |
+| 图表       | @visactor/vchart、@visactor/react-vchart                                                   |
+| 工具       | qrcode.react、oxfmt、oxlint、vitest（可选）                                                |
 
 优先选用成熟、维护良好的开源库；仅在现有库无法满足或需特殊适配时自行实现，并评估可维护性与通用性。
 
@@ -82,6 +82,7 @@
 ### 3.3 组件
 
 - 使用函数式组件与 Hooks，单一职责；组件 props 须有明确类型（接口或类型别名）。
+- **UI**：可复用控件优先用 `src/components/ui` 的 shadcn/ui 组件（`components.json` 为 base-nova，底层为 Base UI）。页面从 `@/components/ui` 引入，不要在业务里直接包 `@base-ui/react`。新增或更新组件用 `cd web && bunx shadcn@latest`。
 - **Props 使用**：组件 props 非必要不要解构，直接使用 `props.xxx` 访问属性，保持代码清晰（详见 [3.2 代码风格与类型](#32-代码风格与类型)）。
 - 单文件超过约 200 行时考虑拆分子组件或将逻辑抽到自定义 Hooks；类型定义可与组件同文件或放在同模块的 `types` 中。
 
@@ -100,7 +101,7 @@
 
 ### 3.6 API 请求
 
-- **React Query**：数据获取用 `useQuery`，变更用 `useMutation`；为每个查询配置唯一 `queryKey`（建议数组形式、层级一致）；在 `onSuccess` 中对相关 query 做 `invalidateQueries`，可配合乐观更新。服务端错误统一通过 `handleServerError` 处理（详见 [3.9 错误处理](#39-错误处理)）。
+- **SWR**：数据获取用 `useQuery`（封装自 `useSWR`），变更用 `useMutation`；为每个查询配置唯一 `queryKey`（数组形式、层级一致）；在 `onSuccess` 中对相关 query 做 `invalidateQueries`。服务端错误统一通过 `handleServerError` 处理（详见 [3.9 错误处理](#39-错误处理)）。业务代码从 `@/lib/query` 引入这些 API。
 - **Axios**：使用项目统一的 `api` 实例（含 `baseURL`、`headers`、`withCredentials: true`）；GET 默认请求去重，特殊请求可通过配置关闭；认证与通用错误在拦截器中处理。
 
 ### 3.7 表单
@@ -110,13 +111,13 @@
 
 ### 3.8 路由
 
-- 使用 TanStack Router，路由文件位于 `src/routes/`，通过 `createFileRoute` 定义；搜索参数用 Zod schema + `validateSearch` 校验。
-- 在 `beforeLoad` 中做认证与重定向，避免不必要的请求；嵌套结构用布局路由与 `_authenticated` 等前缀，子路由通过 `<Outlet />` 渲染。
-- 导航使用 `useNavigate` 或 `Link`，保持类型安全，避免直接操作 `window.location`。
+- 使用 React Router（`createBrowserRouter`），路由表在 `src/routes/app-router.tsx`；鉴权与角色校验在 loader / 布局组件中完成。
+- 导航使用 `@/lib/router` 的 `useNavigate` 与 `Link`（兼容原先的 `to` / `params` / `search` 写法），避免直接操作 `window.location`。
+- 嵌套页面通过布局路由的 `<Outlet />` 渲染；未保存表单用 `useBlocker` 拦截离开。
 
 ### 3.9 错误处理
 
-- **服务端错误**：统一使用 `handleServerError`，在 React Query 全局配置与拦截器中接入；按 HTTP 状态码给出合适提示，文案使用 i18n。
+- **服务端错误**：统一使用 `handleServerError`，在 SWR/`useMutation` 与 axios 拦截器中接入；按 HTTP 状态码给出合适提示，文案使用 i18n。
 - **展示**：使用 `toast.error` 等统一方式；路由级错误由 `errorComponent` 承接，提供友好错误页并记录便于排查的信息。
 - **表单**：校验与服务端错误映射到字段后，在字段下方展示；使用 `form.setError` 等与表单库一致的方式。
 
@@ -172,7 +173,7 @@
 
 ### 3.16 构建与部署
 
-- 使用 Rsbuild，配置见 `rsbuild.config.ts`；脚本以 `package.json` 为准（如 `bun run dev`、`bun run build`、`bun run typecheck`、`bun run lint`、`bun run format`），包管理见 [3.15 依赖管理](#315-依赖管理)。
+- 使用 Vite，配置见 `vite.config.ts`；脚本以 `package.json` 为准（如 `bun run dev`、`bun run build`、`bun run typecheck`、`bun run lint`、`bun run format`），包管理见 [3.15 依赖管理](#315-依赖管理)。
 - 代码分割与懒加载策略见 [3.4 性能](#34-性能)；资源使用合适格式与压缩，环境变量用 `.env` 且以 `VITE_` 前缀，不在代码中硬编码。
 - **发布前**：执行 typecheck、lint、format 检查，完成生产构建并检查产物体积与环境变量配置。
 

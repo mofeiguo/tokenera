@@ -20,6 +20,42 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 import { VIEW_MODES, type ViewMode } from '../constants'
 
+const CARD_SKELETON_KEYS = [
+  'card-a',
+  'card-b',
+  'card-c',
+  'card-d',
+  'card-e',
+  'card-f',
+  'card-g',
+  'card-h',
+  'card-i',
+  'card-j',
+  'card-k',
+  'card-l',
+]
+const TABLE_COLUMNS = [
+  { key: 'model', width: 200 },
+  { key: 'provider', width: 100 },
+  { key: 'input', width: 100 },
+  { key: 'output', width: 100 },
+  { key: 'type', width: 80 },
+  { key: 'endpoint', width: 100 },
+]
+const TABLE_ROW_KEYS = [
+  'row-a',
+  'row-b',
+  'row-c',
+  'row-d',
+  'row-e',
+  'row-f',
+  'row-g',
+  'row-h',
+  'row-i',
+  'row-j',
+]
+const PAGINATION_KEYS = ['previous', 'one', 'two', 'next']
+
 export interface LoadingSkeletonProps {
   viewMode?: ViewMode
 }
@@ -29,12 +65,19 @@ export function LoadingSkeleton(props: LoadingSkeletonProps) {
 
   return (
     <div className='space-y-5'>
-      <div className='space-y-1.5'>
-        <Skeleton className='h-8 w-40' />
-        <Skeleton className='h-4 w-52' />
+      <div className='space-y-2'>
+        <Skeleton className='h-9 w-52 sm:h-10' />
+        <Skeleton className='h-4 w-40' />
       </div>
-      <Skeleton className='h-10 w-full rounded-lg' />
-      <FilterBarSkeleton />
+      <Skeleton className='h-11 w-full rounded-lg sm:h-12' />
+      <div className='border-border/60 flex items-center justify-between gap-4 border-y py-3'>
+        <div className='flex gap-2'>
+          {['all', 'chat', 'image', 'video', 'embeddings'].map((key) => (
+            <Skeleton key={key} className='h-8 w-16 rounded-md' />
+          ))}
+        </div>
+        <Skeleton className='h-8 w-16 rounded-md' />
+      </div>
       {viewMode === VIEW_MODES.TABLE ? (
         <TableContentSkeleton />
       ) : (
@@ -46,31 +89,36 @@ export function LoadingSkeleton(props: LoadingSkeletonProps) {
 
 function CardContentSkeleton() {
   return (
-    <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
-      {Array.from({ length: 9 }).map((_, i) => (
-        <div key={i} className='rounded-xl border p-5'>
+    <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
+      {CARD_SKELETON_KEYS.map((key) => (
+        <div
+          key={key}
+          className='bg-card border-border/80 min-h-52 rounded-xl border p-5 shadow-xs'
+        >
           <div className='flex items-start justify-between gap-3'>
             <div className='flex min-w-0 items-start gap-3'>
-              <Skeleton className='size-10 shrink-0 rounded-xl' />
+              <Skeleton className='size-10 shrink-0 rounded-lg' />
               <div className='min-w-0 flex-1 space-y-2'>
                 <Skeleton className='h-5 w-36' />
-                <Skeleton className='h-3.5 w-48' />
+                <Skeleton className='h-3.5 w-28' />
               </div>
             </div>
-            <Skeleton className='h-8 w-16 rounded-md' />
+            <Skeleton className='size-8 rounded-md' />
           </div>
-          <div className='mt-4 space-y-2'>
-            <Skeleton className='h-3.5 w-full' />
-            <Skeleton className='h-3.5 w-4/5' />
+          <div className='mt-3 flex items-center gap-1.5'>
+            <Skeleton className='size-6 rounded-md' />
+            <Skeleton className='size-6 rounded-md' />
+            <Skeleton className='size-6 rounded-md' />
           </div>
-          <div className='mt-4 flex items-center gap-2'>
-            <Skeleton className='h-4 w-24' />
-            <Skeleton className='h-4 w-16' />
-          </div>
-          <div className='mt-2 flex items-center gap-3'>
-            <Skeleton className='h-3.5 w-14' />
-            <Skeleton className='h-3.5 w-14' />
-            <Skeleton className='h-3.5 w-8' />
+          <div className='border-border/60 mt-8 grid grid-cols-2 gap-4 border-t pt-4'>
+            <div className='space-y-2'>
+              <Skeleton className='h-3 w-14' />
+              <Skeleton className='h-4 w-20' />
+            </div>
+            <div className='space-y-2'>
+              <Skeleton className='h-3 w-14' />
+              <Skeleton className='h-4 w-20' />
+            </div>
           </div>
         </div>
       ))}
@@ -78,65 +126,31 @@ function CardContentSkeleton() {
   )
 }
 
-function FilterBarSkeleton() {
-  return (
-    <div className='space-y-3'>
-      <div className='flex items-center gap-3'>
-        <div className='flex flex-1 flex-wrap items-center gap-2'>
-          {[80, 90, 75, 85, 70].map((width, i) => (
-            <Skeleton
-              key={i}
-              className='h-8 rounded-lg'
-              style={{ width: `${width}px` }}
-            />
-          ))}
-        </div>
-        <div className='flex items-center gap-2'>
-          <Skeleton className='h-8 w-24 rounded-lg' />
-          <Skeleton className='h-8 w-20 rounded-lg' />
-          <Skeleton className='h-8 w-24' />
-          <Skeleton className='h-8 w-20 rounded-lg' />
-        </div>
-      </div>
-      <Skeleton className='h-5 w-24' />
-    </div>
-  )
-}
-
 function TableContentSkeleton() {
-  const columns = [
-    { width: 200 },
-    { width: 100 },
-    { width: 100 },
-    { width: 100 },
-    { width: 80 },
-    { width: 100 },
-  ]
-
   return (
     <div className='space-y-4'>
-      <div className='overflow-hidden rounded-lg border'>
-        <div className='bg-muted/30 border-b px-4 py-3'>
+      <div className='bg-card border-border/80 overflow-hidden rounded-xl border shadow-xs'>
+        <div className='bg-muted/30 border-border/60 border-b px-4 py-3'>
           <div className='flex items-center gap-4'>
-            {columns.map((col, i) => (
+            {TABLE_COLUMNS.map((column) => (
               <Skeleton
-                key={i}
+                key={column.key}
                 className='h-4'
-                style={{ width: `${col.width}px` }}
+                style={{ width: `${column.width}px` }}
               />
             ))}
           </div>
         </div>
-        {Array.from({ length: 10 }).map((_, i) => (
+        {TABLE_ROW_KEYS.map((rowKey) => (
           <div
-            key={i}
-            className='flex items-center gap-4 border-b px-4 py-3 last:border-b-0'
+            key={rowKey}
+            className='border-border/50 flex items-center gap-4 border-b px-4 py-3 last:border-b-0'
           >
-            {columns.map((col, j) => (
+            {TABLE_COLUMNS.map((column) => (
               <Skeleton
-                key={j}
+                key={`${rowKey}-${column.key}`}
                 className='h-5'
-                style={{ width: `${col.width}px` }}
+                style={{ width: `${column.width}px` }}
               />
             ))}
           </div>
@@ -145,8 +159,8 @@ function TableContentSkeleton() {
       <div className='flex items-center justify-between'>
         <Skeleton className='h-5 w-32' />
         <div className='flex items-center gap-2'>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className='size-8' />
+          {PAGINATION_KEYS.map((key) => (
+            <Skeleton key={key} className='size-8 rounded-md' />
           ))}
         </div>
       </div>

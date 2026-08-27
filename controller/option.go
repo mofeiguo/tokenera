@@ -79,12 +79,19 @@ func buildCompletionRatioMetaValue(optionValues map[string]string) string {
 func GetOptions(c *gin.Context) {
 	var options []*model.Option
 	optionValues := make(map[string]string)
+	effectivePricing, err := model.GetEffectivePricingOptionValues()
+	if err != nil {
+		common.SysError("failed to build effective model pricing options: " + err.Error())
+	}
 	common.OptionMapRWMutex.Lock()
 	for k, v := range common.OptionMap {
 		if k == "theme.frontend" {
 			continue
 		}
 		value := common.Interface2String(v)
+		if effectiveValue, ok := effectivePricing[k]; ok {
+			value = effectiveValue
+		}
 		isSensitiveKey := strings.HasSuffix(k, "Token") ||
 			strings.HasSuffix(k, "Secret") ||
 			strings.HasSuffix(k, "Key") ||

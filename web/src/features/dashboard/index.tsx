@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { Eye, EyeOff } from 'lucide-react'
 import { useState, useCallback, useMemo, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -32,12 +31,17 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { ROLE } from '@/lib/roles'
+import { getRouteApi, useNavigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
+import {
+  DASHBOARD_PANEL_FRAME,
+  DASHBOARD_PANEL_HEADER,
+} from './components/ui/panel-surface'
 import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   buildDefaultDashboardFilters,
@@ -115,13 +119,13 @@ const LazyFlowCharts = lazy(() =>
 
 function LogStatCardsFallback() {
   return (
-    <div className='overflow-hidden rounded-lg border'>
+    <div className={DASHBOARD_PANEL_FRAME} aria-busy='true'>
       <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
         {LOG_STAT_CARD_FALLBACK_KEYS.map((key, index) => (
           <div
             key={key}
             className={cn(
-              'px-2.5 py-1.5 sm:px-5 sm:py-4',
+              'px-2.5 py-2 sm:px-4 sm:py-3.5',
               index === LOG_STAT_CARD_FALLBACK_KEYS.length - 1 &&
                 'col-span-2 sm:col-span-1'
             )}
@@ -141,13 +145,13 @@ function LogStatCardsFallback() {
 
 function ModelChartsFallback() {
   return (
-    <div className='overflow-hidden rounded-lg border'>
-      <div className='flex items-center justify-between border-b px-4 py-3 sm:px-5'>
+    <div className={DASHBOARD_PANEL_FRAME} aria-busy='true'>
+      <div className={cn(DASHBOARD_PANEL_HEADER, 'justify-between')}>
         <Skeleton className='h-5 w-32' />
-        <Skeleton className='h-8 w-72' />
+        <Skeleton className='h-8 w-48 sm:w-72' />
       </div>
       <div className='h-96 p-2'>
-        <Skeleton className='h-full w-full' />
+        <Skeleton className='h-full w-full rounded-lg' />
       </div>
     </div>
   )
@@ -155,8 +159,13 @@ function ModelChartsFallback() {
 
 function PerformanceOverviewFallback() {
   return (
-    <div className='overflow-hidden rounded-lg border'>
-      <div className='flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-5'>
+    <div className={DASHBOARD_PANEL_FRAME} aria-busy='true'>
+      <div
+        className={cn(
+          DASHBOARD_PANEL_HEADER,
+          'flex-wrap gap-x-6 gap-y-2 border-b-0'
+        )}
+      >
         <div className='flex items-center gap-2'>
           <Skeleton className='h-4 w-24' />
         </div>

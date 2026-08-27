@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
 import { Gauge, HeartPulse, Timer } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -32,7 +31,13 @@ import {
   getSuccessRateTextClass,
 } from '@/features/performance-metrics/lib/format'
 import type { PerfModelSummary } from '@/features/performance-metrics/types'
+import { useQuery } from '@/lib/query'
 import { cn } from '@/lib/utils'
+
+import {
+  DASHBOARD_PANEL_FRAME,
+  DASHBOARD_PANEL_HEADER,
+} from '../ui/panel-surface'
 
 const PERFORMANCE_WINDOW_HOURS = 24
 const TOP_MODEL_LIMIT = 6
@@ -103,16 +108,26 @@ export function PerformanceOverview() {
 
   if (!loading && !hasData) {
     return (
-      <div className='text-muted-foreground overflow-hidden rounded-lg border px-4 py-3 text-center text-xs'>
+      <div
+        className={cn(
+          DASHBOARD_PANEL_FRAME,
+          'text-muted-foreground px-4 py-3 text-center text-xs'
+        )}
+        role='status'
+      >
         {t('No performance data available')}
       </div>
     )
   }
 
   return (
-    <div className='overflow-hidden rounded-lg border'>
-      <div className='flex flex-wrap items-center gap-x-5 gap-y-2.5 px-4 py-2.5 sm:px-5 sm:py-3'>
-        {/* Title */}
+    <div className={DASHBOARD_PANEL_FRAME}>
+      <div
+        className={cn(
+          DASHBOARD_PANEL_HEADER,
+          'flex-wrap gap-x-5 gap-y-2.5 border-b-0'
+        )}
+      >
         <div className='flex items-center gap-1.5'>
           <IconBadge tone='success' size='xs'>
             <HeartPulse />
@@ -122,10 +137,8 @@ export function PerformanceOverview() {
           </span>
         </div>
 
-        {/* Separator */}
         <div className='bg-border hidden h-4 w-px sm:block' />
 
-        {/* 3 KPI inline metrics */}
         {loading ? (
           <div className='flex flex-wrap items-center gap-x-5 gap-y-2'>
             {['success', 'latency', 'throughput'].map((key) => (
@@ -159,10 +172,8 @@ export function PerformanceOverview() {
           </div>
         )}
 
-        {/* Separator */}
         <div className='bg-border hidden h-4 w-px lg:block' />
 
-        {/* Top models inline badges */}
         {!loading && hasData && (
           <div className='flex flex-wrap items-center gap-1.5'>
             {topModels.map((model) => (

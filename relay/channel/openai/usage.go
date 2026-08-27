@@ -7,6 +7,12 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
 
+// ApplyUsagePostProcessing remaps provider-specific cache token fields into the
+// standard prompt_tokens_details.cached_tokens used for billing.
+func ApplyUsagePostProcessing(info *relaycommon.RelayInfo, usage *dto.Usage, responseBody []byte) {
+	applyUsagePostProcessing(info, usage, responseBody)
+}
+
 func applyUsagePostProcessing(info *relaycommon.RelayInfo, usage *dto.Usage, responseBody []byte) {
 	if info == nil || usage == nil {
 		return

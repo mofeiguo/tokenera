@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -28,9 +27,10 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useQueryClient } from '@/lib/query'
 import { cn } from '@/lib/utils'
 
-import { syncUpstream, previewUpstreamDiff } from '../../api'
+import { previewUpstreamDiff } from '../../api'
 import { getSyncLocaleOptions, getSyncSourceOptions } from '../../constants'
 import { modelsQueryKeys, vendorsQueryKeys } from '../../lib'
 import type { SyncLocale, SyncSource } from '../../types'
@@ -83,37 +83,34 @@ export function SyncWizardDialog({
       const previewRes = await previewUpstreamDiff({ locale, source })
 
       if (!previewRes.success) {
-        throw new Error(previewRes.message || 'Failed to preview upstream diff')
+        throw new Error(
+          previewRes.message || t('Failed to preview upstream diff')
+        )
       }
 
       const conflicts = previewRes.data?.conflicts || []
 
       if (conflicts.length > 0) {
         toast.warning(
-          `Found ${conflicts.length} conflict${conflicts.length > 1 ? 's' : ''}. Please resolve them first.`
+          t('Found {{count}} conflicts. Please resolve them first.', {
+            count: conflicts.length,
+          })
         )
         setUpstreamConflicts(conflicts)
         setOpen('upstream-conflict')
         return
       }
 
-      // No conflicts, proceed with sync
-      const response = await syncUpstream({ locale, source })
-
-      if (response.success) {
-        const { created_models, created_vendors, updated_models } =
-          response.data || {}
-        toast.success(
-          `Sync completed! Created ${created_models || 0} models, updated ${updated_models || 0}, and added ${created_vendors || 0} vendors.`
+      toast.success(
+        t(
+          'Existing catalog models already match upstream. Models that exist only upstream were skipped.'
         )
-        queryClient.invalidateQueries({ queryKey: modelsQueryKeys.lists() })
-        queryClient.invalidateQueries({ queryKey: vendorsQueryKeys.lists() })
-        onOpenChange(false)
-      } else {
-        toast.error(response.message || 'Sync failed')
-      }
+      )
+      queryClient.invalidateQueries({ queryKey: modelsQueryKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: vendorsQueryKeys.lists() })
+      onOpenChange(false)
     } catch (error: unknown) {
-      toast.error((error as Error)?.message || 'Sync failed')
+      toast.error((error as Error)?.message || t('Sync failed'))
     } finally {
       setIsSyncing(false)
     }
@@ -124,7 +121,9 @@ export function SyncWizardDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={t('Sync Upstream Models')}
-      description={t('Synchronize models and vendors from an upstream source')}
+      description={t(
+        'Update display metadata for existing catalog models from an upstream source'
+      )}
       initialFocus={!isMobile}
       contentHeight='auto'
       bodyClassName='flex flex-col gap-6'
@@ -236,7 +235,7 @@ export function SyncWizardDialog({
       <div className='bg-muted/50 rounded-lg border p-4'>
         <p className='text-muted-foreground text-sm'>
           {t(
-            'The sync will fetch missing models and vendors from the selected source. Existing records are updated only when you approve conflicts.'
+            'Only existing catalog models with official sync enabled are updated. Models that exist only upstream are skipped. Conflicts must be approved before overwrite.'
           )}
         </p>
       </div>

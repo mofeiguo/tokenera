@@ -68,6 +68,7 @@ type GroupFormValues = {
   GroupRatio: string
   TopupGroupRatio: string
   UserUsableGroups: string
+  GroupInherit: string
   GroupGroupRatio: string
   AutoGroups: string
   MaxTokenAutoGroups: number
@@ -216,6 +217,33 @@ export const GroupRatioForm = memo(function GroupRatioForm({
 
             <FormField
               control={form.control}
+              name='GroupInherit'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Group inheritance')}</FormLabel>
+                  <FormControl>
+                    <JsonCodeEditor
+                      value={field.value}
+                      onChange={field.onChange}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      textareaRef={field.ref}
+                      heightClassName='h-40 min-h-40 max-h-40'
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'JSON map of identity group → ordered groups it can use. The identity group is always tried first.'
+                    )}
+                    {` { "vip": ["vip", "default"] }`}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name='DefaultUseAutoGroup'
               render={({ field }) => (
                 <SettingsSwitchItem>
@@ -285,6 +313,33 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                       'Optional multiplier per user group used when calculating recharge pricing. Provide a JSON object such as'
                     )}
                     {` { "default": 1, "vip": 1.2 }`}.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='GroupInherit'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Group inheritance')}</FormLabel>
+                  <FormControl>
+                    <JsonCodeEditor
+                      value={field.value}
+                      onChange={field.onChange}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      textareaRef={field.ref}
+                      heightClassName='h-40 min-h-40 max-h-40'
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'JSON map of identity group → ordered groups it can use. The identity group is always tried first.'
+                    )}
+                    {` { "vip": ["vip", "default"] }`}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

@@ -16,8 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useBlocker } from '@tanstack/react-router'
 import { useEffect } from 'react'
+
+import { useBlocker } from '@/lib/router'
 
 /**
  * @deprecated Use FormNavigationGuard component instead for better UX

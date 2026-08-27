@@ -58,7 +58,7 @@ func TestValidateChannelProxy(t *testing.T) {
 	}
 }
 
-func TestValidateChannelRequiresNewAPIBaseURL(t *testing.T) {
+func TestValidateChannelRequiresBifrostBaseURL(t *testing.T) {
 	tests := []struct {
 		name    string
 		baseURL *string
@@ -66,20 +66,20 @@ func TestValidateChannelRequiresNewAPIBaseURL(t *testing.T) {
 	}{
 		{name: "missing", wantErr: true},
 		{name: "blank", baseURL: common.GetPointer("  "), wantErr: true},
-		{name: "configured", baseURL: common.GetPointer("https://new-api.example")},
+		{name: "configured", baseURL: common.GetPointer("http://127.0.0.1:8080")},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			channel := &model.Channel{
-				Type:    constant.ChannelTypeNewAPI,
+				Type:    constant.ChannelTypeBifrost,
 				BaseURL: test.baseURL,
 			}
 
 			err := validateChannel(channel, false)
 
 			if test.wantErr {
-				require.ErrorContains(t, err, "New API channel base URL cannot be empty")
+				require.ErrorContains(t, err, "Bifrost channel base URL cannot be empty")
 				return
 			}
 			require.NoError(t, err)
@@ -87,14 +87,15 @@ func TestValidateChannelRequiresNewAPIBaseURL(t *testing.T) {
 	}
 }
 
-func TestNewAPIChannelRegistration(t *testing.T) {
-	apiType, ok := common.ChannelType2APIType(constant.ChannelTypeNewAPI)
+func TestBifrostChannelRegistration(t *testing.T) {
+	apiType, ok := common.ChannelType2APIType(constant.ChannelTypeBifrost)
 
 	require.True(t, ok)
-	assert.Equal(t, constant.APITypeNewAPI, apiType)
-	assert.Equal(t, "New API", constant.GetChannelTypeName(constant.ChannelTypeNewAPI))
-	require.Greater(t, len(constant.ChannelBaseURLs), constant.ChannelTypeNewAPI)
-	assert.Empty(t, constant.ChannelBaseURLs[constant.ChannelTypeNewAPI])
+	assert.Equal(t, constant.APITypeBifrost, apiType)
+	assert.Equal(t, "Bifrost", constant.GetChannelTypeName(constant.ChannelTypeBifrost))
+	require.Greater(t, len(constant.ChannelBaseURLs), constant.ChannelTypeBifrost)
+	assert.Empty(t, constant.ChannelBaseURLs[constant.ChannelTypeBifrost])
+	assert.Equal(t, "bifrost", channelOwnerName(constant.ChannelTypeBifrost))
 }
 
 func TestResponsesCompactChannelSupport(t *testing.T) {
@@ -102,36 +103,26 @@ func TestResponsesCompactChannelSupport(t *testing.T) {
 		name        string
 		channelType int
 		apiType     int
-		want        bool
 	}{
-		{name: "OpenAI", channelType: constant.ChannelTypeOpenAI, apiType: constant.APITypeOpenAI, want: true},
-		{name: "Azure", channelType: constant.ChannelTypeAzure, apiType: constant.APITypeOpenAI, want: true},
-		{name: "Codex", channelType: constant.ChannelTypeCodex, apiType: constant.APITypeCodex, want: true},
-		{name: "Advanced Custom", channelType: constant.ChannelTypeAdvancedCustom, apiType: constant.APITypeAdvancedCustom, want: true},
-		{name: "Sub2API", channelType: constant.ChannelTypeSub2API, apiType: constant.APITypeSub2API, want: true},
-		{name: "New API", channelType: constant.ChannelTypeNewAPI, apiType: constant.APITypeNewAPI, want: true},
-		{name: "Anthropic", channelType: constant.ChannelTypeAnthropic, apiType: constant.APITypeAnthropic, want: false},
+		{name: "OpenAI", channelType: constant.ChannelTypeOpenAI, apiType: constant.APITypeOpenAI},
+		{name: "Bifrost", channelType: constant.ChannelTypeBifrost, apiType: constant.APITypeBifrost},
+		{name: "Anthropic", channelType: constant.ChannelTypeAnthropic, apiType: constant.APITypeAnthropic},
+		{name: "Jimeng", channelType: constant.ChannelTypeJimeng, apiType: constant.APITypeJimeng},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.want, common.SupportsResponsesCompact(test.channelType, test.apiType))
+			assert.False(t, common.SupportsResponsesCompact(test.channelType, test.apiType))
 		})
 	}
 }
 
-func TestMultiprotocolGatewayEndpointTypes(t *testing.T) {
-	want := []constant.EndpointType{
+func TestBifrostChannelEndpointTypes(t *testing.T) {
+	assert.Equal(t, []constant.EndpointType{
 		constant.EndpointTypeOpenAI,
 		constant.EndpointTypeOpenAIResponse,
-		constant.EndpointTypeOpenAIResponseCompact,
 		constant.EndpointTypeAnthropic,
-		constant.EndpointTypeGemini,
-		constant.EndpointTypeOpenAIAlphaSearch,
-	}
-
-	assert.Equal(t, want, common.GetEndpointTypesByChannelType(constant.ChannelTypeNewAPI, "gpt-5"))
-	assert.Equal(t, want, common.GetEndpointTypesByChannelType(constant.ChannelTypeSub2API, "gpt-5"))
+	}, common.GetEndpointTypesByChannelType(constant.ChannelTypeBifrost, "gpt-5"))
 }
 
 func TestCopyChannelRejectsInvalidLegacyProxySettings(t *testing.T) {

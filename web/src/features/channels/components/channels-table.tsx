@@ -16,8 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { getRouteApi } from '@tanstack/react-router'
 import type {
   ColumnFiltersState,
   OnChangeFn,
@@ -45,6 +43,8 @@ import {
 import { useMediaQuery } from '@/hooks'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { getLobeIcon } from '@/lib/lobe-icon'
+import { useQuery } from '@/lib/query'
+import { getRouteApi } from '@/lib/router'
 
 import { getChannels, searchChannels, getGroups } from '../api'
 import {

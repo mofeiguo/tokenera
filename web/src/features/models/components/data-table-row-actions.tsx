@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQueryClient } from '@tanstack/react-query'
 import type { Row } from '@tanstack/react-table'
 import { Pencil, Power, PowerOff, Trash2 } from 'lucide-react'
 import { useState } from 'react'
@@ -34,6 +33,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { useQueryClient } from '@/lib/query'
 
 import {
   handleDeleteModel,

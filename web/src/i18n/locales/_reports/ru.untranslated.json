@@ -1,0 +1,12 @@
+{
+  "All upstream models on this channel. Catalog bindings are managed from the Models page.": "All upstream models on this channel. Catalog bindings are managed from the Models page.",
+  "Bifrost": "Bifrost",
+  "Bind this public model to one upstream model on each channel. Set priority per binding so the same channel can rank differently for different public models.": "Bind this public model to one upstream model on each channel. Set priority per binding so the same channel can rank differently for different public models.",
+  "Catalog bindings": "Catalog bindings",
+  "No catalog binding": "No catalog binding",
+  "No catalog bindings on this channel.": "No catalog bindings on this channel.",
+  "No models configured on this channel.": "No models configured on this channel.",
+  "Public model": "Public model",
+  "Public model bindings for this channel. Edit them from the Models page to enable routing.": "Public model bindings for this channel. Edit them from the Models page to enable routing.",
+  "You can still edit non-sensitive operations fields such as models, groups, and weight.": "You can still edit non-sensitive operations fields such as models, groups, and weight."
+}

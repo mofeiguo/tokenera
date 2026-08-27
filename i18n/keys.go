@@ -256,31 +256,11 @@ const (
 	MsgSettingSaved            = "setting.saved"
 )
 
-// Deployment related messages (io.net)
-const (
-	MsgDeploymentNotEnabled     = "deployment.not_enabled"
-	MsgDeploymentIdRequired     = "deployment.id_required"
-	MsgDeploymentContainerIdReq = "deployment.container_id_required"
-	MsgDeploymentNameEmpty      = "deployment.name_empty"
-	MsgDeploymentNameTaken      = "deployment.name_taken"
-	MsgDeploymentHardwareIdReq  = "deployment.hardware_id_required"
-	MsgDeploymentHardwareInvId  = "deployment.hardware_invalid_id"
-	MsgDeploymentApiKeyRequired = "deployment.api_key_required"
-	MsgDeploymentInvalidPayload = "deployment.invalid_payload"
-	MsgDeploymentNotFound       = "deployment.not_found"
-)
-
 // Performance related messages
 const (
 	MsgPerfDiskCacheCleared = "performance.disk_cache_cleared"
 	MsgPerfStatsReset       = "performance.stats_reset"
 	MsgPerfGcExecuted       = "performance.gc_executed"
-)
-
-// Ability related messages
-const (
-	MsgAbilityDbCorrupted   = "ability.db_corrupted"
-	MsgAbilityRepairRunning = "ability.repair_running"
 )
 
 // OAuth related messages
@@ -322,6 +302,7 @@ const (
 	MsgDistributorGroupAccessDenied       = "distributor.group_access_denied"
 	MsgDistributorGetChannelFailed        = "distributor.get_channel_failed"
 	MsgDistributorNoAvailableChannel      = "distributor.no_available_channel"
+	MsgDistributorModelNotInCatalog       = "distributor.model_not_in_catalog"
 	MsgDistributorInvalidMidjourney       = "distributor.invalid_midjourney_request"
 	MsgDistributorInvalidParseModel       = "distributor.invalid_request_parse_model"
 )

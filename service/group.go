@@ -11,6 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func GetRequestAccessibleGroups(c *gin.Context) []string {
+	userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
+	return setting.GetAccessibleGroups(userGroup)
+}
+
 func GetUserUsableGroups(userGroup string) map[string]string {
 	groupsCopy := setting.GetUserUsableGroupsCopy()
 	if userGroup != "" {

@@ -16,9 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { QueryClient } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { toast } from 'sonner'
+
+import type { QueryClient } from '@/lib/query'
 
 import {
   copyChannel,
@@ -32,7 +33,6 @@ import {
   enableTagChannels,
   disableTagChannels,
   deleteDisabledChannels,
-  fixChannelAbilities,
   editTagChannels,
   testAllChannels,
   updateAllChannelsBalance,
@@ -587,37 +587,6 @@ export async function handleDeleteAllDisabled(
     }
   } catch {
     toast.error(i18next.t('Failed to delete disabled channels'))
-  }
-}
-
-/**
- * Repair channel consistency
- */
-export async function handleFixAbilities(
-  queryClient?: QueryClient,
-  onSuccess?: (result: { success: number; fails: number }) => void
-): Promise<void> {
-  try {
-    const response = await fixChannelAbilities()
-    if (response.success && response.data) {
-      toast.success(
-        i18next.t(
-          'Channel consistency repaired: {{success}} succeeded, {{fails}} failed',
-          {
-            success: response.data.success,
-            fails: response.data.fails,
-          }
-        )
-      )
-      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-      onSuccess?.(response.data)
-    } else {
-      toast.error(
-        response.message || i18next.t('Failed to repair channel consistency')
-      )
-    }
-  } catch {
-    toast.error(i18next.t('Failed to repair channel consistency'))
   }
 }
 

@@ -16,8 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-/* eslint-disable react-refresh/only-export-components */
-import { useQueryClient } from '@tanstack/react-query'
 import React, {
   createContext,
   useContext,
@@ -25,6 +23,9 @@ import React, {
   useCallback,
   useMemo,
 } from 'react'
+
+/* eslint-disable react-refresh/only-export-components */
+import { useQueryClient } from '@/lib/query'
 
 import { useChannelUpstreamUpdates } from '../hooks/use-channel-upstream-updates'
 import { channelsQueryKeys } from '../lib'
@@ -40,7 +41,6 @@ type DialogType =
   | 'test-channel'
   | 'balance-query'
   | 'fetch-models'
-  | 'ollama-models'
   | 'multi-key-manage'
   | 'tag-batch-edit'
   | 'edit-tag'

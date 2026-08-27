@@ -16,14 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  ChevronRight,
-  Gauge,
-  KeyRound,
-  ScrollText,
-  Sigma,
-  Zap,
-} from 'lucide-react'
+import { ChevronRight, KeyRound, Link2, ScrollText } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BundledLanguage } from 'shiki/bundle/web'
@@ -32,20 +25,10 @@ import {
   CodeBlock,
   CodeBlockCopyButton,
 } from '@/components/ai-elements/code-block'
-import {
-  StaticDataTable,
-  staticDataTableClassNames as tableStyles,
-} from '@/components/data-table'
-import { Badge } from '@/components/ui/badge'
+import { CopyButton } from '@/components/copy-button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useStatus } from '@/hooks/use-status'
 
-import {
-  buildRateLimits,
-  buildSupportedParameters,
-  formatRateLimit,
-  type SupportedParameter,
-} from '../lib/mock-stats'
 import { replaceModelInPath } from '../lib/model-helpers'
 import type { PricingModel } from '../types'
 
@@ -109,7 +92,7 @@ function buildChatSample(lang: Lang, ctx: SampleContext): string {
       `curl ${url} \\`,
       `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
       `  -H "Content-Type: application/json" \\`,
-      `  -d '${bodyJson.replace(/\n/g, '\n     ')}'`,
+      `  -d '${bodyJson.replaceAll('\n', '\n     ')}'`,
     ].join('\n')
   }
 
@@ -177,7 +160,7 @@ function buildAnthropicSample(lang: Lang, ctx: SampleContext): string {
       `  -H "x-api-key: $${ctx.apiKeyEnv}" \\`,
       `  -H "anthropic-version: 2023-06-01" \\`,
       `  -H "Content-Type: application/json" \\`,
-      `  -d '${body.replace(/\n/g, '\n     ')}'`,
+      `  -d '${body.replaceAll('\n', '\n     ')}'`,
     ].join('\n')
   }
   if (lang === 'python') {
@@ -249,7 +232,7 @@ function buildGeminiSample(lang: Lang, ctx: SampleContext): string {
     return [
       `curl '${url}' \\`,
       `  -H 'Content-Type: application/json' \\`,
-      `  -d '${body.replace(/\n/g, '\n     ')}'`,
+      `  -d '${body.replaceAll('\n', '\n     ')}'`,
     ].join('\n')
   }
   if (lang === 'python') {
@@ -299,7 +282,7 @@ function buildEmbeddingSample(lang: Lang, ctx: SampleContext): string {
       `curl ${url} \\`,
       `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
       `  -H "Content-Type: application/json" \\`,
-      `  -d '${body.replace(/\n/g, '\n     ')}'`,
+      `  -d '${body.replaceAll('\n', '\n     ')}'`,
     ].join('\n')
   }
   if (lang === 'python') {
@@ -365,7 +348,7 @@ function buildImageSample(lang: Lang, ctx: SampleContext): string {
       `curl ${url} \\`,
       `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
       `  -H "Content-Type: application/json" \\`,
-      `  -d '${body.replace(/\n/g, '\n     ')}'`,
+      `  -d '${body.replaceAll('\n', '\n     ')}'`,
     ].join('\n')
   }
   if (lang === 'python') {
@@ -428,12 +411,35 @@ function buildSample(
   endpointType: string,
   ctx: SampleContext
 ): string {
-  if (endpointType === 'anthropic') return buildAnthropicSample(lang, ctx)
-  if (endpointType === 'gemini') return buildGeminiSample(lang, ctx)
-  if (endpointType === 'embeddings' || endpointType === 'jina-rerank')
+  if (endpointType === 'anthropic') {
+    return buildAnthropicSample(lang, ctx)
+  }
+  if (endpointType === 'gemini') {
+    return buildGeminiSample(lang, ctx)
+  }
+  if (endpointType === 'embeddings' || endpointType === 'jina-rerank') {
     return buildEmbeddingSample(lang, ctx)
-  if (endpointType === 'image-generation') return buildImageSample(lang, ctx)
+  }
+  if (endpointType === 'image-generation') {
+    return buildImageSample(lang, ctx)
+  }
   return buildChatSample(lang, ctx)
+}
+
+function getModelEndpoints(
+  model: PricingModel,
+  endpointMap: Record<string, { path?: string; method?: string }>
+) {
+  return (model.supported_endpoint_types || [])
+    .map((type) => {
+      const info = endpointMap[type] || {}
+      let path = info.path || ''
+      if (path.includes('{model}')) {
+        path = replaceModelInPath(path, model.model_name || '')
+      }
+      return { type, path, method: info.method || 'POST' }
+    })
+    .filter((endpoint) => Boolean(endpoint.path))
 }
 
 // ---------------------------------------------------------------------------
@@ -460,19 +466,10 @@ function CodeSamplesSection(props: {
     return 'https://api.example.com'
   }, [status])
 
-  const endpoints = useMemo(() => {
-    const types = props.model.supported_endpoint_types || []
-    return types
-      .map((type) => {
-        const info = props.endpointMap[type] || {}
-        let path = info.path || ''
-        if (path && path.includes('{model}')) {
-          path = replaceModelInPath(path, props.model.model_name || '')
-        }
-        return { type, path, method: info.method || 'POST' }
-      })
-      .filter((e) => Boolean(e.path))
-  }, [props.model, props.endpointMap])
+  const endpoints = useMemo(
+    () => getModelEndpoints(props.model, props.endpointMap),
+    [props.model, props.endpointMap]
+  )
 
   const [endpointType, setEndpointType] = useState<string>(
     endpoints[0]?.type ?? ''
@@ -549,173 +546,45 @@ function CodeSamplesSection(props: {
 }
 
 // ---------------------------------------------------------------------------
-// Supported parameters table
+// Endpoint list
 // ---------------------------------------------------------------------------
 
-function SupportedParametersSection(props: { model: PricingModel }) {
+function EndpointsSection(props: {
+  model: PricingModel
+  endpointMap: Record<string, { path?: string; method?: string }>
+}) {
   const { t } = useTranslation()
-  const params = useMemo(
-    () => buildSupportedParameters(props.model),
-    [props.model]
+  const endpoints = useMemo(
+    () => getModelEndpoints(props.model, props.endpointMap),
+    [props.model, props.endpointMap]
   )
 
-  if (params.length === 0) return null
+  if (endpoints.length === 0) return null
 
   return (
     <section>
-      <SectionTitle icon={Sigma}>{t('Supported parameters')}</SectionTitle>
-      <StaticDataTable
-        className={tableStyles.sectionContainer}
-        headerRowClassName={tableStyles.mutedHeaderRow}
-        data={params}
-        getRowKey={(param) => param.name}
-        getRowClassName={() => 'hover:bg-muted/20'}
-        columns={[
-          {
-            id: 'parameter',
-            header: t('Parameter'),
-            className: 'h-9 w-44',
-            cellClassName: tableStyles.topCell,
-            cell: (p) => (
-              <div className='flex items-center gap-1.5'>
-                <code className='font-mono text-sm font-medium'>{p.name}</code>
-                {p.required && (
-                  <Badge
-                    variant='outline'
-                    className='h-6 border-rose-500/40 px-2 text-sm text-rose-600 dark:text-rose-400'
-                  >
-                    {t('required')}
-                  </Badge>
-                )}
-              </div>
-            ),
-          },
-          {
-            id: 'type',
-            header: t('Type'),
-            className: 'h-9 w-24',
-            cellClassName: tableStyles.topCell,
-            cell: (p) => (
-              <Badge
-                variant='secondary'
-                className='h-7 rounded-full px-2.5 font-mono text-sm font-normal'
-              >
-                {p.type}
-              </Badge>
-            ),
-          },
-          {
-            id: 'range',
-            header: t('Default / range'),
-            className: 'h-9 w-32',
-            cellClassName: tableStyles.topCell,
-            cell: (p) => <ParamRangeCell param={p} />,
-          },
-          {
-            id: 'description',
-            header: t('Description'),
-            className: 'h-9',
-            cellClassName: tableStyles.topMutedCell,
-            cell: (p) => t(p.descriptionKey),
-          },
-        ]}
-      />
-    </section>
-  )
-}
-
-function ParamRangeCell(props: { param: SupportedParameter }) {
-  const { defaultValue, range, enumValues } = props.param
-  if (defaultValue !== undefined) {
-    return (
-      <div className='flex flex-wrap items-center gap-1'>
-        <span className='text-muted-foreground text-sm'>=</span>
-        <code className='bg-muted rounded px-1.5 py-0.5 font-mono text-sm'>
-          {String(defaultValue)}
-        </code>
-        {range && (
-          <span className='text-muted-foreground text-sm'>{range}</span>
-        )}
-      </div>
-    )
-  }
-  if (range) {
-    return (
-      <span className='text-muted-foreground font-mono text-sm'>{range}</span>
-    )
-  }
-  if (enumValues && enumValues.length > 0) {
-    return (
-      <div className='flex flex-wrap gap-0.5'>
-        {enumValues.map((v) => (
-          <code
-            key={v}
-            className='bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-sm'
+      <SectionTitle icon={Link2}>{t('Endpoints')}</SectionTitle>
+      <div className='divide-border/60 border-border/70 divide-y overflow-hidden rounded-xl border'>
+        {endpoints.map((endpoint) => (
+          <div
+            key={endpoint.type}
+            className='flex items-center gap-3 px-3 py-2.5'
           >
-            {v}
-          </code>
+            <span className='bg-muted text-muted-foreground shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide uppercase'>
+              {endpoint.method}
+            </span>
+            <code className='min-w-0 flex-1 truncate font-mono text-xs'>
+              {endpoint.path}
+            </code>
+            <CopyButton
+              value={endpoint.path}
+              className='size-7 shrink-0'
+              iconClassName='size-3'
+              tooltip={t('Copy')}
+            />
+          </div>
         ))}
       </div>
-    )
-  }
-  return <span className='text-muted-foreground/60 text-sm'>—</span>
-}
-
-// ---------------------------------------------------------------------------
-// Rate-limits table
-// ---------------------------------------------------------------------------
-
-function RateLimitsSection(props: { model: PricingModel }) {
-  const { t } = useTranslation()
-  const limits = useMemo(() => buildRateLimits(props.model), [props.model])
-
-  if (limits.length === 0) return null
-
-  return (
-    <section>
-      <SectionTitle icon={Gauge}>{t('Rate limits')}</SectionTitle>
-      <StaticDataTable
-        className={tableStyles.sectionContainer}
-        headerRowClassName={tableStyles.mutedHeaderRow}
-        data={limits}
-        getRowKey={(limit) => limit.group}
-        getRowClassName={() => 'hover:bg-muted/20'}
-        columns={[
-          {
-            id: 'group',
-            header: t('Group'),
-            className: 'h-9',
-            cellClassName: 'py-2 font-mono',
-            cell: (limit) => limit.group,
-          },
-          {
-            id: 'rpm',
-            header: 'RPM',
-            className: 'h-9 text-right',
-            cellClassName: tableStyles.topNumericCell,
-            cell: (limit) => formatRateLimit(limit.rpm),
-          },
-          {
-            id: 'tpm',
-            header: 'TPM',
-            className: 'h-9 text-right',
-            cellClassName: tableStyles.topNumericCell,
-            cell: (limit) => formatRateLimit(limit.tpm),
-          },
-          {
-            id: 'rpd',
-            header: 'RPD',
-            className: 'h-9 text-right',
-            cellClassName: tableStyles.topNumericCell,
-            cell: (limit) => formatRateLimit(limit.rpd),
-          },
-        ]}
-      />
-      <p className='text-muted-foreground mt-2 text-[11px] leading-relaxed'>
-        {t(
-          'RPM = requests per minute, TPM = tokens per minute, RPD = requests per day. Limits apply per token group.'
-        )}
-      </p>
     </section>
   )
 }
@@ -765,9 +634,8 @@ export function ModelDetailsApi(props: {
   return (
     <div className='space-y-6'>
       <CodeSamplesSection model={props.model} endpointMap={props.endpointMap} />
+      <EndpointsSection model={props.model} endpointMap={props.endpointMap} />
       <AuthSection />
-      <SupportedParametersSection model={props.model} />
-      <RateLimitsSection model={props.model} />
     </div>
   )
 }
@@ -788,6 +656,3 @@ function SectionTitle(props: {
     </h3>
   )
 }
-
-// Re-export so the parent can keep its own SectionTitle if it wants:
-export { Zap as ApiTabIcon }

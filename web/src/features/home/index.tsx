@@ -31,8 +31,8 @@ import { useHomePageContent } from './hooks'
 
 export function Home() {
   const { i18n, t } = useTranslation()
-  const iframeRef = useRef<HTMLIFrameElement>(null)
   const { resolvedTheme } = useTheme()
+  const iframeRef = useRef<HTMLIFrameElement>(null)
   const { auth } = useAuthStore()
   const isAuthenticated = !!auth.user
   const { content, isLoaded, isUrl } = useHomePageContent()
@@ -61,9 +61,9 @@ export function Home() {
   if (!isLoaded) {
     return (
       <PublicLayout showMainContainer={false}>
-        <main className='flex min-h-screen items-center justify-center'>
+        <div className='flex min-h-screen items-center justify-center'>
           <div className='text-muted-foreground'>{t('Loading...')}</div>
-        </main>
+        </div>
       </PublicLayout>
     )
   }
@@ -122,12 +122,18 @@ export function Home() {
 
   return (
     <PublicLayout showMainContainer={false}>
-      <Hero isAuthenticated={isAuthenticated} />
-      <Stats />
-      <Features />
-      <HowItWorks />
-      <CTA isAuthenticated={isAuthenticated} />
-      <Footer />
+      <div className='zen-atmosphere relative isolate overflow-hidden'>
+        <div
+          aria-hidden
+          className='zen-grid-fade pointer-events-none absolute inset-0'
+        />
+        <Hero isAuthenticated={isAuthenticated} />
+        <Stats />
+        <Features />
+        <HowItWorks />
+        <CTA isAuthenticated={isAuthenticated} />
+        <Footer />
+      </div>
     </PublicLayout>
   )
 }

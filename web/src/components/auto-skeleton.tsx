@@ -16,11 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { UseQueryResult } from '@tanstack/react-query'
 import { AutoSkeleton } from 'auto-skeleton-react'
 import type { ReactNode } from 'react'
 
 import { ErrorState } from '@/components/error-state'
+import type { UseQueryResult } from '@/lib/query'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
 
 interface ContentSkeletonProps {

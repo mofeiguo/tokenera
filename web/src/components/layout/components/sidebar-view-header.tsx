@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Link } from '@tanstack/react-router'
 import { ChevronLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -27,6 +26,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { Link } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
 import type { SidebarView } from '../types'

@@ -11,7 +11,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 )
 
@@ -21,6 +20,11 @@ type Pricing struct {
 	Icon                   string                  `json:"icon,omitempty"`
 	Tags                   string                  `json:"tags,omitempty"`
 	VendorID               int                     `json:"vendor_id,omitempty"`
+	InputModalities        []string                `json:"input_modalities"`
+	OutputModalities       []string                `json:"output_modalities"`
+	Capabilities           []string                `json:"capabilities"`
+	ContextLength          int                     `json:"context_length,omitempty"`
+	MaxOutputTokens        int                     `json:"max_output_tokens,omitempty"`
 	QuotaType              int                     `json:"quota_type"`
 	ModelRatio             float64                 `json:"model_ratio"`
 	ModelPrice             float64                 `json:"model_price"`
@@ -55,6 +59,7 @@ var (
 	// 缓存映射：模型名 -> 启用分组 / 计费类型
 	modelEnableGroups     = make(map[string][]string)
 	modelQuotaTypeMap     = make(map[string]int)
+	modelCatalogVisible   = make(map[string]bool)
 	modelEnableGroupsLock = sync.RWMutex{}
 )
 
@@ -107,14 +112,14 @@ func GetModelSupportEndpointTypes(model string) []constant.EndpointType {
 	return make([]constant.EndpointType, 0)
 }
 
-func getPricingEndpointTypesForAbility(ability AbilityWithChannel, advancedCustomConfigs map[int]*dto.AdvancedCustomConfig) []constant.EndpointType {
-	if ability.ChannelType != constant.ChannelTypeAdvancedCustom {
-		return common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
+func getPricingEndpointTypesForBinding(binding BindingWithChannel, advancedCustomConfigs map[int]*dto.AdvancedCustomConfig) []constant.EndpointType {
+	if binding.ChannelType != constant.ChannelTypeAdvancedCustom {
+		return common.GetEndpointTypesByChannelType(binding.ChannelType, binding.Model)
 	}
-	if config := advancedCustomConfigs[ability.ChannelId]; config != nil {
-		return config.SupportedEndpointTypesForModel(ability.Model)
+	if config := advancedCustomConfigs[binding.ChannelId]; config != nil {
+		return config.SupportedEndpointTypesForModel(binding.Model)
 	}
-	return common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
+	return common.GetEndpointTypesByChannelType(binding.ChannelType, binding.Model)
 }
 
 // loadPricingAdvancedCustomConfigs runs inside updatePricing while
@@ -125,18 +130,18 @@ func getPricingEndpointTypesForAbility(ability AbilityWithChannel, advancedCusto
 // The returned configs are pointers shared with the channel cache; they are
 // replaced wholesale on update and never mutated in place, so reading them after
 // RUnlock is safe.
-func loadPricingAdvancedCustomConfigs(enableAbilities []AbilityWithChannel) map[int]*dto.AdvancedCustomConfig {
+func loadPricingAdvancedCustomConfigs(enabledBindings []BindingWithChannel) map[int]*dto.AdvancedCustomConfig {
 	channelIDs := make([]int, 0)
 	seen := make(map[int]struct{})
-	for _, ability := range enableAbilities {
-		if ability.ChannelType != constant.ChannelTypeAdvancedCustom {
+	for _, binding := range enabledBindings {
+		if binding.ChannelType != constant.ChannelTypeAdvancedCustom {
 			continue
 		}
-		if _, exists := seen[ability.ChannelId]; exists {
+		if _, exists := seen[binding.ChannelId]; exists {
 			continue
 		}
-		seen[ability.ChannelId] = struct{}{}
-		channelIDs = append(channelIDs, ability.ChannelId)
+		seen[binding.ChannelId] = struct{}{}
+		channelIDs = append(channelIDs, binding.ChannelId)
 	}
 	if len(channelIDs) == 0 {
 		return nil
@@ -179,9 +184,9 @@ func appendPricingEndpoint(endpoints []string, endpoint string) []string {
 
 func updatePricing() {
 	//modelRatios := common.GetModelRatios()
-	enableAbilities, err := GetAllEnableAbilityWithChannels()
+	enabledBindings, err := GetEnabledBindingsWithChannels()
 	if err != nil {
-		common.SysLog(fmt.Sprintf("GetAllEnableAbilityWithChannels error: %v", err))
+		common.SysLog(fmt.Sprintf("GetEnabledBindingsWithChannels error: %v", err))
 		return
 	}
 	// 预加载模型元数据与供应商一次，避免循环查询
@@ -209,7 +214,7 @@ func updatePricing() {
 
 	// 将非精确规则模型匹配到 metaMap
 	for _, m := range prefixList {
-		for _, pricingModel := range enableAbilities {
+		for _, pricingModel := range enabledBindings {
 			if strings.HasPrefix(pricingModel.Model, m.ModelName) {
 				if _, exists := metaMap[pricingModel.Model]; !exists {
 					metaMap[pricingModel.Model] = m
@@ -218,7 +223,7 @@ func updatePricing() {
 		}
 	}
 	for _, m := range suffixList {
-		for _, pricingModel := range enableAbilities {
+		for _, pricingModel := range enabledBindings {
 			if strings.HasSuffix(pricingModel.Model, m.ModelName) {
 				if _, exists := metaMap[pricingModel.Model]; !exists {
 					metaMap[pricingModel.Model] = m
@@ -227,13 +232,17 @@ func updatePricing() {
 		}
 	}
 	for _, m := range containsList {
-		for _, pricingModel := range enableAbilities {
+		for _, pricingModel := range enabledBindings {
 			if strings.Contains(pricingModel.Model, m.ModelName) {
 				if _, exists := metaMap[pricingModel.Model]; !exists {
 					metaMap[pricingModel.Model] = m
 				}
 			}
 		}
+	}
+	publishedCatalogModels := make(map[string]bool, len(metaMap))
+	for modelName, meta := range metaMap {
+		publishedCatalogModels[modelName] = meta.Status == 1
 	}
 
 	// 预加载供应商
@@ -245,7 +254,7 @@ func updatePricing() {
 	}
 
 	// 初始化默认供应商映射
-	initDefaultVendorMapping(metaMap, vendorMap, enableAbilities)
+	initDefaultVendorMapping(metaMap, vendorMap, enabledBindings)
 
 	// 构建对前端友好的供应商列表
 	vendorsList = make([]PricingVendor, 0, len(vendorMap))
@@ -260,29 +269,32 @@ func updatePricing() {
 
 	modelGroupsMap := make(map[string]*types.Set[string])
 
-	for _, ability := range enableAbilities {
-		groups, ok := modelGroupsMap[ability.Model]
+	for _, binding := range enabledBindings {
+		if !publishedCatalogModels[binding.Model] {
+			continue
+		}
+		groups, ok := modelGroupsMap[binding.Model]
 		if !ok {
 			groups = types.NewSet[string]()
-			modelGroupsMap[ability.Model] = groups
+			modelGroupsMap[binding.Model] = groups
 		}
-		groups.Add(ability.Group)
+		groups.Add(binding.Group)
 	}
 
 	//这里使用切片而不是Set，因为一个模型可能支持多个端点类型，并且第一个端点是优先使用端点
 	modelSupportEndpointsStr := make(map[string][]string)
-	advancedCustomConfigs := loadPricingAdvancedCustomConfigs(enableAbilities)
+	advancedCustomConfigs := loadPricingAdvancedCustomConfigs(enabledBindings)
 
-	// 先根据已有能力填充原生端点
-	for _, ability := range enableAbilities {
-		endpoints := modelSupportEndpointsStr[ability.Model]
-		channelTypes := getPricingEndpointTypesForAbility(ability, advancedCustomConfigs)
+	// 先根据已有绑定填充原生端点
+	for _, binding := range enabledBindings {
+		endpoints := modelSupportEndpointsStr[binding.Model]
+		channelTypes := getPricingEndpointTypesForBinding(binding, advancedCustomConfigs)
 		for _, channelType := range channelTypes {
 			if !common.StringsContains(endpoints, string(channelType)) {
 				endpoints = append(endpoints, string(channelType))
 			}
 		}
-		modelSupportEndpointsStr[ability.Model] = endpoints
+		modelSupportEndpointsStr[binding.Model] = endpoints
 	}
 
 	// 再补充模型自定义端点：若配置有效则追加到已有推断，不再裁剪渠道真实能力
@@ -372,39 +384,39 @@ func updatePricing() {
 			pricing.Icon = meta.Icon
 			pricing.Tags = meta.Tags
 			pricing.VendorID = meta.VendorID
+			pricing.InputModalities = append([]string(nil), meta.InputModalities...)
+			pricing.OutputModalities = append([]string(nil), meta.OutputModalities...)
+			pricing.Capabilities = append([]string(nil), meta.Capabilities...)
+			pricing.ContextLength = meta.ContextLength
+			pricing.MaxOutputTokens = meta.MaxOutputTokens
 		}
-		modelPrice, findPrice := ratio_setting.GetModelPrice(model, false)
-		if findPrice {
-			pricing.ModelPrice = modelPrice
+		resolvedPricing := ResolveModelPricing(model)
+		if resolvedPricing.Mode == ModelPricingModePerRequest {
+			pricing.ModelPrice = resolvedPricing.ModelPrice
 			pricing.QuotaType = 1
 		} else {
-			modelRatio, _, _ := ratio_setting.GetModelRatio(model)
-			pricing.ModelRatio = modelRatio
-			pricing.CompletionRatio = ratio_setting.GetCompletionRatio(model)
+			pricing.ModelRatio = resolvedPricing.ModelRatio
+			pricing.CompletionRatio = resolvedPricing.CompletionRatio
 			pricing.QuotaType = 0
 		}
-		if cacheRatio, ok := ratio_setting.GetCacheRatio(model); ok {
-			pricing.CacheRatio = &cacheRatio
+		if resolvedPricing.HasCacheRatio {
+			pricing.CacheRatio = &resolvedPricing.CacheRatio
 		}
-		if createCacheRatio, ok := ratio_setting.GetCreateCacheRatio(model); ok {
-			pricing.CreateCacheRatio = &createCacheRatio
+		if resolvedPricing.HasCreateCacheRatio {
+			pricing.CreateCacheRatio = &resolvedPricing.CreateCacheRatio
 		}
-		if imageRatio, ok := ratio_setting.GetImageRatio(model); ok {
-			pricing.ImageRatio = &imageRatio
+		if resolvedPricing.HasImageRatio {
+			pricing.ImageRatio = &resolvedPricing.ImageRatio
 		}
-		if ratio_setting.ContainsAudioRatio(model) {
-			audioRatio := ratio_setting.GetAudioRatio(model)
-			pricing.AudioRatio = &audioRatio
+		if resolvedPricing.HasAudioRatio {
+			pricing.AudioRatio = &resolvedPricing.AudioRatio
 		}
-		if ratio_setting.ContainsAudioCompletionRatio(model) {
-			audioCompletionRatio := ratio_setting.GetAudioCompletionRatio(model)
-			pricing.AudioCompletionRatio = &audioCompletionRatio
+		if resolvedPricing.HasAudioCompletion {
+			pricing.AudioCompletionRatio = &resolvedPricing.AudioCompletionRatio
 		}
-		if billingMode := billing_setting.GetBillingMode(model); billingMode == "tiered_expr" {
-			if expr, ok := billing_setting.GetBillingExpr(model); ok && strings.TrimSpace(expr) != "" {
-				pricing.BillingMode = billingMode
-				pricing.BillingExpr = expr
-			}
+		if resolvedPricing.BillingMode == billing_setting.BillingModeTieredExpr {
+			pricing.BillingMode = resolvedPricing.BillingMode
+			pricing.BillingExpr = resolvedPricing.BillingExpr
 		}
 		pricingMap = append(pricingMap, pricing)
 	}
@@ -418,9 +430,11 @@ func updatePricing() {
 	modelEnableGroupsLock.Lock()
 	modelEnableGroups = make(map[string][]string)
 	modelQuotaTypeMap = make(map[string]int)
+	modelCatalogVisible = make(map[string]bool)
 	for _, p := range pricingMap {
 		modelEnableGroups[p.ModelName] = p.EnableGroup
 		modelQuotaTypeMap[p.ModelName] = p.QuotaType
+		modelCatalogVisible[p.ModelName] = true
 	}
 	modelEnableGroupsLock.Unlock()
 
@@ -430,4 +444,11 @@ func updatePricing() {
 // GetSupportedEndpointMap 返回全局端点到路径的映射
 func GetSupportedEndpointMap() map[string]common.EndpointInfo {
 	return supportedEndpointMap
+}
+
+func IsModelCatalogVisible(modelName string) bool {
+	GetPricing()
+	modelEnableGroupsLock.RLock()
+	defer modelEnableGroupsLock.RUnlock()
+	return modelCatalogVisible[modelName]
 }

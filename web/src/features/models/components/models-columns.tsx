@@ -20,7 +20,6 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
 
 import { BadgeCell, BadgeListCell } from '@/components/data-table'
-import { GroupBadge } from '@/components/group-badge'
 import { ProviderBadge } from '@/components/provider-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
@@ -32,7 +31,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { formatTimestampToDate } from '@/lib/format'
-import { getLobeIcon } from '@/lib/lobe-icon'
 
 import {
   getModelStatusConfig,
@@ -40,15 +38,11 @@ import {
   getQuotaTypeConfig,
 } from '../constants'
 import { parseModelTags, formatEndpointsDisplay } from '../lib'
-import type { Model, Vendor } from '../types'
+import type { BoundChannel, Model, Vendor } from '../types'
+import { BoundChannelsCell } from './bound-channels-cell'
 import { DataTableRowActions } from './data-table-row-actions'
 import { DescriptionCell } from './description-cell'
-
-function getCompactModelIcon(iconKey: string) {
-  const baseIconKey = iconKey.split('.')[0]
-
-  return getLobeIcon(`${baseIconKey}.Avatar.type={'platform'}`, 20)
-}
+import { ModelNameCell } from './model-name-cell'
 
 /**
  * Generate models columns configuration
@@ -102,44 +96,100 @@ export function useModelsColumns(vendors: Vendor[] = []): ColumnDef<Model>[] {
       size: 64,
     },
 
-    // Model Name column (with model icon)
     {
       accessorKey: 'model_name',
       header: t('Model Name'),
       meta: { mobileTitle: true },
       cell: ({ row }) => {
         const model = row.original
-        const name = row.getValue('model_name') as string
-        const iconKey =
-          model.icon ||
-          vendorMap[model.vendor_id || 0]?.icon ||
-          model.model_name?.[0] ||
-          'N'
-        const icon = getCompactModelIcon(iconKey)
-
         return (
-          <div className='flex max-w-full min-w-0 items-center gap-2'>
-            <div className='flex size-5 shrink-0 items-center justify-center overflow-hidden'>
-              {icon}
-            </div>
-            <StatusBadge
-              label={name}
-              variant='neutral'
-              copyText={name}
-              size='sm'
-              className='-ml-1.5 font-mono'
-            />
-          </div>
+          <ModelNameCell
+            model={model}
+            vendor={vendorMap[model.vendor_id || 0]}
+          />
         )
       },
-      size: 260,
-      minSize: 200,
+      size: 200,
+      minSize: 160,
+      maxSize: 240,
     },
 
-    // Name Rule column
+    // Status column
+    {
+      accessorKey: 'status',
+      header: t('Status'),
+      meta: { mobileBadge: true },
+      cell: ({ row }) => {
+        const status = row.getValue('status') as number
+        const config =
+          MODEL_STATUS_CONFIG[status as 0 | 1] || MODEL_STATUS_CONFIG[0]
+
+        return (
+          <StatusBadge
+            variant={config.variant}
+            size='sm'
+            copyable={false}
+            className='-ml-1.5 max-w-none shrink-0'
+          >
+            {config.label}
+          </StatusBadge>
+        )
+      },
+      filterFn: (row, id, value) => {
+        if (!value || value.length === 0 || value.includes('all')) return true
+        const status = row.getValue(id) as number
+        if (value.includes('enabled')) return status === 1
+        if (value.includes('disabled')) return status !== 1
+        return false
+      },
+      size: 100,
+      minSize: 90,
+      enableSorting: false,
+    },
+
+    // Vendor column
+    {
+      accessorKey: 'vendor_id',
+      header: t('Vendor'),
+      cell: ({ row }) => {
+        const vendorId = row.getValue('vendor_id') as number
+        const vendor = vendorMap[vendorId]
+
+        if (!vendor) {
+          return <span className='text-muted-foreground text-xs'>-</span>
+        }
+
+        return (
+          <BadgeCell>
+            <ProviderBadge iconKey={vendor.icon} label={vendor.name} />
+          </BadgeCell>
+        )
+      },
+      filterFn: (row, id, value) => {
+        if (!value || value.length === 0 || value.includes('all')) return true
+        return value.includes(String(row.getValue(id)))
+      },
+      size: 130,
+      enableSorting: false,
+    },
+
+    {
+      accessorKey: 'bound_channels',
+      header: t('Bound Channels'),
+      cell: ({ row }) => {
+        const channels = row.getValue('bound_channels') as
+          | BoundChannel[]
+          | undefined
+        return <BoundChannelsCell channels={channels} />
+      },
+      size: 130,
+      enableSorting: false,
+    },
+
     {
       accessorKey: 'name_rule',
       header: t('Match Type'),
+      meta: { mobileHidden: true },
       cell: ({ row }) => {
         const rule = row.getValue('name_rule') as 0 | 1 | 2 | 3
         const model = row.original
@@ -202,65 +252,6 @@ export function useModelsColumns(vendors: Vendor[] = []): ColumnDef<Model>[] {
       enableSorting: false,
     },
 
-    // Status column
-    {
-      accessorKey: 'status',
-      header: t('Status'),
-      meta: { mobileBadge: true },
-      cell: ({ row }) => {
-        const status = row.getValue('status') as number
-        const config =
-          MODEL_STATUS_CONFIG[status as 0 | 1] || MODEL_STATUS_CONFIG[0]
-
-        return (
-          <StatusBadge
-            variant={config.variant}
-            size='sm'
-            copyable={false}
-            className='-ml-1.5 max-w-none shrink-0'
-          >
-            {config.label}
-          </StatusBadge>
-        )
-      },
-      filterFn: (row, id, value) => {
-        if (!value || value.length === 0 || value.includes('all')) return true
-        const status = row.getValue(id) as number
-        if (value.includes('enabled')) return status === 1
-        if (value.includes('disabled')) return status !== 1
-        return false
-      },
-      size: 110,
-      minSize: 110,
-      enableSorting: false,
-    },
-
-    // Vendor column
-    {
-      accessorKey: 'vendor_id',
-      header: t('Vendor'),
-      cell: ({ row }) => {
-        const vendorId = row.getValue('vendor_id') as number
-        const vendor = vendorMap[vendorId]
-
-        if (!vendor) {
-          return <span className='text-muted-foreground text-xs'>-</span>
-        }
-
-        return (
-          <BadgeCell>
-            <ProviderBadge iconKey={vendor.icon} label={vendor.name} />
-          </BadgeCell>
-        )
-      },
-      filterFn: (row, id, value) => {
-        if (!value || value.length === 0 || value.includes('all')) return true
-        return value.includes(String(row.getValue(id)))
-      },
-      size: 130,
-      enableSorting: false,
-    },
-
     // Description column
     {
       accessorKey: 'description',
@@ -311,55 +302,6 @@ export function useModelsColumns(vendors: Vendor[] = []): ColumnDef<Model>[] {
             max={3}
             items={endpointArray.map((ep) => (
               <StatusBadge key={ep} label={ep} autoColor={ep} size='sm' />
-            ))}
-          />
-        )
-      },
-      size: 200,
-      enableSorting: false,
-    },
-
-    // Bound Channels column
-    {
-      accessorKey: 'bound_channels',
-      header: t('Bound Channels'),
-      meta: { mobileHidden: true },
-      cell: ({ row }) => {
-        const channels = row.getValue('bound_channels') as Array<{
-          id: number
-          name: string
-          type?: number
-          status?: number
-        }>
-        return (
-          <BadgeListCell
-            items={(channels ?? []).map((c) => (
-              <StatusBadge
-                key={c.id}
-                label={`${c.name} (${c.type})`}
-                autoColor={c.name}
-                size='sm'
-              />
-            ))}
-          />
-        )
-      },
-      size: 150,
-      enableSorting: false,
-    },
-
-    // Enable Groups column
-    {
-      accessorKey: 'enable_groups',
-      header: t('Enable Groups'),
-      meta: { mobileHidden: true },
-      cell: ({ row }) => {
-        const groups = row.getValue('enable_groups') as string[]
-        return (
-          <BadgeListCell
-            max={3}
-            items={(groups ?? []).map((g) => (
-              <GroupBadge key={g} group={g} size='sm' />
             ))}
           />
         )

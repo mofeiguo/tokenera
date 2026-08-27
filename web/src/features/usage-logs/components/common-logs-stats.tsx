@@ -16,12 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { getRouteApi } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatLogQuota } from '@/lib/format'
+import { useQuery } from '@/lib/query'
+import { getRouteApi } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
 import { getLogStats, getUserLogStats } from '../api'

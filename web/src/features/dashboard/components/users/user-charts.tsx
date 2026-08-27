@@ -16,16 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
 import { Users, Loader2 } from 'lucide-react'
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { IconBadge } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useTheme } from '@/context/theme-provider'
 import { getUserQuotaDataByUsers } from '@/features/dashboard/api'
 import {
   TIME_GRANULARITY_OPTIONS,
@@ -40,12 +38,15 @@ import type {
   ProcessedUserChartData,
   UserChartsFilters,
 } from '@/features/dashboard/types'
+import { useQuery } from '@/lib/query'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
+import { useChartTheme } from '@/lib/use-chart-theme'
 import { VCHART_OPTION } from '@/lib/vchart'
 
-let themeManagerPromise: Promise<
-  (typeof import('@visactor/vchart'))['ThemeManager']
-> | null = null
+import {
+  DASHBOARD_PANEL_FRAME,
+  DASHBOARD_PANEL_HEADER,
+} from '../ui/panel-surface'
 
 const USER_CHARTS: {
   value: string
@@ -73,11 +74,7 @@ interface UserChartsProps {
 
 export function UserCharts(props: UserChartsProps) {
   const { t } = useTranslation()
-  const { resolvedTheme } = useTheme()
-  const [themeReady, setThemeReady] = useState(false)
-  const themeManagerRef = useRef<
-    (typeof import('@visactor/vchart'))['ThemeManager'] | null
-  >(null)
+  const { themeReady, resolvedTheme } = useChartTheme()
 
   // The selection is owned by the dashboard parent so it persists across
   // sub-section switches; the rolling window is derived from the chosen range.
@@ -120,22 +117,6 @@ export function UserCharts(props: UserChartsProps) {
     [onFiltersChange, props.filters]
   )
 
-  useEffect(() => {
-    const updateTheme = async () => {
-      setThemeReady(false)
-      if (!themeManagerPromise) {
-        themeManagerPromise = import('@visactor/vchart').then(
-          (m) => m.ThemeManager
-        )
-      }
-      const ThemeManager = await themeManagerPromise
-      themeManagerRef.current = ThemeManager
-      ThemeManager.setCurrentTheme(resolvedTheme === 'dark' ? 'dark' : 'light')
-      setThemeReady(true)
-    }
-    updateTheme()
-  }, [resolvedTheme])
-
   const { data: userData, isLoading } = useQuery({
     queryKey: ['dashboard', 'user-quota', timeRange],
     queryFn: () => getUserQuotaDataByUsers(timeRange),
@@ -143,16 +124,16 @@ export function UserCharts(props: UserChartsProps) {
     staleTime: 60_000,
   })
 
-  const chartData = useMemo(
-    () =>
-      processUserChartData(
-        isLoading ? [] : (userData ?? []),
-        timeGranularity,
-        t,
-        topUserLimit
-      ),
-    [userData, isLoading, timeGranularity, t, topUserLimit]
-  )
+  const chartData = useMemo(() => {
+    // Re-read CSS chart tokens after the resolved theme changes.
+    void resolvedTheme
+    return processUserChartData(
+      isLoading ? [] : (userData ?? []),
+      timeGranularity,
+      t,
+      topUserLimit
+    )
+  }, [userData, isLoading, timeGranularity, t, topUserLimit, resolvedTheme])
 
   return (
     <div className='space-y-3'>
@@ -226,11 +207,8 @@ export function UserCharts(props: UserChartsProps) {
           const spec = chartData[chart.specKey]
 
           return (
-            <div
-              key={chart.value}
-              className='overflow-hidden rounded-lg border'
-            >
-              <div className='flex w-full items-center gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
+            <div key={chart.value} className={DASHBOARD_PANEL_FRAME}>
+              <div className={DASHBOARD_PANEL_HEADER}>
                 <IconBadge tone='info' size='sm'>
                   <Users />
                 </IconBadge>
@@ -247,7 +225,7 @@ export function UserCharts(props: UserChartsProps) {
                       key={`user-${chart.value}-${topUserLimit}-${resolvedTheme}`}
                       spec={{
                         ...spec,
-                        theme: resolvedTheme === 'dark' ? 'dark' : 'light',
+                        theme: resolvedTheme,
                         background: 'transparent',
                       }}
                       option={VCHART_OPTION}

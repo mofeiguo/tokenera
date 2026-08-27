@@ -10,15 +10,12 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
-	"github.com/QuantumNous/new-api/relay/channel/ai360"
-	"github.com/QuantumNous/new-api/relay/channel/lingyiwanwu"
-	"github.com/QuantumNous/new-api/relay/channel/minimax"
-	"github.com/QuantumNous/new-api/relay/channel/moonshot"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
@@ -38,6 +35,9 @@ func init() {
 			continue
 		}
 		adaptor := relay.GetAdaptor(i)
+		if adaptor == nil {
+			continue
+		}
 		channelName := adaptor.GetChannelName()
 		modelNames := adaptor.GetModelList()
 		for _, modelName := range modelNames {
@@ -49,39 +49,7 @@ func init() {
 			})
 		}
 	}
-	for _, modelName := range ai360.ModelList {
-		openAIModels = append(openAIModels, dto.OpenAIModels{
-			Id:      modelName,
-			Object:  "model",
-			Created: 1626777600,
-			OwnedBy: ai360.ChannelName,
-		})
-	}
-	for _, modelName := range moonshot.ModelList {
-		openAIModels = append(openAIModels, dto.OpenAIModels{
-			Id:      modelName,
-			Object:  "model",
-			Created: 1626777600,
-			OwnedBy: moonshot.ChannelName,
-		})
-	}
-	for _, modelName := range lingyiwanwu.ModelList {
-		openAIModels = append(openAIModels, dto.OpenAIModels{
-			Id:      modelName,
-			Object:  "model",
-			Created: 1626777600,
-			OwnedBy: lingyiwanwu.ChannelName,
-		})
-	}
-	for _, modelName := range minimax.ModelList {
-		openAIModels = append(openAIModels, dto.OpenAIModels{
-			Id:      modelName,
-			Object:  "model",
-			Created: 1626777600,
-			OwnedBy: minimax.ChannelName,
-		})
-	}
-	for modelName, _ := range constant.MidjourneyModel2Action {
+	for modelName := range constant.MidjourneyModel2Action {
 		openAIModels = append(openAIModels, dto.OpenAIModels{
 			Id:      modelName,
 			Object:  "model",
@@ -103,6 +71,9 @@ func init() {
 			ChannelType: i,
 		}}
 		adaptor := relay.GetAdaptor(apiType)
+		if adaptor == nil {
+			continue
+		}
 		adaptor.Init(meta)
 		channelId2Models[i] = adaptor.GetModelList()
 	}
@@ -177,32 +148,21 @@ type modelListGroups struct {
 }
 
 func getModelListGroups(c *gin.Context) (modelListGroups, error) {
-	tokenGroup := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
 	userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
-	if userGroup == "" && (tokenGroup == "" || tokenGroup == "auto") {
+	if userGroup == "" {
 		var err error
 		userGroup, err = model.GetUserGroup(c.GetInt("id"), false)
 		if err != nil {
 			return modelListGroups{}, err
 		}
 	}
-
-	if tokenGroup == "auto" {
-		return modelListGroups{
-			userGroup:   userGroup,
-			tokenGroup:  tokenGroup,
-			ownerGroups: service.GetRequestAutoGroups(c, userGroup),
-		}, nil
-	}
-
-	group := userGroup
-	if tokenGroup != "" {
-		group = tokenGroup
+	if userGroup == "" {
+		userGroup = "default"
 	}
 	return modelListGroups{
 		userGroup:   userGroup,
-		tokenGroup:  tokenGroup,
-		ownerGroups: []string{group},
+		tokenGroup:  "",
+		ownerGroups: setting.GetAccessibleGroups(userGroup),
 	}, nil
 }
 
@@ -241,6 +201,9 @@ func ListModels(c *gin.Context, modelType int) {
 	}
 	models := service.GetGroupsEnabledModels(ownerGroups)
 	for _, modelName := range models {
+		if !model.IsModelCatalogVisible(modelName) {
+			continue
+		}
 		if modelLimitEnable {
 			matchingName := ratio_setting.FormatMatchingModelName(modelName)
 			if !tokenModelLimit[modelName] && !tokenModelLimit[matchingName] {
@@ -307,9 +270,18 @@ func ListModels(c *gin.Context, modelType int) {
 }
 
 func ChannelListModels(c *gin.Context) {
+	modelNames, err := model.GetExactCatalogModelNames()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	catalogModels := make([]dto.OpenAIModels, 0, len(modelNames))
+	for _, modelName := range modelNames {
+		catalogModels = append(catalogModels, buildOpenAIModel(modelName, nil))
+	}
 	c.JSON(200, gin.H{
 		"success": true,
-		"data":    openAIModels,
+		"data":    catalogModels,
 	})
 }
 

@@ -88,10 +88,9 @@ func main() {
 			defer func() {
 				if r := recover(); r != nil {
 					common.SysLog(fmt.Sprintf("InitChannelCache panic: %v, retrying once", r))
-					// Retry once
-					_, _, fixErr := model.FixAbility()
-					if fixErr != nil {
-						common.FatalLog(fmt.Sprintf("InitChannelCache failed: %s", fixErr.Error()))
+					model.InitChannelCache()
+					if fixErr := recover(); fixErr != nil {
+						common.FatalLog(fmt.Sprintf("InitChannelCache failed: %v", fixErr))
 					}
 				}
 			}()
@@ -323,6 +322,12 @@ func InitResources() error {
 		}
 	}
 	model.InitOptionMap()
+	if common.IsMasterNode {
+		if err := model.MigrateCatalogPricingFromSettings(); err != nil {
+			common.SysError("failed to migrate catalog pricing: " + err.Error())
+		}
+	}
+	model.RefreshCatalogPricingCache()
 
 	// 清理旧的磁盘缓存文件
 	common.CleanupOldCacheFiles()

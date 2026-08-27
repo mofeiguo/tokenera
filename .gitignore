@@ -10,6 +10,9 @@ build
 logs
 web/dist
 web/node_modules
+portal/node_modules
+portal/.next
+portal/out
 .env
 one-api
 new-api

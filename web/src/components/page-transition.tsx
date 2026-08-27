@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Outlet, useRouterState } from '@tanstack/react-router'
 import { motion, useReducedMotion, type Variants } from 'motion/react'
 import type { ReactNode } from 'react'
 
@@ -30,6 +29,7 @@ import {
   TABLE_ROW_VARIANTS,
   TABLE_STAGGER_VARIANTS,
 } from '@/lib/motion'
+import { Outlet, useRouterState } from '@/lib/router'
 
 interface PageTransitionProps {
   children: ReactNode

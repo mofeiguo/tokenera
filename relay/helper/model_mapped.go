@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	rootcommon "github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/gin-gonic/gin"
@@ -13,6 +15,14 @@ import (
 func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Request) error {
 	if info.ChannelMeta == nil {
 		info.ChannelMeta = &common.ChannelMeta{}
+	}
+	if upstreamModel := rootcommon.GetContextKeyString(c, constant.ContextKeyChannelUpstreamModel); upstreamModel != "" {
+		info.UpstreamModelName = upstreamModel
+		info.IsModelMapped = upstreamModel != info.OriginModelName
+		if request != nil {
+			request.SetModelName(upstreamModel)
+		}
+		return nil
 	}
 
 	// map model name

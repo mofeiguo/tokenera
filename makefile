@@ -1,6 +1,7 @@
 WEB_DIR = ./web
 API_DIR = .
-DEV_WEB_PORT ?= 5173
+DEV_WEB_PORT ?= 9527
+VITE_REACT_APP_SERVER_URL ?= http://localhost:3007
 DEV_COMPOSE_FILE = docker-compose.dev.yml
 DEV_POSTGRES_SERVICE = postgres
 DEV_API_SERVICE = new-api
@@ -34,8 +35,9 @@ dev-api-rebuild:
 dev-web:
 	@echo "Starting web frontend dev server..."
 	@echo "Web frontend: http://localhost:$(DEV_WEB_PORT)"
+	@echo "API proxy: $(VITE_REACT_APP_SERVER_URL)"
 	@cd $(WEB_DIR) && bun install
-	@cd $(WEB_DIR) && bun run dev -- --host 0.0.0.0 --port $(DEV_WEB_PORT)
+	@cd $(WEB_DIR) && VITE_REACT_APP_SERVER_URL=$(VITE_REACT_APP_SERVER_URL) bun run dev -- --host 0.0.0.0 --port $(DEV_WEB_PORT)
 
 dev: dev-api dev-web
 

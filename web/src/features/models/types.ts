@@ -26,8 +26,25 @@ import { z } from 'zod'
  * Bound channel information
  */
 export interface BoundChannel {
+  id: number
   name: string
   type: number
+  upstream_model: string
+  enabled: boolean
+}
+
+export interface ModelChannelBinding {
+  id?: number
+  model_id?: number
+  model_name?: string
+  channel_id: number
+  channel_name?: string
+  channel_type?: number
+  channel_status?: number
+  upstream_model: string
+  enabled: boolean
+  priority?: number
+  weight?: number
 }
 
 /**
@@ -39,6 +56,20 @@ export interface Model {
   description?: string
   icon?: string
   tags?: string
+  input_modalities?: ModelModality[]
+  output_modalities?: ModelModality[]
+  capabilities?: ModelCapability[]
+  context_length?: number
+  max_output_tokens?: number
+  pricing_mode?: '' | 'per_token' | 'per_request'
+  model_price?: number | null
+  model_ratio?: number | null
+  completion_ratio?: number | null
+  cache_ratio?: number | null
+  create_cache_ratio?: number | null
+  image_ratio?: number | null
+  audio_ratio?: number | null
+  audio_completion_ratio?: number | null
   vendor_id?: number
   endpoints?: string
   status: number
@@ -54,6 +85,21 @@ export interface Model {
   matched_count?: number
 }
 
+export type ModelModality = 'text' | 'image' | 'audio' | 'video' | 'file'
+
+export type ModelCapability =
+  | 'function_calling'
+  | 'streaming'
+  | 'json_mode'
+  | 'structured_output'
+  | 'reasoning'
+  | 'tools'
+  | 'system_prompt'
+  | 'web_search'
+  | 'code_interpreter'
+  | 'caching'
+  | 'embeddings'
+
 /**
  * Vendor entity from API
  */
@@ -65,17 +111,6 @@ export interface Vendor {
   status: number
   created_time: number
   updated_time: number
-}
-
-/**
- * Prefill group entity
- */
-export interface PrefillGroup {
-  id: number
-  name: string
-  type: 'model' | 'tag' | 'endpoint'
-  items: string | string[]
-  description?: string
 }
 
 // ============================================================================
@@ -156,11 +191,7 @@ export interface GetVendorResponse {
  * Sync diff data
  */
 export interface SyncDiffData {
-  missing?: Array<{
-    model_name: string
-    vendor?: string
-    [key: string]: unknown
-  }>
+  missing?: string[]
   conflicts?: Array<{
     model_name: string
     local?: Partial<Model>
@@ -202,24 +233,6 @@ export interface PreviewUpstreamDiffResponse {
   data?: SyncDiffData
 }
 
-/**
- * Missing models response
- */
-export interface MissingModelsResponse {
-  success: boolean
-  message?: string
-  data?: string[]
-}
-
-/**
- * Prefill groups response
- */
-export interface PrefillGroupsResponse {
-  success: boolean
-  message?: string
-  data?: PrefillGroup[]
-}
-
 // ============================================================================
 // Form Data Types
 // ============================================================================
@@ -233,6 +246,31 @@ export const modelFormSchema = z.object({
   description: z.string().default(''),
   icon: z.string().default(''),
   tags: z.array(z.string()).default([]),
+  input_modalities: z
+    .array(z.enum(['text', 'image', 'audio', 'video', 'file']))
+    .default([]),
+  output_modalities: z
+    .array(z.enum(['text', 'image', 'audio', 'video', 'file']))
+    .default([]),
+  capabilities: z
+    .array(
+      z.enum([
+        'function_calling',
+        'streaming',
+        'json_mode',
+        'structured_output',
+        'reasoning',
+        'tools',
+        'system_prompt',
+        'web_search',
+        'code_interpreter',
+        'caching',
+        'embeddings',
+      ])
+    )
+    .default([]),
+  context_length: z.number().int().min(0).default(0),
+  max_output_tokens: z.number().int().min(0).default(0),
   vendor_id: z.number().optional(),
   endpoints: z.string().default(''),
   name_rule: z.number().min(0).max(3).default(0),
@@ -254,19 +292,6 @@ export const vendorFormSchema = z.object({
 })
 
 export type VendorFormValues = z.infer<typeof vendorFormSchema>
-
-/**
- * Prefill group form schema
- */
-export const prefillGroupFormSchema = z.object({
-  id: z.number().optional(),
-  name: z.string().min(1, 'Group name is required'),
-  description: z.string().optional(),
-  type: z.enum(['model', 'tag', 'endpoint']),
-  items: z.union([z.string(), z.array(z.string())]),
-})
-
-export type PrefillGroupFormValues = z.infer<typeof prefillGroupFormSchema>
 
 // ============================================================================
 // Utility Types
@@ -296,92 +321,3 @@ export type SyncLocale = 'zh' | 'en' | 'ja'
  * Sync upstream source
  */
 export type SyncSource = 'official' | 'config'
-
-// ============================================================================
-// Model Deployments Types
-// ============================================================================
-
-/**
- * Model tab type
- */
-export type ModelTabCategory = 'metadata' | 'deployments'
-
-/**
- * Deployment entity from API
- */
-export interface Deployment {
-  id: string | number
-  container_name?: string
-  deployment_name?: string
-  name?: string
-  status?: string
-  provider?: string
-  /**
-   * Human readable string returned by backend, e.g. "2 hour 15 minutes"
-   * or "completed".
-   */
-  time_remaining?: string
-  /**
-   * Remaining minutes (numeric) returned by backend.
-   */
-  compute_minutes_remaining?: number
-  /**
-   * Served minutes (numeric) returned by backend.
-   */
-  compute_minutes_served?: number
-  /**
-   * Completed percent (0-100) returned by backend.
-   */
-  completed_percent?: number
-  hardware_info?: string | Record<string, unknown>
-  hardware_name?: string
-  brand_name?: string
-  hardware_quantity?: number
-  created_at?: string | number
-  updated_at?: string | number
-  [key: string]: unknown
-}
-
-/**
- * Deployment settings response
- */
-export interface DeploymentSettingsResponse {
-  success: boolean
-  message?: string
-  data?: {
-    enabled?: boolean
-    [key: string]: unknown
-  }
-}
-
-/**
- * List deployments response
- */
-export interface ListDeploymentsResponse {
-  success: boolean
-  message?: string
-  data?: {
-    items?: Deployment[]
-    total?: number
-    page?: number
-    page_size?: number
-    status_counts?: Record<string, number>
-  }
-}
-
-/**
- * Deployment logs response
- */
-export interface DeploymentLogsResponse {
-  success: boolean
-  message?: string
-  data?: {
-    logs?: Array<{
-      timestamp?: string
-      level?: string
-      message?: string
-      source?: string
-    }>
-    cursor?: string
-  }
-}

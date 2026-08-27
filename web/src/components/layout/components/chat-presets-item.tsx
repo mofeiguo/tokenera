@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Link, useLocation } from '@tanstack/react-router'
 import { ExternalLink, Loader2, ChevronRight } from 'lucide-react'
 import { useMemo, useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -48,6 +47,7 @@ import {
   resolveChatUrl,
   type ChatPreset,
 } from '@/features/chat/lib/chat-links'
+import { Link, useLocation } from '@/lib/router'
 
 import { normalizeHref } from '../lib/url-utils'
 import type { NavChatPresets } from '../types'

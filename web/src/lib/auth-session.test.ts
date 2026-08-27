@@ -16,8 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { QueryClient } from '@tanstack/react-query'
 import { afterEach, describe, expect, test } from 'vitest'
+
+import { QueryClient } from '@/lib/query'
 
 import { useAuthStore, type AuthBundle } from '../stores/auth-store'
 import {

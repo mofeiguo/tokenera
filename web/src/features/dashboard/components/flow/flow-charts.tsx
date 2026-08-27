@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
 import type { EventParamsDefinition, IVChart } from '@visactor/vchart'
 import {
@@ -85,6 +84,7 @@ import type {
   FlowRole,
 } from '@/features/dashboard/types'
 import { formatQuota } from '@/lib/format'
+import { useQuery } from '@/lib/query'
 import { ROLE } from '@/lib/roles'
 import { computeTimeRange } from '@/lib/time'
 import { useChartTheme } from '@/lib/use-chart-theme'
@@ -92,6 +92,10 @@ import { cn } from '@/lib/utils'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useAuthStore } from '@/stores/auth-store'
 
+import {
+  DASHBOARD_PANEL_FRAME,
+  DASHBOARD_PANEL_HEADER,
+} from '../ui/panel-surface'
 import { FlowNodeFilterControl } from './flow-node-filter'
 
 interface FlowChartsProps {
@@ -254,7 +258,7 @@ function formatFlowMetricNumber(value: number): string {
 
 export function FlowCharts(props: FlowChartsProps) {
   const { t } = useTranslation()
-  const { resolvedTheme, themeReady } = useChartTheme()
+  const { themeReady, resolvedTheme } = useChartTheme()
   const chartInstanceRef = useRef<IVChart | null>(null)
   const user = useAuthStore((state) => state.auth.user)
   const isRoot = Boolean(user?.role && user.role >= ROLE.SUPER_ADMIN)
@@ -343,37 +347,38 @@ export function FlowCharts(props: FlowChartsProps) {
   })
 
   const maskSensitive = props.sensitiveVisible === false
-  const flowData = useMemo(
-    () =>
-      buildDashboardFlowData(isLoading ? [] : (flowRows ?? []), metric, {
-        role: flowRole,
-        selectedUsers,
-        selectedNodes,
-        activeNode: activeFlowNode,
-        activeLink: activeFlowLink,
-        visibleStages,
-        topNodeLimit,
-        overflowMode,
-        maskSensitive,
-        deletedTokenLabel: (tokenId) => t('Deleted ({{id}})', { id: tokenId }),
-        otherNodeLabel: (kind) => t(FLOW_OTHER_NODE_LABEL_KEYS[kind]),
-      }),
-    [
-      flowRole,
-      flowRows,
-      isLoading,
-      metric,
-      overflowMode,
-      activeFlowNode,
-      activeFlowLink,
-      selectedNodes,
+  const flowData = useMemo(() => {
+    // Flow colors are sourced from CSS variables and must refresh per theme.
+    void resolvedTheme
+    return buildDashboardFlowData(isLoading ? [] : (flowRows ?? []), metric, {
+      role: flowRole,
       selectedUsers,
-      topNodeLimit,
+      selectedNodes,
+      activeNode: activeFlowNode,
+      activeLink: activeFlowLink,
       visibleStages,
+      topNodeLimit,
+      overflowMode,
       maskSensitive,
-      t,
-    ]
-  )
+      deletedTokenLabel: (tokenId) => t('Deleted ({{id}})', { id: tokenId }),
+      otherNodeLabel: (kind) => t(FLOW_OTHER_NODE_LABEL_KEYS[kind]),
+    })
+  }, [
+    flowRole,
+    flowRows,
+    isLoading,
+    metric,
+    overflowMode,
+    activeFlowNode,
+    activeFlowLink,
+    selectedNodes,
+    selectedUsers,
+    topNodeLimit,
+    visibleStages,
+    maskSensitive,
+    t,
+    resolvedTheme,
+  ])
   const userFilterOptions = useMemo(
     () =>
       flowData.filterOptions.users.map((user) => ({
@@ -462,8 +467,8 @@ export function FlowCharts(props: FlowChartsProps) {
       }),
     [chartTitle, flowData.flow, t]
   )
-  const chartTheme = resolvedTheme === 'dark' ? 'dark' : 'light'
   const chartKey = [
+    resolvedTheme,
     metric,
     topNodeLimit,
     overflowMode,
@@ -477,7 +482,6 @@ export function FlowCharts(props: FlowChartsProps) {
     visibleStages.join(','),
     maskSensitive ? 'masked' : 'plain',
     flowRows?.length ?? 0,
-    resolvedTheme,
   ].join('-')
   const displayState = flowDisplayState({
     isLoading,
@@ -494,7 +498,7 @@ export function FlowCharts(props: FlowChartsProps) {
       key={`flow-${chartKey}`}
       spec={{
         ...flowSpec,
-        theme: chartTheme,
+        theme: resolvedTheme,
         background: 'transparent',
       }}
       option={VCHART_OPTION}
@@ -664,8 +668,13 @@ export function FlowCharts(props: FlowChartsProps) {
         </div>
       </div>
 
-      <div className='overflow-hidden rounded-lg border'>
-        <div className='flex w-full flex-col gap-2 border-b px-3 py-2 sm:px-5 sm:py-3 lg:flex-row lg:items-center lg:justify-between'>
+      <div className={DASHBOARD_PANEL_FRAME}>
+        <div
+          className={cn(
+            DASHBOARD_PANEL_HEADER,
+            'flex-col items-stretch gap-2 lg:flex-row lg:items-center lg:justify-between'
+          )}
+        >
           <div className='flex min-w-0 items-center gap-2'>
             <IconBadge tone='info' size='sm'>
               <GitBranch />

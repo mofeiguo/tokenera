@@ -444,9 +444,6 @@ const AUDIT_TEMPLATES: Record<string, string> = {
   'redemption.delete': 'Deleted a redemption code',
   'redemption.delete_invalid': 'Deleted invalid redemption codes',
   // Prefill groups
-  'prefill_group.create': 'Created a prefill group',
-  'prefill_group.update': 'Updated a prefill group',
-  'prefill_group.delete': 'Deleted a prefill group',
   // Vendors
   'vendor.create': 'Created a vendor',
   'vendor.update': 'Updated a vendor',
@@ -456,10 +453,6 @@ const AUDIT_TEMPLATES: Record<string, string> = {
   'model.update': 'Updated a model',
   'model.delete': 'Deleted a model',
   'model.sync_upstream': 'Synced upstream models',
-  // Deployments
-  'deployment.create': 'Created a deployment',
-  'deployment.update': 'Updated a deployment',
-  'deployment.delete': 'Deleted a deployment',
   // Subscriptions
   'subscription.plan_create': 'Created a subscription plan',
   'subscription.plan_update': 'Updated a subscription plan',

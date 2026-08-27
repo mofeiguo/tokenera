@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -56,14 +57,17 @@ type upstreamEnvelope[T any] struct {
 }
 
 type upstreamModel struct {
-	Description string          `json:"description"`
-	Endpoints   json.RawMessage `json:"endpoints"`
-	Icon        string          `json:"icon"`
-	ModelName   string          `json:"model_name"`
-	NameRule    int             `json:"name_rule"`
-	Status      int             `json:"status"`
-	Tags        string          `json:"tags"`
-	VendorName  string          `json:"vendor_name"`
+	Description      string          `json:"description"`
+	Endpoints        json.RawMessage `json:"endpoints"`
+	Icon             string          `json:"icon"`
+	ModelName        string          `json:"model_name"`
+	NameRule         int             `json:"name_rule"`
+	Status           int             `json:"status"`
+	Tags             string          `json:"tags"`
+	VendorName       string          `json:"vendor_name"`
+	InputModalities  []string        `json:"input_modalities"`
+	OutputModalities []string        `json:"output_modalities"`
+	Capabilities     []string        `json:"capabilities"`
 }
 
 type upstreamVendor struct {
@@ -262,49 +266,41 @@ func ensureVendorID(vendorName string, vendorByName map[string]upstreamVendor, v
 	return 0
 }
 
-// SyncUpstreamModels 同步上游模型与供应商：
-// - 默认仅创建「未配置模型」
-// - 可通过 overwrite 选择性覆盖更新本地已有模型的字段（前提：sync_official <> 0）
+func emptySyncResult(locale, modelsURL, vendorsURL string) gin.H {
+	return gin.H{
+		"created_models":  0,
+		"created_vendors": 0,
+		"updated_models":  0,
+		"skipped_models":  []string{},
+		"created_list":    []string{},
+		"updated_list":    []string{},
+		"source": gin.H{
+			"locale":      locale,
+			"models_url":  modelsURL,
+			"vendors_url": vendorsURL,
+		},
+	}
+}
+
+// SyncUpstreamModels 同步上游模型元数据：
+// 只更新本地已有、且开启官方同步的模型；不会把官方目录中多出来的模型写入本地。
 func SyncUpstreamModels(c *gin.Context) {
 	var req syncRequest
-	// 允许空体
 	_ = c.ShouldBindJSON(&req)
-	// 1) 获取未配置模型列表
-	missing, err := model.GetMissingModels()
-	if err != nil {
-		common.SysError("failed to get missing models: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取模型列表失败，请稍后重试"})
-		return
-	}
 
-	// 若既无缺失模型需要创建，也未指定覆盖更新字段，则无需请求上游数据，直接返回
-	if len(missing) == 0 && len(req.Overwrite) == 0 {
-		modelsURL, vendorsURL := getUpstreamURLs(req.Locale)
+	modelsURL, vendorsURL := getUpstreamURLs(req.Locale)
+	if len(req.Overwrite) == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
-			"data": gin.H{
-				"created_models":  0,
-				"created_vendors": 0,
-				"updated_models":  0,
-				"skipped_models":  []string{},
-				"created_list":    []string{},
-				"updated_list":    []string{},
-				"source": gin.H{
-					"locale":      req.Locale,
-					"models_url":  modelsURL,
-					"vendors_url": vendorsURL,
-				},
-			},
+			"data":    emptySyncResult(req.Locale, modelsURL, vendorsURL),
 		})
 		return
 	}
 
-	// 2) 拉取上游 vendors 与 models
 	timeoutSec := common.GetEnvOrDefault("SYNC_HTTP_TIMEOUT_SECONDS", 15)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	modelsURL, vendorsURL := getUpstreamURLs(req.Locale)
 	var vendorsEnv upstreamEnvelope[upstreamVendor]
 	var modelsEnv upstreamEnvelope[upstreamModel]
 	var fetchErr error
@@ -312,7 +308,6 @@ func SyncUpstreamModels(c *gin.Context) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		// vendor 失败不拦截
 		_ = fetchJSON(ctx, vendorsURL, &vendorsEnv)
 	}()
 	go func() {
@@ -327,7 +322,6 @@ func SyncUpstreamModels(c *gin.Context) {
 		return
 	}
 
-	// 建立映射
 	vendorByName := make(map[string]upstreamVendor)
 	for _, v := range vendorsEnv.Data {
 		if v.Name != "" {
@@ -341,123 +335,95 @@ func SyncUpstreamModels(c *gin.Context) {
 		}
 	}
 
-	// 3) 执行同步：仅创建缺失模型；若上游缺失该模型则跳过
-	createdModels := 0
 	createdVendors := 0
 	updatedModels := 0
-	skipped := make([]string, 0)
-	createdList := make([]string, 0)
 	updatedList := make([]string, 0)
-
-	// 本地缓存：vendorName -> id
 	vendorIDCache := make(map[string]int)
 
-	for _, name := range missing {
-		up, ok := modelByName[name]
+	for _, ow := range req.Overwrite {
+		up, ok := modelByName[ow.ModelName]
 		if !ok {
-			skipped = append(skipped, name)
+			continue
+		}
+		var local model.Model
+		if err := model.DB.Where("model_name = ?", ow.ModelName).First(&local).Error; err != nil {
 			continue
 		}
 
-		// 若本地已存在且设置为不同步，则跳过（极端情况：缺失列表与本地状态不同步时）
-		var existing model.Model
-		if err := model.DB.Where("model_name = ?", name).First(&existing).Error; err == nil {
-			if existing.SyncOfficial == 0 {
-				skipped = append(skipped, name)
-				continue
+		// 跳过被禁用官方同步的模型
+		if local.SyncOfficial == 0 {
+			continue
+		}
+
+		// 映射 vendor
+		newVendorID := ensureVendorID(up.VendorName, vendorByName, vendorIDCache, &createdVendors)
+
+		// 应用字段覆盖（事务）
+		_ = model.DB.Transaction(func(tx *gorm.DB) error {
+			needUpdate := false
+			if containsField(ow.Fields, "description") {
+				local.Description = up.Description
+				needUpdate = true
 			}
-		}
-
-		// 确保 vendor 存在
-		vendorID := ensureVendorID(up.VendorName, vendorByName, vendorIDCache, &createdVendors)
-
-		// 创建模型
-		mi := &model.Model{
-			ModelName:   name,
-			Description: up.Description,
-			Icon:        up.Icon,
-			Tags:        up.Tags,
-			VendorID:    vendorID,
-			Status:      chooseStatus(up.Status, 1),
-			NameRule:    up.NameRule,
-		}
-		if err := mi.Insert(); err == nil {
-			createdModels++
-			createdList = append(createdList, name)
-		} else {
-			skipped = append(skipped, name)
-		}
+			if containsField(ow.Fields, "icon") {
+				local.Icon = up.Icon
+				needUpdate = true
+			}
+			if containsField(ow.Fields, "tags") {
+				local.Tags = up.Tags
+				needUpdate = true
+			}
+			if containsField(ow.Fields, "vendor") {
+				local.VendorID = newVendorID
+				needUpdate = true
+			}
+			if containsField(ow.Fields, "name_rule") {
+				local.NameRule = up.NameRule
+				needUpdate = true
+			}
+			if containsField(ow.Fields, "status") {
+				local.Status = chooseStatus(up.Status, local.Status)
+				needUpdate = true
+			}
+			if containsField(ow.Fields, "input_modalities") {
+				local.InputModalities = model.CatalogStringList(up.InputModalities)
+				needUpdate = true
+			}
+			if containsField(ow.Fields, "output_modalities") {
+				local.OutputModalities = model.CatalogStringList(up.OutputModalities)
+				needUpdate = true
+			}
+			if containsField(ow.Fields, "capabilities") {
+				local.Capabilities = model.CatalogStringList(up.Capabilities)
+				needUpdate = true
+			}
+			if !needUpdate {
+				return nil
+			}
+			if err := local.NormalizeCatalogMetadata(); err != nil {
+				return err
+			}
+			if err := tx.Save(&local).Error; err != nil {
+				return err
+			}
+			updatedModels++
+			updatedList = append(updatedList, ow.ModelName)
+			return nil
+		})
 	}
 
-	// 4) 处理可选覆盖（更新本地已有模型的差异字段）
-	if len(req.Overwrite) > 0 {
-		// vendorIDCache 已用于创建阶段，可复用
-		for _, ow := range req.Overwrite {
-			up, ok := modelByName[ow.ModelName]
-			if !ok {
-				continue
-			}
-			var local model.Model
-			if err := model.DB.Where("model_name = ?", ow.ModelName).First(&local).Error; err != nil {
-				continue
-			}
-
-			// 跳过被禁用官方同步的模型
-			if local.SyncOfficial == 0 {
-				continue
-			}
-
-			// 映射 vendor
-			newVendorID := ensureVendorID(up.VendorName, vendorByName, vendorIDCache, &createdVendors)
-
-			// 应用字段覆盖（事务）
-			_ = model.DB.Transaction(func(tx *gorm.DB) error {
-				needUpdate := false
-				if containsField(ow.Fields, "description") {
-					local.Description = up.Description
-					needUpdate = true
-				}
-				if containsField(ow.Fields, "icon") {
-					local.Icon = up.Icon
-					needUpdate = true
-				}
-				if containsField(ow.Fields, "tags") {
-					local.Tags = up.Tags
-					needUpdate = true
-				}
-				if containsField(ow.Fields, "vendor") {
-					local.VendorID = newVendorID
-					needUpdate = true
-				}
-				if containsField(ow.Fields, "name_rule") {
-					local.NameRule = up.NameRule
-					needUpdate = true
-				}
-				if containsField(ow.Fields, "status") {
-					local.Status = chooseStatus(up.Status, local.Status)
-					needUpdate = true
-				}
-				if !needUpdate {
-					return nil
-				}
-				if err := tx.Save(&local).Error; err != nil {
-					return err
-				}
-				updatedModels++
-				updatedList = append(updatedList, ow.ModelName)
-				return nil
-			})
-		}
+	if updatedModels > 0 {
+		model.RefreshPricing()
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"created_models":  createdModels,
+			"created_models":  0,
 			"created_vendors": createdVendors,
 			"updated_models":  updatedModels,
-			"skipped_models":  skipped,
-			"created_list":    createdList,
+			"skipped_models":  []string{},
+			"created_list":    []string{},
 			"updated_list":    updatedList,
 			"source": gin.H{
 				"locale":      req.Locale,
@@ -526,12 +492,6 @@ func SyncUpstreamPreview(c *gin.Context) {
 		return
 	}
 
-	vendorByName := make(map[string]upstreamVendor)
-	for _, v := range vendorsEnv.Data {
-		if v.Name != "" {
-			vendorByName[v.Name] = v
-		}
-	}
 	modelByName := make(map[string]upstreamModel)
 	upstreamNames := make([]string, 0, len(modelsEnv.Data))
 	for _, m := range modelsEnv.Data {
@@ -541,7 +501,7 @@ func SyncUpstreamPreview(c *gin.Context) {
 		}
 	}
 
-	// 2) 本地已有模型
+	// 2) 本地已有、且开启官方同步的模型
 	var locals []model.Model
 	if len(upstreamNames) > 0 {
 		_ = model.DB.Where("model_name IN ? AND sync_official <> 0", upstreamNames).Find(&locals).Error
@@ -567,16 +527,7 @@ func SyncUpstreamPreview(c *gin.Context) {
 		}
 	}
 
-	// 3) 缺失且上游存在的模型
-	missingList, _ := model.GetMissingModels()
-	var missing []string
-	for _, name := range missingList {
-		if _, ok := modelByName[name]; ok {
-			missing = append(missing, name)
-		}
-	}
-
-	// 4) 计算冲突字段
+	// 3) 计算冲突字段
 	type conflictField struct {
 		Field    string      `json:"field"`
 		Local    interface{} `json:"local"`
@@ -614,6 +565,15 @@ func SyncUpstreamPreview(c *gin.Context) {
 		if local.Status != chooseStatus(up.Status, local.Status) {
 			fields = append(fields, conflictField{Field: "status", Local: local.Status, Upstream: up.Status})
 		}
+		if up.InputModalities != nil && !slices.Equal([]string(local.InputModalities), up.InputModalities) {
+			fields = append(fields, conflictField{Field: "input_modalities", Local: local.InputModalities, Upstream: up.InputModalities})
+		}
+		if up.OutputModalities != nil && !slices.Equal([]string(local.OutputModalities), up.OutputModalities) {
+			fields = append(fields, conflictField{Field: "output_modalities", Local: local.OutputModalities, Upstream: up.OutputModalities})
+		}
+		if up.Capabilities != nil && !slices.Equal([]string(local.Capabilities), up.Capabilities) {
+			fields = append(fields, conflictField{Field: "capabilities", Local: local.Capabilities, Upstream: up.Capabilities})
+		}
 		if len(fields) > 0 {
 			conflicts = append(conflicts, conflictItem{ModelName: local.ModelName, Fields: fields})
 		}
@@ -622,7 +582,7 @@ func SyncUpstreamPreview(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"missing":   missing,
+			"missing":   []string{},
 			"conflicts": conflicts,
 			"source": gin.H{
 				"locale":      locale,

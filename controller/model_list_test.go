@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +16,6 @@ import (
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +49,7 @@ func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	model.DB = db
 	model.LOG_DB = db
 
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Model{}, &model.ModelBinding{}, &model.Vendor{}))
 
 	t.Cleanup(func() {
 		sqlDB, err := db.DB()
@@ -141,6 +141,73 @@ func withSelfUseModeEnabled(t *testing.T) {
 	})
 }
 
+func seedModelBinding(t *testing.T, db *gorm.DB, channelID int, group string, modelName string, enabled bool) {
+	t.Helper()
+
+	var channel model.Channel
+	err := db.First(&channel, channelID).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		require.NoError(t, db.Create(&model.Channel{
+			Id:     channelID,
+			Type:   constant.ChannelTypeOpenAI,
+			Name:   fmt.Sprintf("channel-%d", channelID),
+			Status: common.ChannelStatusEnabled,
+			Group:  group,
+		}).Error)
+	} else {
+		require.NoError(t, err)
+	}
+
+	var catalogModel model.Model
+	err = db.Where("model_name = ?", modelName).First(&catalogModel).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		require.NoError(t, db.Create(&model.Model{
+			ModelName: modelName,
+			Status:    1,
+			NameRule:  model.NameRuleExact,
+		}).Error)
+		require.NoError(t, db.Where("model_name = ?", modelName).First(&catalogModel).Error)
+	} else {
+		require.NoError(t, err)
+	}
+
+	if !enabled {
+		return
+	}
+	var count int64
+	require.NoError(t, db.Model(&model.ModelBinding{}).
+		Where("model_id = ? AND channel_id = ? AND deleted = ?", catalogModel.Id, channelID, false).
+		Count(&count).Error)
+	if count > 0 {
+		return
+	}
+	require.NoError(t, db.Create(&model.ModelBinding{
+		ModelId:       catalogModel.Id,
+		ChannelId:     channelID,
+		UpstreamModel: modelName,
+		Enabled:       true,
+		GroupsRaw:     group,
+	}).Error)
+}
+
+func publishModelListCatalog(t *testing.T, db *gorm.DB, modelNames ...string) {
+	t.Helper()
+	for _, modelName := range modelNames {
+		var catalogModel model.Model
+		err := db.Where("model_name = ?", modelName).First(&catalogModel).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			require.NoError(t, db.Create(&model.Model{
+				ModelName: modelName,
+				Status:    1,
+				NameRule:  model.NameRuleExact,
+			}).Error)
+		} else {
+			require.NoError(t, err)
+		}
+	}
+	model.InvalidatePricingCache()
+}
+
 func decodeListModelsPayload(t *testing.T, recorder *httptest.ResponseRecorder) listModelsResponse {
 	t.Helper()
 
@@ -181,6 +248,55 @@ func decodeUserModelsResponse(t *testing.T, recorder *httptest.ResponseRecorder)
 	return payload.Data
 }
 
+func TestChannelListModelsUsesExactCatalogEntries(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	publishModelListCatalog(t, db, "catalog-exact-model")
+	require.NoError(t, db.Create(&model.Model{
+		ModelName: "catalog-prefix-",
+		Status:    1,
+		NameRule:  model.NameRulePrefix,
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	ChannelListModels(context)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var payload listModelsResponse
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	modelNames := make(map[string]struct{}, len(payload.Data))
+	for _, item := range payload.Data {
+		modelNames[item.Id] = struct{}{}
+	}
+	assert.Equal(t, map[string]struct{}{"catalog-exact-model": {}}, modelNames)
+}
+
+func TestEnsureCatalogModelsCreatesMissingNames(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	publishModelListCatalog(t, db, "already-cataloged")
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	request := httptest.NewRequest(http.MethodPost, "/api/models/ensure", strings.NewReader(`{"model_names":["already-cataloged","new-from-channel"]}`))
+	request.Header.Set("Content-Type", "application/json")
+	context.Request = request
+	EnsureCatalogModels(context)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var payload struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Created      []string `json:"created"`
+			CreatedCount int      `json:"created_count"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	assert.Equal(t, []string{"new-from-channel"}, payload.Data.Created)
+	assert.Equal(t, 1, payload.Data.CreatedCount)
+}
+
 func TestGetUserModelsFiltersByRequestedGroup(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.Create(&model.User{
@@ -190,10 +306,9 @@ func TestGetUserModelsFiltersByRequestedGroup(t *testing.T) {
 		Group:    "default",
 		Status:   common.UserStatusEnabled,
 	}).Error)
-	require.NoError(t, db.Create(&[]model.Ability{
-		{Group: "default", Model: "zz-default-only-model", ChannelId: 1, Enabled: true},
-		{Group: "default", Model: "zz-disabled-model", ChannelId: 1, Enabled: false},
-	}).Error)
+	seedModelBinding(t, db, 1, "default", "zz-default-only-model", true)
+	seedModelBinding(t, db, 1, "default", "zz-disabled-model", false)
+	publishModelListCatalog(t, db, "zz-default-only-model", "zz-disabled-model")
 
 	defaultRecorder := httptest.NewRecorder()
 	defaultContext, _ := gin.CreateTestContext(defaultRecorder)
@@ -212,28 +327,14 @@ func TestGetUserModelsFiltersByRequestedGroup(t *testing.T) {
 
 	GetUserModels(vipContext)
 
-	require.Empty(t, decodeUserModelsResponse(t, vipRecorder))
+	require.Equal(t, []string{"zz-default-only-model"}, decodeUserModelsResponse(t, vipRecorder))
 }
 
-func TestGetUserModelsExpandsAutoGroupsInConfiguredOrder(t *testing.T) {
-	originalAutoGroups := setting.AutoGroups2JsonString()
-	originalUsableGroups := setting.UserUsableGroups2JSONString()
-	originalSpecialGroups := ratio_setting.GetGroupRatioSetting().GroupSpecialUsableGroup.ReadAll()
+func TestGetUserModelsUsesAccessibleGroups(t *testing.T) {
+	originalInherit := setting.GroupInherit2JSONString()
+	require.NoError(t, setting.UpdateGroupInheritByJSONString(`{"default":["default"],"vip":["vip","default"]}`))
 	t.Cleanup(func() {
-		require.NoError(t, setting.UpdateAutoGroupsByJsonString(originalAutoGroups))
-		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
-		specialGroups := ratio_setting.GetGroupRatioSetting().GroupSpecialUsableGroup
-		specialGroups.Clear()
-		specialGroups.AddAll(originalSpecialGroups)
-	})
-
-	require.NoError(t, setting.UpdateAutoGroupsByJsonString(`["vip","default","unavailable"]`))
-	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"auto":"自动分组","default":"默认分组","unavailable":"不可用分组"}`))
-	specialGroups := ratio_setting.GetGroupRatioSetting().GroupSpecialUsableGroup
-	specialGroups.Clear()
-	specialGroups.Set("default", map[string]string{
-		"+:vip":         "VIP 分组",
-		"-:unavailable": "",
+		require.NoError(t, setting.UpdateGroupInheritByJSONString(originalInherit))
 	})
 
 	db := setupModelListControllerTestDB(t)
@@ -243,26 +344,35 @@ func TestGetUserModelsExpandsAutoGroupsInConfiguredOrder(t *testing.T) {
 		Password: "password",
 		Group:    "default",
 		Status:   common.UserStatusEnabled,
+		AffCode:  "aff1003",
 	}).Error)
-	require.NoError(t, db.Create(&[]model.Ability{
-		{Group: "vip", Model: "zz-vip-model", ChannelId: 1, Enabled: true},
-		{Group: "vip", Model: "zz-shared-model", ChannelId: 1, Enabled: true},
-		{Group: "default", Model: "zz-default-model", ChannelId: 1, Enabled: true},
-		{Group: "default", Model: "zz-shared-model", ChannelId: 2, Enabled: true},
-		{Group: "unavailable", Model: "zz-unavailable-model", ChannelId: 1, Enabled: true},
+	require.NoError(t, db.Create(&model.User{
+		Id:       1004,
+		Username: "playground-vip-model-user",
+		Password: "password",
+		Group:    "vip",
+		Status:   common.UserStatusEnabled,
+		AffCode:  "aff1004",
 	}).Error)
+	seedModelBinding(t, db, 1, "vip", "zz-vip-model", true)
+	seedModelBinding(t, db, 2, "default", "zz-shared-model", true)
+	seedModelBinding(t, db, 3, "default", "zz-default-model", true)
+	seedModelBinding(t, db, 4, "unavailable", "zz-unavailable-model", true)
+	publishModelListCatalog(t, db, "zz-vip-model", "zz-shared-model", "zz-default-model")
 
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
-	context.Request = httptest.NewRequest(http.MethodGet, "/api/user/models?group=auto", nil)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/user/models", nil)
 	context.Set("id", 1003)
-
 	GetUserModels(context)
+	assert.ElementsMatch(t, []string{"zz-shared-model", "zz-default-model"}, decodeUserModelsResponse(t, recorder))
 
-	models := decodeUserModelsResponse(t, recorder)
-	require.Len(t, models, 3)
-	assert.ElementsMatch(t, []string{"zz-vip-model", "zz-shared-model"}, models[:2])
-	assert.Equal(t, "zz-default-model", models[2])
+	vipRecorder := httptest.NewRecorder()
+	vipContext, _ := gin.CreateTestContext(vipRecorder)
+	vipContext.Request = httptest.NewRequest(http.MethodGet, "/api/user/models", nil)
+	vipContext.Set("id", 1004)
+	GetUserModels(vipContext)
+	assert.ElementsMatch(t, []string{"zz-vip-model", "zz-shared-model", "zz-default-model"}, decodeUserModelsResponse(t, vipRecorder))
 }
 
 func TestListModelsIncludesTieredBillingModel(t *testing.T) {
@@ -284,12 +394,17 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 		Group:    "default",
 		Status:   common.UserStatusEnabled,
 	}).Error)
-	require.NoError(t, db.Create(&[]model.Ability{
-		{Group: "default", Model: "zz-tiered-visible-model", ChannelId: 1, Enabled: true},
-		{Group: "default", Model: "zz-tiered-empty-expr-model", ChannelId: 1, Enabled: true},
-		{Group: "default", Model: "zz-tiered-missing-expr-model", ChannelId: 1, Enabled: true},
-		{Group: "default", Model: "zz-unpriced-model", ChannelId: 1, Enabled: true},
-	}).Error)
+	seedModelBinding(t, db, 1, "default", "zz-tiered-visible-model", true)
+	seedModelBinding(t, db, 1, "default", "zz-tiered-empty-expr-model", true)
+	seedModelBinding(t, db, 1, "default", "zz-tiered-missing-expr-model", true)
+	seedModelBinding(t, db, 1, "default", "zz-unpriced-model", true)
+	publishModelListCatalog(
+		t,
+		db,
+		"zz-tiered-visible-model",
+		"zz-tiered-empty-expr-model",
+		"zz-tiered-missing-expr-model",
+	)
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -321,7 +436,7 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 	require.Empty(t, missingExprPricing.BillingExpr)
 }
 
-func TestListModelsUsesAdvancedCustomEndpointTypesFromPricingCache(t *testing.T) {
+func TestListModelsUsesBifrostEndpointTypesFromPricingCache(t *testing.T) {
 	withSelfUseModeEnabled(t)
 	db := setupModelListControllerTestDB(t)
 
@@ -334,7 +449,7 @@ func TestListModelsUsesAdvancedCustomEndpointTypesFromPricingCache(t *testing.T)
 
 	require.NoError(t, db.Create(&model.User{
 		Id:       1003,
-		Username: "advanced-custom-model-list-user",
+		Username: "bifrost-model-list-user",
 		Password: "password",
 		Group:    "default",
 		Status:   common.UserStatusEnabled,
@@ -342,36 +457,16 @@ func TestListModelsUsesAdvancedCustomEndpointTypesFromPricingCache(t *testing.T)
 
 	channel := &model.Channel{
 		Id:     701,
-		Type:   constant.ChannelTypeAdvancedCustom,
-		Key:    "advanced-custom-key",
+		Type:   constant.ChannelTypeBifrost,
+		Key:    "bifrost-key",
 		Status: common.ChannelStatusEnabled,
-		Name:   "advanced-custom-channel",
+		Name:   "bifrost-channel",
 		Group:  "default",
-		Models: "gemini-3.5-flash",
+		Models: "gpt-5",
 	}
-	channel.SetOtherSettings(dto.ChannelOtherSettings{
-		AdvancedCustom: &dto.AdvancedCustomConfig{
-			Routes: []dto.AdvancedCustomRoute{
-				{
-					IncomingPath: "/v1/chat/completions",
-					UpstreamPath: "/v1/chat/completions",
-				},
-				{
-					IncomingPath: "/v1/responses",
-					UpstreamPath: "/v1beta/models/{model}:generateContent",
-					Converter:    "openai_responses_to_gemini_generate_content",
-					Models:       []string{"re:^gemini-"},
-				},
-			},
-		},
-	})
 	require.NoError(t, db.Create(channel).Error)
-	require.NoError(t, db.Create(&model.Ability{
-		Group:     "default",
-		Model:     "gemini-3.5-flash",
-		ChannelId: 701,
-		Enabled:   true,
-	}).Error)
+	seedModelBinding(t, db, 701, "default", "gpt-5", true)
+	publishModelListCatalog(t, db, "gpt-5")
 
 	model.InitChannelCache()
 	model.GetPricing()
@@ -385,10 +480,11 @@ func TestListModelsUsesAdvancedCustomEndpointTypesFromPricingCache(t *testing.T)
 
 	payload := decodeListModelsPayload(t, recorder)
 	require.Len(t, payload.Data, 1)
-	require.Equal(t, "gemini-3.5-flash", payload.Data[0].Id)
+	require.Equal(t, "gpt-5", payload.Data[0].Id)
 	require.Equal(t, []constant.EndpointType{
 		constant.EndpointTypeOpenAI,
 		constant.EndpointTypeOpenAIResponse,
+		constant.EndpointTypeAnthropic,
 	}, payload.Data[0].SupportedEndpointTypes)
 }
 
@@ -403,12 +499,17 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 		"zz-token-tiered-empty-expr-model": "",
 	})
 	db := setupModelListControllerTestDB(t)
-	require.NoError(t, db.Create(&[]model.Ability{
-		{Group: "default", Model: "zz-token-tiered-visible-model", ChannelId: 1, Enabled: true},
-		{Group: "default", Model: "zz-token-tiered-empty-expr-model", ChannelId: 1, Enabled: true},
-		{Group: "default", Model: "zz-token-tiered-missing-expr-model", ChannelId: 1, Enabled: true},
-		{Group: "default", Model: "zz-token-unpriced-model", ChannelId: 1, Enabled: true},
-	}).Error)
+	seedModelBinding(t, db, 1, "default", "zz-token-tiered-visible-model", true)
+	seedModelBinding(t, db, 1, "default", "zz-token-tiered-empty-expr-model", true)
+	seedModelBinding(t, db, 1, "default", "zz-token-tiered-missing-expr-model", true)
+	seedModelBinding(t, db, 1, "default", "zz-token-unpriced-model", true)
+	publishModelListCatalog(
+		t,
+		db,
+		"zz-token-tiered-visible-model",
+		"zz-token-tiered-empty-expr-model",
+		"zz-token-tiered-missing-expr-model",
+	)
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -431,26 +532,19 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 	require.NotContains(t, ids, "zz-token-unpriced-model")
 }
 
-func TestListModelsTokenLimitUsesResolvedCustomAutoGroups(t *testing.T) {
+func TestListModelsIgnoresTokenGroupAndUsesUserInherit(t *testing.T) {
 	withSelfUseModeEnabled(t)
-	originalMax := setting.GetMaxTokenAutoGroups()
-	originalUsableGroups := setting.UserUsableGroups2JSONString()
-	originalRatios := ratio_setting.GroupRatio2JSONString()
-	require.NoError(t, setting.UpdateMaxTokenAutoGroups("5"))
-	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default","vip":"VIP"}`))
-	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"vip":1}`))
+	originalInherit := setting.GroupInherit2JSONString()
+	require.NoError(t, setting.UpdateGroupInheritByJSONString(`{"vip":["vip","default"],"default":["default"]}`))
 	t.Cleanup(func() {
-		require.NoError(t, setting.UpdateMaxTokenAutoGroups(fmt.Sprintf("%d", originalMax)))
-		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
-		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(originalRatios))
+		require.NoError(t, setting.UpdateGroupInheritByJSONString(originalInherit))
 	})
 
 	db := setupModelListControllerTestDB(t)
-	require.NoError(t, db.Create(&[]model.Ability{
-		{Group: "vip", Model: "zz-vip-allowed", ChannelId: 1, Enabled: true},
-		{Group: "vip", Model: "zz-vip-denied", ChannelId: 1, Enabled: true},
-		{Group: "default", Model: "zz-default-outside-snapshot", ChannelId: 1, Enabled: true},
-	}).Error)
+	seedModelBinding(t, db, 1, "vip", "zz-vip-allowed", true)
+	seedModelBinding(t, db, 1, "vip", "zz-vip-denied", true)
+	seedModelBinding(t, db, 2, "default", "zz-default-outside-snapshot", true)
+	publishModelListCatalog(t, db, "zz-vip-allowed", "zz-vip-denied", "zz-default-outside-snapshot")
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -467,30 +561,22 @@ func TestListModelsTokenLimitUsesResolvedCustomAutoGroups(t *testing.T) {
 
 	ListModels(ctx, constant.ChannelTypeOpenAI)
 	ids := decodeListModelsResponse(t, recorder)
-	require.Equal(t, map[string]struct{}{"zz-vip-allowed": {}}, ids)
+	require.Equal(t, map[string]struct{}{"zz-default-outside-snapshot": {}}, ids)
 
-	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default"}`))
-	emptyRecorder := httptest.NewRecorder()
-	emptyCtx, _ := gin.CreateTestContext(emptyRecorder)
-	emptyCtx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	common.SetContextKey(emptyCtx, constant.ContextKeyUserGroup, "default")
-	common.SetContextKey(emptyCtx, constant.ContextKeyTokenGroup, "auto")
-	common.SetContextKey(emptyCtx, constant.ContextKeyTokenAutoGroups, []string{"vip"})
-	common.SetContextKey(emptyCtx, constant.ContextKeyTokenModelLimitEnabled, true)
-	common.SetContextKey(emptyCtx, constant.ContextKeyTokenModelLimit, map[string]bool{"zz-vip-allowed": true})
-
-	require.NotPanics(t, func() {
-		ListModels(emptyCtx, constant.ChannelTypeAnthropic)
+	vipRecorder := httptest.NewRecorder()
+	vipCtx, _ := gin.CreateTestContext(vipRecorder)
+	vipCtx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	common.SetContextKey(vipCtx, constant.ContextKeyUserGroup, "vip")
+	common.SetContextKey(vipCtx, constant.ContextKeyTokenModelLimitEnabled, true)
+	common.SetContextKey(vipCtx, constant.ContextKeyTokenModelLimit, map[string]bool{
+		"zz-vip-allowed":              true,
+		"zz-default-outside-snapshot": true,
 	})
-	var anthropicResponse struct {
-		Data    []dto.AnthropicModel `json:"data"`
-		FirstID string               `json:"first_id"`
-		LastID  string               `json:"last_id"`
-	}
-	require.NoError(t, common.Unmarshal(emptyRecorder.Body.Bytes(), &anthropicResponse))
-	require.Empty(t, anthropicResponse.Data)
-	require.Empty(t, anthropicResponse.FirstID)
-	require.Empty(t, anthropicResponse.LastID)
+	ListModels(vipCtx, constant.ChannelTypeOpenAI)
+	require.Equal(t, map[string]struct{}{
+		"zz-vip-allowed":              {},
+		"zz-default-outside-snapshot": {},
+	}, decodeListModelsResponse(t, vipRecorder))
 }
 
 func TestCheckUpdatePasswordRequiresCurrentPassword(t *testing.T) {

@@ -16,8 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Check, Moon, Sun } from 'lucide-react'
-import { useEffect } from 'react'
+import { Check, Monitor, Moon, Sun } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -27,52 +26,81 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useTheme } from '@/context/theme-provider'
+import { type Theme, useTheme } from '@/context/theme-provider'
 import { cn } from '@/lib/utils'
+
+const OPTIONS: Array<{
+  value: Theme
+  label: 'Light' | 'Dark' | 'System'
+  icon: typeof Sun
+}> = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: Monitor },
+]
 
 export function ThemeSwitch() {
   const { t } = useTranslation()
-  const { theme, setTheme } = useTheme()
-
-  /* Update theme-color meta tag
-   * when theme is updated */
-  useEffect(() => {
-    const themeColor = theme === 'dark' ? '#020817' : '#fff'
-    const metaThemeColor = document.querySelector("meta[name='theme-color']")
-    if (metaThemeColor) metaThemeColor.setAttribute('content', themeColor)
-  }, [theme])
+  const { theme, resolvedTheme, setTheme } = useTheme()
 
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger
-        render={<Button variant='ghost' size='icon' className='h-9 w-9' />}
+        render={
+          <Button
+            variant='ghost'
+            size='icon'
+            className='relative h-9 w-9 overflow-hidden rounded-full'
+            aria-label={t('Toggle theme')}
+          />
+        }
       >
-        <Sun className='size-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90' />
-        <Moon className='absolute size-[1.2rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0' />
+        <Sun
+          aria-hidden
+          className={cn(
+            'absolute size-[1.15rem] transition-[transform,opacity] duration-200 ease-out',
+            resolvedTheme === 'light'
+              ? 'scale-100 rotate-0 opacity-100'
+              : 'scale-50 rotate-90 opacity-0'
+          )}
+        />
+        <Moon
+          aria-hidden
+          className={cn(
+            'absolute size-[1.05rem] transition-[transform,opacity] duration-200 ease-out',
+            resolvedTheme === 'dark'
+              ? 'scale-100 rotate-0 opacity-100'
+              : 'scale-50 -rotate-90 opacity-0'
+          )}
+        />
+        {theme === 'system' && (
+          <span
+            aria-hidden
+            className='bg-info ring-background absolute right-1 bottom-1 size-1.5 rounded-full ring-2'
+          />
+        )}
         <span className='sr-only'>{t('Toggle theme')}</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='end'>
-        <DropdownMenuItem onClick={() => setTheme('light')}>
-          {t('Light')}{' '}
-          <Check
-            size={14}
-            className={cn('ms-auto', theme !== 'light' && 'hidden')}
-          />
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme('dark')}>
-          {t('Dark')}
-          <Check
-            size={14}
-            className={cn('ms-auto', theme !== 'dark' && 'hidden')}
-          />
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme('system')}>
-          {t('System')}
-          <Check
-            size={14}
-            className={cn('ms-auto', theme !== 'system' && 'hidden')}
-          />
-        </DropdownMenuItem>
+      <DropdownMenuContent align='end' className='min-w-36'>
+        {OPTIONS.map((option) => {
+          const Icon = option.icon
+          return (
+            <DropdownMenuItem
+              key={option.value}
+              onClick={() => setTheme(option.value)}
+            >
+              <Icon aria-hidden className='size-4' />
+              <span>{t(option.label)}</span>
+              <Check
+                aria-hidden
+                className={cn(
+                  'ms-auto size-4',
+                  theme !== option.value && 'invisible'
+                )}
+              />
+            </DropdownMenuItem>
+          )
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   )

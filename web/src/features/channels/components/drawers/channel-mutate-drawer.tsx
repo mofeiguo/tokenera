@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRight,
   AlertCircle,
@@ -99,7 +98,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -123,6 +121,7 @@ import {
   type ChannelConnectionInfo,
 } from '@/lib/channel-connection-info'
 import { getLobeIcon } from '@/lib/lobe-icon'
+import { useQuery, useQueryClient } from '@/lib/query'
 import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -132,8 +131,6 @@ import {
   getAllModels,
   getChannel,
   getChannelKey,
-  getGroups,
-  getPrefillGroups,
   refreshCodexCredential,
 } from '../../api'
 import {
@@ -165,9 +162,6 @@ import {
   formatModelsArray,
   extractRedirectModels,
   extractMappingSourceModels,
-  hasModelConfigChanged,
-  findMissingModelsInMapping,
-  validateModelMappingJson,
   hasAdvancedSettingsErrors,
 } from '../../lib'
 import {
@@ -175,13 +169,10 @@ import {
   collectNewDisallowedStatusCodeRedirects,
 } from '../../lib/status-code-risk-guard'
 import type { Channel } from '../../types'
+import { ChannelModelBindingsPanel } from '../channel-model-bindings-panel'
 import { useChannels } from '../channels-provider'
 import { AdvancedCustomEditorDialog } from '../dialogs/advanced-custom-editor-dialog'
 import { FetchModelsDialog } from '../dialogs/fetch-models-dialog'
-import {
-  MissingModelsConfirmationDialog,
-  type MissingModelsAction,
-} from '../dialogs/missing-models-confirmation-dialog'
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
 import { ModelMappingEditor } from '../model-mapping-editor'
@@ -336,7 +327,6 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     hasConfiguredOverrideValue(values.status_code_mapping) ||
     values.tag?.trim() ||
     values.remark?.trim() ||
-    values.priority ||
     values.weight ||
     values.proxy?.trim() ||
     values.system_prompt?.trim() ||
@@ -636,11 +626,6 @@ export function ChannelMutateDrawer({
   const statusCodeRiskResolveRef = useRef<
     ((confirmed: boolean) => void) | null
   >(null)
-  const [missingModelsDialogOpen, setMissingModelsDialogOpen] = useState(false)
-  const [missingModelsList, setMissingModelsList] = useState<string[]>([])
-  const missingModelsResolveRef = useRef<
-    ((action: MissingModelsAction) => void) | null
-  >(null)
   const channelFormRef = useRef<HTMLFormElement>(null)
   const advancedNavScrollPendingRef = useRef(false)
   const [activeEditorSectionId, setActiveEditorSectionId] = useState<string>(
@@ -668,21 +653,10 @@ export function ChannelMutateDrawer({
   })
 
   // Fetch available groups
-  const { data: groupsData, isLoading: isLoadingGroups } = useQuery({
-    queryKey: ['groups'],
-    queryFn: getGroups,
-  })
-
   // Fetch all available models
   const { data: allModelsData } = useQuery({
     queryKey: ['channel_models'],
     queryFn: getAllModels,
-  })
-
-  // Fetch prefill model groups
-  const { data: prefillGroupsData } = useQuery({
-    queryKey: ['prefill_groups', 'model'],
-    queryFn: () => getPrefillGroups('model'),
   })
 
   const { copyToClipboard } = useCopyToClipboard()
@@ -737,7 +711,6 @@ export function ChannelMutateDrawer({
   )
   const currentSettings = form.watch('settings')
   const currentAdvancedCustom = form.watch('advanced_custom')
-  const currentPriority = form.watch('priority')
   const currentWeight = form.watch('weight')
   const currentTestModel = form.watch('test_model')
   const currentAutoBan = form.watch('auto_ban')
@@ -901,22 +874,6 @@ export function ChannelMutateDrawer({
     return allModelsList
   }, [allModelsList, currentType])
 
-  // Get prefill groups
-  const prefillGroups = useMemo(
-    () => prefillGroupsData?.data || [],
-    [prefillGroupsData]
-  )
-
-  // Transform groups to multi-select options
-  const groupOptions = useMemo(() => {
-    if (!groupsData?.data) return []
-    const allGroups = new Set([...groupsData.data, ...(currentGroups || [])])
-    return [...allGroups].map((group) => ({
-      value: group,
-      label: group,
-    }))
-  }, [groupsData, currentGroups])
-
   // Parse current models as array
   const currentModelsArray = useMemo(
     () => parseModelsString(currentModels),
@@ -1004,10 +961,7 @@ export function ChannelMutateDrawer({
     : 'idle'
   const advancedSummary = advancedHaveErrors ? t('Error') : undefined
   const routingStrategyConfigured = Boolean(
-    currentPriority ||
-    currentWeight ||
-    currentTestModel?.trim() ||
-    (currentAutoBan ?? 1) !== 1
+    currentWeight || currentTestModel?.trim() || (currentAutoBan ?? 1) !== 1
   )
   const internalNotesConfigured = Boolean(
     currentTag?.trim() || currentRemark?.trim()
@@ -1519,32 +1473,6 @@ export function ChannelMutateDrawer({
     await copyToClipboard(models)
   }, [form, copyToClipboard, t])
 
-  // Handle adding prefill group models
-  const handleAddPrefillGroup = useCallback(
-    (group: { id: number; name: string; items: string | string[] }) => {
-      try {
-        const items = Array.isArray(group.items)
-          ? group.items
-          : JSON.parse(group.items)
-
-        if (!Array.isArray(items)) {
-          throw new Error('Invalid items format')
-        }
-
-        const count = updateModels(items, true)
-        toast.success(
-          t('Added {{count}} models from "{{name}}"', {
-            count,
-            name: group.name,
-          })
-        )
-      } catch {
-        toast.error(t('Failed to parse group items'))
-      }
-    },
-    [updateModels, t]
-  )
-
   // Handle model selection change from MultiSelect
   const handleModelsChange = useCallback(
     (selected: string[]) => {
@@ -1564,30 +1492,6 @@ export function ChannelMutateDrawer({
     onOpenChange(false)
     setOpen(null)
   }, [channelId, queryClient, onOpenChange, setOpen])
-
-  // Show missing models confirmation dialog
-  const confirmMissingModelMappings = useCallback(
-    (missingModels: string[]): Promise<MissingModelsAction> => {
-      return new Promise((resolve) => {
-        setMissingModelsList(missingModels)
-        setMissingModelsDialogOpen(true)
-        missingModelsResolveRef.current = resolve
-      })
-    },
-    []
-  )
-
-  // Handle missing models dialog action
-  const handleMissingModelsAction = useCallback(
-    (action: MissingModelsAction) => {
-      setMissingModelsDialogOpen(false)
-      if (missingModelsResolveRef.current) {
-        missingModelsResolveRef.current(action)
-        missingModelsResolveRef.current = null
-      }
-    },
-    []
-  )
 
   const confirmStatusCodeRisk = useCallback(
     (detailItems: string[]): Promise<boolean> =>
@@ -1677,61 +1581,12 @@ export function ChannelMutateDrawer({
         }
       }
 
-      // Validate model_mapping JSON format
-      const hasModelMapping =
-        typeof data.model_mapping === 'string' &&
-        data.model_mapping.trim() !== ''
-      const modelMappingValue = data.model_mapping || ''
-
-      if (hasModelMapping) {
-        const validation = validateModelMappingJson(modelMappingValue)
-        if (!validation.valid) {
-          toast.error(t(validation.error || 'Invalid model mapping'))
-          return
-        }
-      }
-
-      // Normalize models array
-      const normalizedModels = parseModelsString(data.models || '')
-
-      // Check for missing models in model_mapping
-      if (hasModelMapping) {
-        const missingModels = findMissingModelsInMapping(
-          modelMappingValue,
-          normalizedModels
-        )
-
-        const shouldPromptMissing =
-          missingModels.length > 0 &&
-          hasModelConfigChanged(
-            normalizedModels,
-            data.model_mapping || '',
-            initialModelsRef.current,
-            initialModelMappingRef.current
-          )
-
-        if (shouldPromptMissing) {
-          const confirmAction = await confirmMissingModelMappings(missingModels)
-          if (confirmAction === 'cancel') {
-            return
-          }
-          if (confirmAction === 'add') {
-            const updatedModels = [
-              ...new Set([...normalizedModels, ...missingModels]),
-            ]
-            data.models = formatModelsArray(updatedModels)
-            form.setValue('models', data.models)
-          }
-        }
-      }
-
       await channelMutation.mutateAsync(data)
     },
     [
       isEditing,
       sensitiveLocked,
       form,
-      confirmMissingModelMappings,
       confirmStatusCodeRisk,
       channelMutation,
       t,
@@ -1912,7 +1767,7 @@ export function ChannelMutateDrawer({
                   'Sensitive channel settings are read-only for your account.'
                 )}{' '}
                 {t(
-                  'You can still edit non-sensitive operations fields such as models, groups, priority, and weight.'
+                  'You can still edit non-sensitive operations fields such as models, groups, and weight.'
                 )}
               </AlertDescription>
             </Alert>
@@ -3255,363 +3110,323 @@ export function ChannelMutateDrawer({
                       className='scroll-mt-4'
                     >
                       <ChannelModelsSection>
-                        <div className='space-y-5'>
-                          <div className='border-border/60 bg-muted/10 rounded-lg border p-4'>
-                            <FormField
-                              control={form.control}
-                              name='models'
-                              render={() => (
-                                <FormItem className='space-y-3'>
-                                  <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
-                                    <div className='space-y-1'>
-                                      <FormLabel>{t('Models *')}</FormLabel>
-                                      <FormDescription>
-                                        {t(FIELD_DESCRIPTIONS.MODELS)}
-                                      </FormDescription>
-                                    </div>
-                                    <Badge variant='outline' className='w-fit'>
-                                      {t('Selected {{count}}', {
-                                        count: currentModelsArray.length,
-                                      })}
-                                    </Badge>
-                                  </div>
-                                  <FormControl>
-                                    <MultiSelect
-                                      options={modelOptions}
-                                      selected={currentModelsArray}
-                                      onChange={handleModelsChange}
-                                      placeholder={t(
-                                        'Select models or add custom ones'
-                                      )}
-                                      allowCreate
-                                      createLabel='Add custom model "{{value}}"'
-                                      maxVisibleChips={8}
-                                      copyChipOnClick
-                                    />
-                                  </FormControl>
-                                  {modelMappingGuardrail.exposedTargetModels
-                                    .length > 0 && (
-                                    <Alert className='border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-50'>
-                                      <AlertDescription className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-                                        <span>
-                                          {t('The mapped upstream model(s)')}{' '}
-                                          {formatModelNames(
-                                            modelMappingGuardrail.exposedTargetModels
-                                          )}{' '}
-                                          {t(
-                                            'are also listed here. Remove them from Models to keep the `/v1/models` response user-friendly and hide vendor-specific names.'
-                                          )}
-                                        </span>
-                                        <Button
-                                          type='button'
-                                          variant='outline'
-                                          size='sm'
-                                          onClick={() => {
-                                            const hiddenTargets = new Set(
-                                              modelMappingGuardrail.exposedTargetModels
-                                            )
-                                            updateModels(
-                                              currentModelsArray.filter(
-                                                (model) =>
-                                                  !hiddenTargets.has(model)
-                                              )
-                                            )
-                                          }}
-                                        >
-                                          {t('Remove mapped targets')}
-                                        </Button>
-                                      </AlertDescription>
-                                    </Alert>
-                                  )}
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-
-                            <Separator className='my-4' />
-
-                            <div className='space-y-3'>
-                              <div>
-                                <p className='text-sm font-medium'>
-                                  {t('Quick actions')}
-                                </p>
-                                <p className='text-muted-foreground text-xs'>
-                                  {t(
-                                    'Use presets or upstream discovery to populate the model list faster.'
-                                  )}
-                                </p>
-                              </div>
-                              <div className='flex flex-wrap gap-2'>
-                                <Button
-                                  type='button'
-                                  variant='outline'
-                                  size='sm'
-                                  onClick={handleFillRelatedModels}
-                                  disabled={!basicModels.length}
-                                >
-                                  <FileText
-                                    className='mr-2 h-4 w-4'
-                                    aria-hidden='true'
-                                  />
-                                  {t('Fill Related Models')}
-                                </Button>
-                                <Button
-                                  type='button'
-                                  variant='outline'
-                                  size='sm'
-                                  onClick={handleFillAllModels}
-                                  disabled={!allModelsList.length}
-                                >
-                                  <Plus
-                                    className='mr-2 h-4 w-4'
-                                    aria-hidden='true'
-                                  />
-                                  {t('Fill All Models')}
-                                </Button>
-                                {MODEL_FETCHABLE_TYPES.has(currentType) && (
-                                  <>
-                                    <Button
-                                      type='button'
-                                      variant='outline'
-                                      size='sm'
-                                      onClick={handleFetchModels}
-                                      disabled={!isEditing && !canEditSensitive}
-                                    >
-                                      <Sparkles
-                                        className='mr-2 h-4 w-4'
-                                        aria-hidden='true'
-                                      />
-                                      {t('Fetch from Upstream')}
-                                    </Button>
-                                    {!isEditing && !canEditSensitive && (
-                                      <span className='text-muted-foreground basis-full text-xs'>
-                                        {t(
-                                          'No permission to perform this action'
-                                        )}
-                                      </span>
-                                    )}
-                                  </>
-                                )}
-                                <Button
-                                  type='button'
-                                  variant='outline'
-                                  size='sm'
-                                  onClick={handleCopyModels}
-                                  disabled={currentModelsArray.length === 0}
-                                >
-                                  <Copy
-                                    className='mr-2 h-4 w-4'
-                                    aria-hidden='true'
-                                  />
-                                  {t('Copy All')}
-                                </Button>
-                                <Button
-                                  type='button'
-                                  variant='ghost'
-                                  size='sm'
-                                  onClick={handleClearModels}
-                                  disabled={currentModelsArray.length === 0}
-                                >
-                                  <Eraser
-                                    className='mr-2 h-4 w-4'
-                                    aria-hidden='true'
-                                  />
-                                  {t('Clear All')}
-                                </Button>
-                              </div>
-                              {prefillGroups.length > 0 && (
-                                <div className='flex flex-wrap items-center gap-2'>
-                                  <span className='text-muted-foreground text-xs'>
-                                    {t('Preset groups')}:
-                                  </span>
-                                  {prefillGroups.map((group) => (
-                                    <Button
-                                      key={group.id}
-                                      type='button'
-                                      variant='secondary'
-                                      size='sm'
-                                      onClick={() =>
-                                        handleAddPrefillGroup(group)
-                                      }
-                                    >
-                                      {group.name}
-                                    </Button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className='border-border/60 rounded-lg border p-4'>
-                            <FormField
-                              control={form.control}
-                              name='model_mapping'
-                              render={({ field }) => (
-                                <FormItem className='space-y-3'>
-                                  <div className='flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between'>
-                                    <div className='space-y-1'>
-                                      <div className='flex items-center gap-2'>
-                                        <FormLabel className='mb-0'>
-                                          {t('Model Mapping')}
-                                        </FormLabel>
-                                        <Tooltip>
-                                          <TooltipTrigger
-                                            render={
-                                              <Button
-                                                type='button'
-                                                variant='ghost'
-                                                size='icon-sm'
-                                                className='text-muted-foreground hover:text-foreground size-auto p-0'
-                                                aria-label={t(
-                                                  'How model mapping works'
-                                                )}
-                                              />
-                                            }
-                                          >
-                                            <HelpCircle
-                                              className='h-4 w-4'
-                                              aria-hidden='true'
-                                            />
-                                          </TooltipTrigger>
-                                          <TooltipContent
-                                            side='top'
-                                            align='start'
-                                            className='max-w-xs space-y-2 text-left'
-                                          >
-                                            <p className='text-xs font-semibold tracking-wide uppercase'>
-                                              {t('Request flow')}
-                                            </p>
-                                            <div className='space-y-1 font-mono text-xs'>
-                                              {mappingPreviewPairs.map(
-                                                (pair) => (
-                                                  <div
-                                                    key={`${pair.source}-${pair.target}`}
-                                                    className='flex items-center gap-1'
-                                                  >
-                                                    <span>{pair.source}</span>
-                                                    <ArrowRight
-                                                      className='h-3.5 w-3.5 opacity-70'
-                                                      aria-hidden='true'
-                                                    />
-                                                    <span>{pair.target}</span>
-                                                  </div>
-                                                )
-                                              )}
-                                              {remainingMappingCount > 0 && (
-                                                <div className='text-[11px] opacity-70'>
-                                                  +{remainingMappingCount}{' '}
-                                                  {t('more mapping')}
-                                                  {remainingMappingCount > 1
-                                                    ? 's'
-                                                    : ''}
-                                                </div>
-                                              )}
-                                            </div>
-                                            <p className='text-[11px] leading-relaxed opacity-80'>
-                                              {t(
-                                                'Users call the model on the left. The platform forwards the request to the upstream model on the right.'
-                                              )}
-                                            </p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </div>
-                                      <FormDescription>
-                                        {t(FIELD_DESCRIPTIONS.MODEL_MAPPING)}
-                                      </FormDescription>
-                                    </div>
-                                  </div>
-                                  <FormControl>
-                                    <ModelMappingEditor
-                                      value={field.value || ''}
-                                      onChange={field.onChange}
-                                      disabled={isSubmitting}
-                                      sourceModelOptions={currentModelsArray}
-                                      targetModelOptions={modelOptions.map(
-                                        (option) => option.value
-                                      )}
-                                    />
-                                  </FormControl>
-                                  {modelMappingGuardrail.invalidJson && (
-                                    <Alert variant='destructive'>
-                                      <AlertDescription>
-                                        {t(
-                                          'Model Mapping must be a JSON object like'
-                                        )}{' '}
-                                        <code className='font-mono'>
-                                          {'{"gpt-4":"Azure-GPT4"}'}
-                                        </code>
-                                        {t(
-                                          '. Please fix the JSON before saving.'
-                                        )}
-                                      </AlertDescription>
-                                    </Alert>
-                                  )}
-                                  {modelMappingGuardrail.missingSourceModels
-                                    .length > 0 && (
-                                    <Alert className='border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-50'>
-                                      <AlertDescription className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-                                        <span>
-                                          {t('Add')}{' '}
-                                          {formatModelNames(
-                                            modelMappingGuardrail.missingSourceModels
-                                          )}{' '}
-                                          {t(
-                                            'to the Models list so users can use them before the mapping sends traffic upstream.'
-                                          )}
-                                        </span>
-                                        <Button
-                                          type='button'
-                                          variant='outline'
-                                          size='sm'
-                                          onClick={() => {
-                                            updateModels([
-                                              ...currentModelsArray,
-                                              ...modelMappingGuardrail.missingSourceModels,
-                                            ])
-                                          }}
-                                        >
-                                          {t('Add missing models')}
-                                        </Button>
-                                      </AlertDescription>
-                                    </Alert>
-                                  )}
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-
-                          <div className='border-border/60 rounded-lg border p-4'>
-                            <FormField
-                              control={form.control}
-                              name='group'
-                              render={({ field }) => (
-                                <FormItem className='space-y-3'>
+                        <div className='border-border/60 bg-muted/10 space-y-4 rounded-lg border p-4'>
+                          <FormField
+                            control={form.control}
+                            name='models'
+                            render={() => (
+                              <FormItem className='space-y-3'>
+                                <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
                                   <div className='space-y-1'>
-                                    <FormLabel>{t('Groups *')}</FormLabel>
+                                    <FormLabel>{t('Models *')}</FormLabel>
                                     <FormDescription>
-                                      {t(FIELD_DESCRIPTIONS.GROUP)}
+                                      {t(FIELD_DESCRIPTIONS.MODELS)}
                                     </FormDescription>
                                   </div>
-                                  <FormControl>
-                                    {isLoadingGroups ? (
-                                      <Skeleton className='h-10 w-full' />
-                                    ) : (
-                                      <MultiSelect
-                                        options={groupOptions}
-                                        selected={field.value}
-                                        onChange={field.onChange}
-                                        placeholder={t(
-                                          FIELD_PLACEHOLDERS.GROUP
-                                        )}
-                                      />
+                                  <Badge variant='outline' className='w-fit'>
+                                    {t('Selected {{count}}', {
+                                      count: currentModelsArray.length,
+                                    })}
+                                  </Badge>
+                                </div>
+                                <FormControl>
+                                  <MultiSelect
+                                    options={modelOptions}
+                                    selected={currentModelsArray}
+                                    onChange={handleModelsChange}
+                                    placeholder={t(
+                                      'Select or add models allowed on this channel'
                                     )}
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
+                                    allowCreate
+                                    createLabel='Add custom model "{{value}}"'
+                                    maxVisibleChips={8}
+                                    copyChipOnClick
+                                  />
+                                </FormControl>
+                                {modelMappingGuardrail.exposedTargetModels
+                                  .length > 0 && (
+                                  <Alert className='border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-50'>
+                                    <AlertDescription className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+                                      <span>
+                                        {t('The mapped upstream model(s)')}{' '}
+                                        {formatModelNames(
+                                          modelMappingGuardrail.exposedTargetModels
+                                        )}{' '}
+                                        {t(
+                                          'are also listed here. Remove them from Models to keep the `/v1/models` response user-friendly and hide vendor-specific names.'
+                                        )}
+                                      </span>
+                                      <Button
+                                        type='button'
+                                        variant='outline'
+                                        size='sm'
+                                        onClick={() => {
+                                          const hiddenTargets = new Set(
+                                            modelMappingGuardrail.exposedTargetModels
+                                          )
+                                          updateModels(
+                                            currentModelsArray.filter(
+                                              (model) =>
+                                                !hiddenTargets.has(model)
+                                            )
+                                          )
+                                        }}
+                                      >
+                                        {t('Remove mapped targets')}
+                                      </Button>
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <Separator />
+
+                          <div className='space-y-3'>
+                            <div>
+                              <p className='text-sm font-medium'>
+                                {t('Quick actions')}
+                              </p>
+                              <p className='text-muted-foreground text-xs'>
+                                {t(
+                                  'Use presets or upstream discovery to populate the model list faster.'
+                                )}
+                              </p>
+                            </div>
+                            <div className='flex flex-wrap gap-2'>
+                              <Button
+                                type='button'
+                                variant='outline'
+                                size='sm'
+                                onClick={handleFillRelatedModels}
+                                disabled={!basicModels.length}
+                              >
+                                <FileText
+                                  className='mr-2 h-4 w-4'
+                                  aria-hidden='true'
+                                />
+                                {t('Fill Related Models')}
+                              </Button>
+                              <Button
+                                type='button'
+                                variant='outline'
+                                size='sm'
+                                onClick={handleFillAllModels}
+                                disabled={!allModelsList.length}
+                              >
+                                <Plus
+                                  className='mr-2 h-4 w-4'
+                                  aria-hidden='true'
+                                />
+                                {t('Fill All Models')}
+                              </Button>
+                              {MODEL_FETCHABLE_TYPES.has(currentType) && (
+                                <>
+                                  <Button
+                                    type='button'
+                                    variant='outline'
+                                    size='sm'
+                                    onClick={handleFetchModels}
+                                    disabled={!isEditing && !canEditSensitive}
+                                  >
+                                    <Sparkles
+                                      className='mr-2 h-4 w-4'
+                                      aria-hidden='true'
+                                    />
+                                    {t('Fetch from Upstream')}
+                                  </Button>
+                                  {!isEditing && !canEditSensitive && (
+                                    <span className='text-muted-foreground basis-full text-xs'>
+                                      {t(
+                                        'No permission to perform this action'
+                                      )}
+                                    </span>
+                                  )}
+                                </>
                               )}
-                            />
+                              <Button
+                                type='button'
+                                variant='outline'
+                                size='sm'
+                                onClick={handleCopyModels}
+                                disabled={currentModelsArray.length === 0}
+                              >
+                                <Copy
+                                  className='mr-2 h-4 w-4'
+                                  aria-hidden='true'
+                                />
+                                {t('Copy All')}
+                              </Button>
+                              <Button
+                                type='button'
+                                variant='ghost'
+                                size='sm'
+                                onClick={handleClearModels}
+                                disabled={currentModelsArray.length === 0}
+                              >
+                                <Eraser
+                                  className='mr-2 h-4 w-4'
+                                  aria-hidden='true'
+                                />
+                                {t('Clear All')}
+                              </Button>
+                            </div>
                           </div>
+                        </div>
+
+                        <div className='space-y-3'>
+                          <div>
+                            <h3 className='text-sm font-semibold'>
+                              {t('Catalog bindings')}
+                            </h3>
+                            <p className='text-muted-foreground text-sm'>
+                              {t(
+                                'Public model bindings for this channel. Edit them from the Models page to enable routing.'
+                              )}
+                            </p>
+                          </div>
+                          <ChannelModelBindingsPanel
+                            channelId={channelId || undefined}
+                          />
+                        </div>
+
+                        <div className='border-border/60 rounded-lg border p-4'>
+                          <FormField
+                            control={form.control}
+                            name='model_mapping'
+                            render={({ field }) => (
+                              <FormItem className='space-y-3'>
+                                <div className='flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between'>
+                                  <div className='space-y-1'>
+                                    <div className='flex items-center gap-2'>
+                                      <FormLabel className='mb-0'>
+                                        {t('Model Mapping')}
+                                      </FormLabel>
+                                      <Tooltip>
+                                        <TooltipTrigger
+                                          render={
+                                            <Button
+                                              type='button'
+                                              variant='ghost'
+                                              size='icon-sm'
+                                              className='text-muted-foreground hover:text-foreground size-auto p-0'
+                                              aria-label={t(
+                                                'How model mapping works'
+                                              )}
+                                            />
+                                          }
+                                        >
+                                          <HelpCircle
+                                            className='h-4 w-4'
+                                            aria-hidden='true'
+                                          />
+                                        </TooltipTrigger>
+                                        <TooltipContent
+                                          side='top'
+                                          align='start'
+                                          className='max-w-xs space-y-2 text-left'
+                                        >
+                                          <p className='text-xs font-semibold tracking-wide uppercase'>
+                                            {t('Request flow')}
+                                          </p>
+                                          <div className='space-y-1 font-mono text-xs'>
+                                            {mappingPreviewPairs.map((pair) => (
+                                              <div
+                                                key={`${pair.source}-${pair.target}`}
+                                                className='flex items-center gap-1'
+                                              >
+                                                <span>{pair.source}</span>
+                                                <ArrowRight
+                                                  className='h-3.5 w-3.5 opacity-70'
+                                                  aria-hidden='true'
+                                                />
+                                                <span>{pair.target}</span>
+                                              </div>
+                                            ))}
+                                            {remainingMappingCount > 0 && (
+                                              <div className='text-[11px] opacity-70'>
+                                                +{remainingMappingCount}{' '}
+                                                {t('more mapping')}
+                                                {remainingMappingCount > 1
+                                                  ? 's'
+                                                  : ''}
+                                              </div>
+                                            )}
+                                          </div>
+                                          <p className='text-[11px] leading-relaxed opacity-80'>
+                                            {t(
+                                              'Users call the model on the left. The platform forwards the request to the upstream model on the right.'
+                                            )}
+                                          </p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </div>
+                                    <FormDescription>
+                                      {t(FIELD_DESCRIPTIONS.MODEL_MAPPING)}
+                                    </FormDescription>
+                                  </div>
+                                </div>
+                                <FormControl>
+                                  <ModelMappingEditor
+                                    value={field.value || ''}
+                                    onChange={field.onChange}
+                                    disabled={isSubmitting}
+                                    sourceModelOptions={currentModelsArray}
+                                    targetModelOptions={modelOptions.map(
+                                      (option) => option.value
+                                    )}
+                                  />
+                                </FormControl>
+                                {modelMappingGuardrail.invalidJson && (
+                                  <Alert variant='destructive'>
+                                    <AlertDescription>
+                                      {t(
+                                        'Model Mapping must be a JSON object like'
+                                      )}{' '}
+                                      <code className='font-mono'>
+                                        {'{"gpt-4":"Azure-GPT4"}'}
+                                      </code>
+                                      {t(
+                                        '. Please fix the JSON before saving.'
+                                      )}
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
+                                {modelMappingGuardrail.missingSourceModels
+                                  .length > 0 && (
+                                  <Alert className='border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-50'>
+                                    <AlertDescription className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+                                      <span>
+                                        {t('Add')}{' '}
+                                        {formatModelNames(
+                                          modelMappingGuardrail.missingSourceModels
+                                        )}{' '}
+                                        {t(
+                                          'to the Models list so users can use them before the mapping sends traffic upstream.'
+                                        )}
+                                      </span>
+                                      <Button
+                                        type='button'
+                                        variant='outline'
+                                        size='sm'
+                                        onClick={() => {
+                                          updateModels([
+                                            ...currentModelsArray,
+                                            ...modelMappingGuardrail.missingSourceModels,
+                                          ])
+                                        }}
+                                      >
+                                        {t('Add missing models')}
+                                      </Button>
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
                         </div>
                       </ChannelModelsSection>
                     </div>
@@ -3644,55 +3459,29 @@ export function ChannelMutateDrawer({
                               icon={<Route className='h-3.5 w-3.5' />}
                               iconTone='info'
                             />
-                            <div className='grid gap-4 sm:grid-cols-2'>
-                              <FormField
-                                control={form.control}
-                                name='priority'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t('Priority')}</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        type='number'
-                                        placeholder='0'
-                                        {...field}
-                                        onChange={(e) =>
-                                          field.onChange(Number(e.target.value))
-                                        }
-                                      />
-                                    </FormControl>
-                                    <FormDescription>
-                                      {t(FIELD_DESCRIPTIONS.PRIORITY)}
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name='weight'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t('Weight')}</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        type='number'
-                                        placeholder='0'
-                                        {...field}
-                                        onChange={(e) =>
-                                          field.onChange(Number(e.target.value))
-                                        }
-                                      />
-                                    </FormControl>
-                                    <FormDescription>
-                                      {t(FIELD_DESCRIPTIONS.WEIGHT)}
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
+                            <FormField
+                              control={form.control}
+                              name='weight'
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>{t('Weight')}</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type='number'
+                                      placeholder='0'
+                                      {...field}
+                                      onChange={(e) =>
+                                        field.onChange(Number(e.target.value))
+                                      }
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    {t(FIELD_DESCRIPTIONS.WEIGHT)}
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
 
                             <FormField
                               control={form.control}
@@ -4852,14 +4641,6 @@ export function ChannelMutateDrawer({
         onCancel={cancelVerification}
         onCodeChange={setVerificationCode}
         onMethodChange={switchVerificationMethod}
-      />
-
-      {/* Missing Models Confirmation Dialog */}
-      <MissingModelsConfirmationDialog
-        open={missingModelsDialogOpen}
-        missingModels={missingModelsList}
-        onConfirm={handleMissingModelsAction}
-        onOpenChange={setMissingModelsDialogOpen}
       />
 
       <StatusCodeRiskDialog

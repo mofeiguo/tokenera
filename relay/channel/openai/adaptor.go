@@ -17,16 +17,10 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/channel"
-	"github.com/QuantumNous/new-api/relay/channel/ai360"
-	"github.com/QuantumNous/new-api/relay/channel/lingyiwanwu"
-	"github.com/QuantumNous/new-api/relaykit/dto"
-
-	//"github.com/QuantumNous/new-api/relay/channel/minimax"
-	"github.com/QuantumNous/new-api/relay/channel/openrouter"
-	"github.com/QuantumNous/new-api/relay/channel/xinference"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/common_handler"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -307,7 +301,7 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 					return nil, fmt.Errorf("BudgetTokens is nil when thinking is enabled")
 				}
 
-				reasoning := openrouter.RequestReasoning{
+				reasoning := requestReasoning{
 					Enabled:   true,
 					MaxTokens: *thinking.BudgetTokens,
 				}
@@ -669,35 +663,16 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 }
 
 func (a *Adaptor) GetModelList() []string {
-	switch a.ChannelType {
-	case constant.ChannelType360:
-		return ai360.ModelList
-	case constant.ChannelTypeLingYiWanWu:
-		return lingyiwanwu.ModelList
-	//case constant.ChannelTypeMiniMax:
-	//	return minimax.ModelList
-	case constant.ChannelTypeXinference:
-		return xinference.ModelList
-	case constant.ChannelTypeOpenRouter:
-		return openrouter.ModelList
-	default:
-		return ModelList
-	}
+	return ModelList
 }
 
 func (a *Adaptor) GetChannelName() string {
-	switch a.ChannelType {
-	case constant.ChannelType360:
-		return ai360.ChannelName
-	case constant.ChannelTypeLingYiWanWu:
-		return lingyiwanwu.ChannelName
-	//case constant.ChannelTypeMiniMax:
-	//	return minimax.ChannelName
-	case constant.ChannelTypeXinference:
-		return xinference.ChannelName
-	case constant.ChannelTypeOpenRouter:
-		return openrouter.ChannelName
-	default:
-		return ChannelName
-	}
+	return ChannelName
+}
+
+type requestReasoning struct {
+	Enabled   bool   `json:"enabled"`
+	Effort    string `json:"effort,omitempty"`
+	MaxTokens int    `json:"max_tokens,omitempty"`
+	Exclude   bool   `json:"exclude,omitempty"`
 }

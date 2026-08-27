@@ -16,11 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useParams } from '@tanstack/react-router'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useParams } from '@/lib/router'
 
 import { useSystemOptions, getOptionValue } from '../hooks/use-system-options'
 import type { SystemOption } from '../types'
@@ -83,12 +85,49 @@ function SettingsPageFrame(props: SettingsPageFrameProps) {
           />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <div className='flex h-full min-h-0 w-full flex-col gap-4'>
+          <div className='flex h-full min-h-0 w-full flex-col gap-3 sm:gap-4'>
             {props.children}
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>
     </SettingsPageProvider>
+  )
+}
+
+function SettingsPageLoading(props: { message: string }) {
+  return (
+    <div
+      className='flex flex-col gap-3'
+      role='status'
+      aria-busy='true'
+      aria-live='polite'
+    >
+      <span className='sr-only'>{props.message}</span>
+      <div className='bg-card border-border/80 overflow-hidden rounded-xl border shadow-[var(--shadow-card)]'>
+        <div className='border-border/70 space-y-2 border-b px-3 py-3 sm:px-4'>
+          <Skeleton className='h-4 w-40' />
+          <Skeleton className='h-3 w-64 max-w-full' />
+        </div>
+        <div className='space-y-4 p-3 sm:p-4'>
+          <div className='grid gap-4 lg:grid-cols-2'>
+            <Skeleton className='h-9 w-full' />
+            <Skeleton className='h-9 w-full' />
+            <Skeleton className='h-9 w-full lg:col-span-2' />
+            <Skeleton className='h-20 w-full lg:col-span-2' />
+          </div>
+        </div>
+      </div>
+      <div className='bg-card border-border/80 overflow-hidden rounded-xl border shadow-[var(--shadow-card)]'>
+        <div className='border-border/70 space-y-2 border-b px-3 py-3 sm:px-4'>
+          <Skeleton className='h-4 w-32' />
+          <Skeleton className='h-3 w-52 max-w-full' />
+        </div>
+        <div className='space-y-3 p-3 sm:p-4'>
+          <Skeleton className='h-9 w-full' />
+          <Skeleton className='h-9 w-3/4 max-w-md' />
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -111,7 +150,7 @@ export function SettingsPage<
   resolveSettings,
 }: SettingsPageProps<TSettings, TSectionId, TExtraArgs>) {
   const { t } = useTranslation()
-  const { data, isLoading } = useSystemOptions()
+  const { data, isLoading, isError, refetch } = useSystemOptions()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const params = useParams({ from: routePath as any })
   const activeSection = (params?.section ?? defaultSection) as TSectionId
@@ -130,8 +169,21 @@ export function SettingsPage<
   if (isLoading) {
     return (
       <SettingsPageFrame title={t(sectionMeta.titleKey)}>
-        <div className='text-muted-foreground flex min-h-40 items-center justify-center text-sm'>
-          {t(loadingMessage)}
+        <SettingsPageLoading message={t(loadingMessage)} />
+      </SettingsPageFrame>
+    )
+  }
+
+  if (isError) {
+    return (
+      <SettingsPageFrame title={t(sectionMeta.titleKey)}>
+        <div className='bg-card border-border/80 overflow-hidden rounded-xl border shadow-[var(--shadow-card)]'>
+          <ErrorState
+            className='min-h-48'
+            onRetry={() => {
+              void refetch()
+            }}
+          />
         </div>
       </SettingsPageFrame>
     )

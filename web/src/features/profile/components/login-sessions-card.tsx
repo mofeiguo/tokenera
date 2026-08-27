@@ -18,8 +18,6 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Logout01Icon, SmartPhone01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -43,6 +41,8 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { clearAuthenticatedClientState } from '@/lib/api'
+import { useMutation, useQuery, useQueryClient } from '@/lib/query'
+import { useNavigate } from '@/lib/router'
 import type { LoginSession } from '@/stores/auth-store'
 
 import {

@@ -16,9 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Link } from '@tanstack/react-router'
-
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
+import { Link, useRouterState } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
 import { defaultTopNavLinks } from '../config/top-nav.config'
@@ -44,6 +43,7 @@ export function PublicNavigation({
   links: providedLinks,
   className,
 }: PublicNavigationProps = {}) {
+  const routerState = useRouterState()
   // Use the same logic as AppHeader: prioritize dynamic links from backend
   const dynamicLinks = useTopNavLinks()
   const defaultLinks = providedLinks || defaultTopNavLinks
@@ -51,12 +51,12 @@ export function PublicNavigation({
 
   return (
     <nav className={cn('hidden items-center gap-1 md:flex', className)}>
-      {links.map((link, index) => {
+      {links.map((link) => {
         // Handle external links
         if (link.external) {
           return (
             <a
-              key={index}
+              key={`${link.href}-${link.title}`}
               href={link.href}
               target='_blank'
               rel='noopener noreferrer'
@@ -72,10 +72,15 @@ export function PublicNavigation({
         // Handle internal links
         return (
           <Link
-            key={index}
+            key={`${link.href}-${link.title}`}
             to={link.href}
+            aria-current={
+              routerState.location.pathname === link.href ? 'page' : undefined
+            }
             className={cn(
-              'text-muted-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground inline-flex h-9 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors focus:outline-none',
+              'text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring inline-flex h-9 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none',
+              routerState.location.pathname === link.href &&
+                'bg-accent text-accent-foreground',
               link.disabled && 'pointer-events-none opacity-50'
             )}
           >

@@ -24,11 +24,11 @@ import {
   BadgeListCell,
   DataTableColumnHeader,
 } from '@/components/data-table'
-import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { getLobeIcon } from '@/lib/lobe-icon'
 
 import { DEFAULT_TOKEN_UNIT } from '../constants'
+import { formatCatalogTokenCount } from '../lib/catalog-signals'
 import {
   getDynamicDisplayGroupRatio,
   getDynamicPricingSummary,
@@ -41,6 +41,7 @@ import {
   stripTrailingZeros,
 } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
+import { CatalogCapabilityChips } from './catalog-capability-chips'
 import { ModelBillingModeBadge } from './model-billing-mode-badge'
 
 // ----------------------------------------------------------------------------
@@ -129,7 +130,7 @@ export function usePricingColumns(
           if (dynamicSummary.isSpecialExpression) {
             return (
               <div className='max-w-full min-w-0'>
-                <div className='text-xs font-medium text-amber-700 dark:text-amber-300'>
+                <div className='text-warning text-xs font-medium'>
                   {t('Special billing expression')}
                 </div>
                 <div className='text-muted-foreground text-[11px]'>
@@ -343,6 +344,32 @@ export function usePricingColumns(
       enableSorting: false,
     },
 
+    {
+      accessorKey: 'context_length',
+      header: t('Context'),
+      cell: ({ row }) => {
+        const formatted = formatCatalogTokenCount(row.original.context_length)
+        if (!formatted) {
+          return <span className='text-muted-foreground/50 text-xs'>—</span>
+        }
+        return (
+          <span className='font-mono text-sm tabular-nums'>{formatted}</span>
+        )
+      },
+      size: 90,
+      enableSorting: false,
+    },
+
+    {
+      id: 'capabilities',
+      header: t('Capabilities'),
+      cell: ({ row }) => (
+        <CatalogCapabilityChips model={row.original} compact />
+      ),
+      size: 140,
+      enableSorting: false,
+    },
+
     // Tags column
     {
       accessorKey: 'tags',
@@ -384,25 +411,6 @@ export function usePricingColumns(
                 copyable={false}
               />
             ))}
-          />
-        )
-      },
-      size: 130,
-      enableSorting: false,
-    },
-
-    // Enable Groups column
-    {
-      accessorKey: 'enable_groups',
-      header: t('Groups'),
-      cell: ({ row }) => {
-        const groups = row.original.enable_groups || []
-        return (
-          <BadgeListCell
-            items={groups.map((group) => (
-              <GroupBadge key={group} group={group} size='sm' />
-            ))}
-            tooltipClassName='max-w-[280px] p-2'
           />
         )
       },

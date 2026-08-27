@@ -257,6 +257,9 @@ func migrateDB() error {
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
 	}
+	needBindingPriorityBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "priority")
+	needBindingGroupsBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "groups")
+	needBindingWeightBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "weight")
 
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -268,15 +271,14 @@ func migrateDB() error {
 		&PasskeyCredential{},
 		&Option{},
 		&Redemption{},
-		&Ability{},
 		&Log{},
 		&Midjourney{},
 		&TopUp{},
 		&QuotaData{},
 		&Task{},
 		&Model{},
+		&ModelBinding{},
 		&Vendor{},
-		&PrefillGroup{},
 		&Setup{},
 		&TwoFA{},
 		&TwoFABackupCode{},
@@ -295,6 +297,24 @@ func migrateDB() error {
 	)
 	if err != nil {
 		return err
+	}
+	if err := EnsureModelBindingIndexes(); err != nil {
+		return err
+	}
+	if needBindingPriorityBackfill {
+		if err := BackfillModelBindingPrioritiesFromChannels(); err != nil {
+			return err
+		}
+	}
+	if needBindingGroupsBackfill {
+		if err := BackfillModelBindingGroupsFromChannels(); err != nil {
+			return err
+		}
+	}
+	if needBindingWeightBackfill {
+		if err := BackfillModelBindingWeightsFromChannels(); err != nil {
+			return err
+		}
 	}
 	if err := InitializeUserAuthVersions(); err != nil {
 		return err
@@ -315,6 +335,9 @@ func migrateDB() error {
 }
 
 func migrateDBFast() error {
+	needBindingPriorityBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "priority")
+	needBindingGroupsBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "groups")
+	needBindingWeightBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "weight")
 
 	var wg sync.WaitGroup
 
@@ -331,7 +354,7 @@ func migrateDBFast() error {
 		{&PasskeyCredential{}, "PasskeyCredential"},
 		{&Option{}, "Option"},
 		{&Redemption{}, "Redemption"},
-		{&Ability{}, "Ability"},
+		{&ModelBinding{}, "ModelBinding"},
 		{&Log{}, "Log"},
 		{&Midjourney{}, "Midjourney"},
 		{&TopUp{}, "TopUp"},
@@ -339,7 +362,6 @@ func migrateDBFast() error {
 		{&Task{}, "Task"},
 		{&Model{}, "Model"},
 		{&Vendor{}, "Vendor"},
-		{&PrefillGroup{}, "PrefillGroup"},
 		{&Setup{}, "Setup"},
 		{&TwoFA{}, "TwoFA"},
 		{&TwoFABackupCode{}, "TwoFABackupCode"},
@@ -374,6 +396,24 @@ func migrateDBFast() error {
 	// Check for any errors
 	for err := range errChan {
 		if err != nil {
+			return err
+		}
+	}
+	if err := EnsureModelBindingIndexes(); err != nil {
+		return err
+	}
+	if needBindingPriorityBackfill {
+		if err := BackfillModelBindingPrioritiesFromChannels(); err != nil {
+			return err
+		}
+	}
+	if needBindingGroupsBackfill {
+		if err := BackfillModelBindingGroupsFromChannels(); err != nil {
+			return err
+		}
+	}
+	if needBindingWeightBackfill {
+		if err := BackfillModelBindingWeightsFromChannels(); err != nil {
 			return err
 		}
 	}

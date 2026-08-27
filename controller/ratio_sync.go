@@ -136,6 +136,24 @@ func getLocalPricingSyncData() map[string]any {
 	data["image_ratio"] = ratio_setting.GetImageRatioCopy()
 	data["audio_ratio"] = ratio_setting.GetAudioRatioCopy()
 	data["audio_completion_ratio"] = ratio_setting.GetAudioCompletionRatioCopy()
+	modelNames, overlay, err := model.GetCatalogPricingSyncOverlay()
+	if err != nil {
+		common.SysError("failed to build catalog pricing sync data: " + err.Error())
+		return data
+	}
+	for field, catalogValues := range overlay {
+		values := valueMap(data[field])
+		if values == nil {
+			values = make(map[string]any)
+		}
+		for _, modelName := range modelNames {
+			delete(values, modelName)
+		}
+		for modelName, value := range catalogValues {
+			values[modelName] = value
+		}
+		data[field] = values
+	}
 	return data
 }
 

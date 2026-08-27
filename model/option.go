@@ -147,6 +147,7 @@ func InitOptionMap() {
 	common.OptionMap["GroupRatio"] = ratio_setting.GroupRatio2JSONString()
 	common.OptionMap["GroupGroupRatio"] = ratio_setting.GroupGroupRatio2JSONString()
 	common.OptionMap["UserUsableGroups"] = setting.UserUsableGroups2JSONString()
+	common.OptionMap["GroupInherit"] = setting.GroupInherit2JSONString()
 	common.OptionMap["CompletionRatio"] = ratio_setting.CompletionRatio2JSONString()
 	common.OptionMap["ImageRatio"] = ratio_setting.ImageRatio2JSONString()
 	common.OptionMap["AudioRatio"] = ratio_setting.AudioRatio2JSONString()
@@ -222,6 +223,15 @@ func UpdateOption(key string, value string) error {
 	if err := validateOptionValue(key, value); err != nil {
 		return err
 	}
+	syncCatalogPricing := isLegacyPricingOption(key)
+	var catalogPricingBefore map[string]ResolvedModelPricing
+	if syncCatalogPricing {
+		var err error
+		catalogPricingBefore, err = captureLegacyCatalogPricing()
+		if err != nil {
+			return err
+		}
+	}
 	// Save to database first
 	option := Option{
 		Key: key,
@@ -234,7 +244,13 @@ func UpdateOption(key string, value string) error {
 	// otherwise it will execute Update (with all fields).
 	DB.Save(&option)
 	// Update OptionMap
-	return updateOptionMap(key, value)
+	if err := updateOptionMap(key, value); err != nil {
+		return err
+	}
+	if syncCatalogPricing {
+		return syncChangedCatalogPricingFromSettings(catalogPricingBefore)
+	}
+	return nil
 }
 
 // UpdateOptionsBulk persists multiple key/value pairs in a single database
@@ -248,6 +264,18 @@ func UpdateOptionsBulk(values map[string]string) error {
 	}
 	for key, value := range values {
 		if err := validateOptionValue(key, value); err != nil {
+			return err
+		}
+	}
+	syncCatalogPricing := false
+	for key := range values {
+		syncCatalogPricing = syncCatalogPricing || isLegacyPricingOption(key)
+	}
+	var catalogPricingBefore map[string]ResolvedModelPricing
+	if syncCatalogPricing {
+		var err error
+		catalogPricingBefore, err = captureLegacyCatalogPricing()
+		if err != nil {
 			return err
 		}
 	}
@@ -272,7 +300,20 @@ func UpdateOptionsBulk(values map[string]string) error {
 			return err
 		}
 	}
+	if syncCatalogPricing {
+		return syncChangedCatalogPricingFromSettings(catalogPricingBefore)
+	}
 	return nil
+}
+
+func isLegacyPricingOption(key string) bool {
+	switch key {
+	case "ModelPrice", "ModelRatio", "CompletionRatio", "CacheRatio", "CreateCacheRatio",
+		"ImageRatio", "AudioRatio", "AudioCompletionRatio":
+		return true
+	default:
+		return false
+	}
 }
 
 func updateOptionMap(key string, value string) (err error) {
@@ -562,6 +603,8 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateGroupGroupRatioByJSONString(value)
 	case "UserUsableGroups":
 		err = setting.UpdateUserUsableGroupsByJSONString(value)
+	case "GroupInherit":
+		err = setting.UpdateGroupInheritByJSONString(value)
 	case "CompletionRatio":
 		err = ratio_setting.UpdateCompletionRatioByJSONString(value)
 	case "ModelPrice":
@@ -602,6 +645,13 @@ func updateOptionMap(key string, value string) (err error) {
 		// WaffoPayMethods is read directly from OptionMap via setting.GetWaffoPayMethods().
 		// The value is already stored in OptionMap at the top of this function (line: common.OptionMap[key] = value).
 		// No additional in-memory variable to update.
+	}
+	if err == nil {
+		switch key {
+		case "ModelRatio", "ModelPrice", "CompletionRatio", "CacheRatio", "CreateCacheRatio",
+			"ImageRatio", "AudioRatio", "AudioCompletionRatio":
+			InvalidatePricingCache()
+		}
 	}
 	return err
 }

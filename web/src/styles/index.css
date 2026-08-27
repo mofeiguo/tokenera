@@ -19,31 +19,15 @@ For commercial licensing, please contact support@quantumnous.com
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
-@import '@fontsource-variable/public-sans';
-/* Editorial serif (Lora) backing the `serif` font axis and the Anthropic
- * preset's default typography. See `--font-serif` in theme.css for the
- * full Latin + CJK fallback stack and `theme-presets.css` for the cascade
- * that activates it. Loaded globally so font-switching is instantaneous
- * with no FOUT once the variable is fetched. */
-@import '@fontsource-variable/lora';
 
 @import './theme.css';
-@import './theme-presets.css';
 
-/* Shiki dual themes: token colors follow dark theme (pre background stays `bg-background` on the block) */
 @layer components {
   .shiki span {
     color: var(--shiki-light) !important;
     font-style: var(--shiki-light-font-style) !important;
     font-weight: var(--shiki-light-font-weight) !important;
     text-decoration: var(--shiki-light-text-decoration) !important;
-  }
-
-  .dark .shiki span {
-    color: var(--shiki-dark) !important;
-    font-style: var(--shiki-dark-font-style) !important;
-    font-weight: var(--shiki-dark-font-weight) !important;
-    text-decoration: var(--shiki-dark-text-decoration) !important;
   }
 
   .json-code-editor-textarea {
@@ -93,13 +77,30 @@ For commercial licensing, please contact support@quantumnous.com
   }
   html {
     @apply overflow-x-hidden font-sans;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   body {
     @apply bg-background text-foreground has-[div[data-variant='inset']]:bg-sidebar min-h-svh w-full;
-    /* Font is driven by the theme's font axis via `--font-body`
-     * (defined in theme.css, swapped by `[data-theme-font='...']` blocks
-     * in theme-presets.css). Defaults to the project's humanist sans. */
     font-family: var(--font-body);
+    line-height: 1.5;
+    letter-spacing: 0;
+  }
+  html.theme-transition body,
+  html.theme-transition header,
+  html.theme-transition aside,
+  html.theme-transition [data-slot='card'],
+  html.theme-transition [data-slot='button'],
+  html.theme-transition [data-slot='dropdown-menu-content'] {
+    transition-property:
+      color, background-color, border-color, box-shadow, opacity;
+    transition-duration: var(--motion-medium);
+    transition-timing-function: var(--ease-standard);
+  }
+  :where(h1, h2, h3) {
+    text-wrap: balance;
+    letter-spacing: -0.025em;
+    line-height: 1.12;
   }
 
   /* Keep sticky headers stable while primitives lock body scrolling. */
@@ -111,6 +112,27 @@ For commercial licensing, please contact support@quantumnous.com
   button:not(:disabled),
   [role='button']:not(:disabled) {
     cursor: pointer;
+  }
+  [data-slot='button']:not(:disabled):active {
+    transform: scale(0.985);
+    transition: transform var(--motion-fast) var(--ease-standard);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot='button']:not(:disabled):active {
+      transform: none;
+      transition: none;
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .backdrop-blur,
+    .backdrop-blur-xs,
+    .backdrop-blur-sm,
+    .backdrop-blur-md,
+    .backdrop-blur-lg {
+      backdrop-filter: none;
+    }
   }
 
   /* Prevent focus zoom on mobile devices */
@@ -270,7 +292,7 @@ For commercial licensing, please contact support@quantumnous.com
   }
 }
 
-/* Launch UI Animations and Effects - Matching Template Exactly */
+/* Shared visual utilities. Keep them token-driven. */
 @layer utilities {
   /* Gradient utilities */
   .bg-radial {
@@ -298,7 +320,94 @@ For commercial licensing, please contact support@quantumnous.com
     @apply border-border border-b-input from-card/100 to-card/20 dark:border-border/10 dark:border-t-border/30 dark:from-primary/15 dark:to-primary/5 border bg-linear-to-b dark:border-b-0;
   }
 
-  /* Fade effects - matching Launch UI template */
+  .glass-morphism {
+    background: color-mix(in oklch, var(--card) 72%, transparent);
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(18px) saturate(140%);
+  }
+
+  .zen-atmosphere {
+    background:
+      radial-gradient(
+        ellipse 80% 55% at 50% -10%,
+        oklch(0.72 0.12 215 / 20%),
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 45% 40% at 85% 20%,
+        oklch(0.75 0.08 250 / 12%),
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse 40% 35% at 10% 40%,
+        oklch(0.76 0.09 185 / 12%),
+        transparent 50%
+      ),
+      var(--background);
+  }
+
+  .zen-grid-fade {
+    background-image:
+      linear-gradient(oklch(0.25 0.03 250 / 6%) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(0.25 0.03 250 / 6%) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(
+      ellipse 70% 60% at 50% 30%,
+      black 20%,
+      transparent 75%
+    );
+  }
+
+  .zen-text-glow {
+    background: linear-gradient(
+      120deg,
+      oklch(0.48 0.15 205) 0%,
+      oklch(0.5 0.17 225) 45%,
+      oklch(0.48 0.14 265) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .dark .zen-atmosphere {
+    background:
+      radial-gradient(
+        ellipse 80% 55% at 50% -10%,
+        oklch(0.55 0.14 210 / 22%),
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 45% 40% at 85% 20%,
+        oklch(0.5 0.1 250 / 12%),
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse 40% 35% at 10% 40%,
+        oklch(0.48 0.1 185 / 10%),
+        transparent 50%
+      ),
+      var(--background);
+  }
+
+  .dark .zen-grid-fade {
+    background-image:
+      linear-gradient(oklch(1 0 0 / 3.5%) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(1 0 0 / 3.5%) 1px, transparent 1px);
+  }
+
+  .dark .zen-text-glow {
+    background: linear-gradient(
+      120deg,
+      oklch(0.92 0.04 200) 0%,
+      oklch(0.78 0.14 210) 45%,
+      oklch(0.7 0.12 250) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+
+  /* Fade effects */
   .fade-x {
     mask-image: linear-gradient(
       to right,
@@ -542,78 +651,22 @@ For commercial licensing, please contact support@quantumnous.com
   }
 }
 
-/* Micro-interactions — Vercel-style subtle hover/active feedback */
+/* Restrained micro-interactions for operational surfaces. */
 @media (prefers-reduced-motion: no-preference) {
   [data-slot='card']:not([data-card-hover='false']) {
     transition:
-      transform 150ms ease,
-      box-shadow 150ms ease;
+      border-color var(--motion-medium) var(--ease-standard),
+      box-shadow var(--motion-medium) var(--ease-standard);
   }
 
   @media (min-width: 641px) {
     [data-slot='card']:not([data-card-hover='false']):hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgb(0 0 0 / 0.06);
+      box-shadow: var(--shadow-card-hover);
     }
-
-    .dark [data-slot='card']:not([data-card-hover='false']):hover {
-      box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
-    }
-  }
-
-  button:not(:disabled):active,
-  [role='button']:not(:disabled):active {
-    transform: scale(0.98);
   }
 
   [data-slot='table'] tr {
     transition: background-color 120ms ease;
-  }
-
-  /* Table row stagger-in animation */
-  [data-slot='table'] tbody tr {
-    animation: tableRowEnter 0.2s cubic-bezier(0.33, 1, 0.68, 1) both;
-  }
-  [data-slot='table'] tbody tr:nth-child(2) {
-    animation-delay: 25ms;
-  }
-  [data-slot='table'] tbody tr:nth-child(3) {
-    animation-delay: 50ms;
-  }
-  [data-slot='table'] tbody tr:nth-child(4) {
-    animation-delay: 75ms;
-  }
-  [data-slot='table'] tbody tr:nth-child(5) {
-    animation-delay: 100ms;
-  }
-  [data-slot='table'] tbody tr:nth-child(6) {
-    animation-delay: 125ms;
-  }
-  [data-slot='table'] tbody tr:nth-child(7) {
-    animation-delay: 150ms;
-  }
-  [data-slot='table'] tbody tr:nth-child(8) {
-    animation-delay: 175ms;
-  }
-  [data-slot='table'] tbody tr:nth-child(9) {
-    animation-delay: 200ms;
-  }
-  [data-slot='table'] tbody tr:nth-child(10) {
-    animation-delay: 225ms;
-  }
-  [data-slot='table'] tbody tr:nth-child(n + 11) {
-    animation-delay: 250ms;
-  }
-}
-
-@keyframes tableRowEnter {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -17,7 +16,10 @@ import (
 )
 
 var group2model2channels map[string]map[string][]int // enabled channel
-var channelsIDM map[int]*Channel                     // all channels include disabled
+var model2channel2upstream map[string]map[int][]string
+var model2channel2priority map[string]map[int]int64
+var model2channel2weight map[string]map[int]int
+var channelsIDM map[int]*Channel // all channels include disabled
 // channel2advancedCustomConfig caches parsed Advanced Custom (type 58) configs so
 // path-aware selection avoids re-parsing JSON per request. Refreshed on full sync.
 var channel2advancedCustomConfig map[int]*dto.AdvancedCustomConfig
@@ -40,37 +42,82 @@ func InitChannelCache() {
 			}
 		}
 	}
-	var abilities []*Ability
-	DB.Find(&abilities)
-	groups := make(map[string]bool)
-	for _, ability := range abilities {
-		groups[ability.Group] = true
-	}
 	newGroup2model2channels := make(map[string]map[string][]int)
-	for group := range groups {
-		newGroup2model2channels[group] = make(map[string][]int)
+	newModel2channel2upstream := make(map[string]map[int][]string)
+	newModel2channel2priority := make(map[string]map[int]int64)
+	newModel2channel2weight := make(map[string]map[int]int)
+	var bindings []struct {
+		ModelName     string
+		ChannelId     int
+		UpstreamModel string
+		Priority      int64
+		Weight        int
+		Enabled       bool
 	}
-	for _, channel := range channels {
-		if channel.Status != common.ChannelStatusEnabled {
-			continue // skip disabled channels
+	DB.Table("model_bindings").
+		Select("models.model_name, model_bindings.channel_id, model_bindings.upstream_model, model_bindings.priority, model_bindings.weight, model_bindings.enabled").
+		Joins("JOIN models ON models.id = model_bindings.model_id").
+		Where("model_bindings.deleted = ?", false).
+		Scan(&bindings)
+	for _, binding := range bindings {
+		channel, exists := newChannelId2channel[binding.ChannelId]
+		if !exists || !binding.Enabled || channel.Status != common.ChannelStatusEnabled {
+			continue
 		}
-		groups := strings.Split(channel.Group, ",")
-		for _, group := range groups {
-			models := strings.Split(channel.Models, ",")
-			for _, model := range models {
-				if _, ok := newGroup2model2channels[group][model]; !ok {
-					newGroup2model2channels[group][model] = make([]int, 0)
-				}
-				newGroup2model2channels[group][model] = append(newGroup2model2channels[group][model], channel.Id)
+		if _, ok := newModel2channel2upstream[binding.ModelName]; !ok {
+			newModel2channel2upstream[binding.ModelName] = make(map[int][]string)
+		}
+		if _, ok := newModel2channel2priority[binding.ModelName]; !ok {
+			newModel2channel2priority[binding.ModelName] = make(map[int]int64)
+		}
+		if _, ok := newModel2channel2weight[binding.ModelName]; !ok {
+			newModel2channel2weight[binding.ModelName] = make(map[int]int)
+		}
+		weight := binding.Weight
+		if weight < 0 {
+			weight = 0
+		}
+		currentPriority, hasPriority := newModel2channel2priority[binding.ModelName][binding.ChannelId]
+		if !hasPriority || binding.Priority > currentPriority ||
+			(binding.Priority == currentPriority && weight > newModel2channel2weight[binding.ModelName][binding.ChannelId]) {
+			newModel2channel2priority[binding.ModelName][binding.ChannelId] = binding.Priority
+			newModel2channel2weight[binding.ModelName][binding.ChannelId] = weight
+		}
+		upstreams := newModel2channel2upstream[binding.ModelName][binding.ChannelId]
+		alreadyListed := false
+		for _, upstream := range upstreams {
+			if upstream == binding.UpstreamModel {
+				alreadyListed = true
+				break
 			}
+		}
+		if !alreadyListed {
+			newModel2channel2upstream[binding.ModelName][binding.ChannelId] = append(upstreams, binding.UpstreamModel)
+		}
+		for _, group := range servingGroupsFromRaw(channel.Group) {
+			if _, ok := newGroup2model2channels[group]; !ok {
+				newGroup2model2channels[group] = make(map[string][]int)
+			}
+			channels := newGroup2model2channels[group][binding.ModelName]
+			alreadyLinked := false
+			for _, channelId := range channels {
+				if channelId == binding.ChannelId {
+					alreadyLinked = true
+					break
+				}
+			}
+			if alreadyLinked {
+				continue
+			}
+			newGroup2model2channels[group][binding.ModelName] = append(channels, binding.ChannelId)
 		}
 	}
 
-	// sort by priority
+	// sort by binding priority
 	for group, model2channels := range newGroup2model2channels {
 		for model, channels := range model2channels {
 			sort.Slice(channels, func(i, j int) bool {
-				return newChannelId2channel[channels[i]].GetPriority() > newChannelId2channel[channels[j]].GetPriority()
+				return newModel2channel2priority[model][channels[i]] > newModel2channel2priority[model][channels[j]]
 			})
 			newGroup2model2channels[group][model] = channels
 		}
@@ -78,6 +125,9 @@ func InitChannelCache() {
 
 	channelSyncLock.Lock()
 	group2model2channels = newGroup2model2channels
+	model2channel2upstream = newModel2channel2upstream
+	model2channel2priority = newModel2channel2priority
+	model2channel2weight = newModel2channel2weight
 	//channelsIDM = newChannelId2channel
 	for i, channel := range newChannelId2channel {
 		if channel.ChannelInfo.IsMultiKey {
@@ -111,10 +161,44 @@ func SyncChannelCache(frequency int) {
 	}
 }
 
+func lookupBindingPriority(model string, channelId int) int64 {
+	if byChannel, ok := model2channel2priority[model]; ok {
+		if priority, exists := byChannel[channelId]; exists {
+			return priority
+		}
+	}
+	normalized := ratio_setting.FormatMatchingModelName(model)
+	if normalized != "" && normalized != model {
+		if byChannel, ok := model2channel2priority[normalized]; ok {
+			if priority, exists := byChannel[channelId]; exists {
+				return priority
+			}
+		}
+	}
+	return 0
+}
+
+func lookupBindingWeight(model string, channelId int) int {
+	if byChannel, ok := model2channel2weight[model]; ok {
+		if weight, exists := byChannel[channelId]; exists {
+			return weight
+		}
+	}
+	normalized := ratio_setting.FormatMatchingModelName(model)
+	if normalized != "" && normalized != model {
+		if byChannel, ok := model2channel2weight[normalized]; ok {
+			if weight, exists := byChannel[channelId]; exists {
+				return weight
+			}
+		}
+	}
+	return 0
+}
+
 func GetRandomSatisfiedChannel(group string, model string, retry int, requestPath string) (*Channel, error) {
 	// if memory cache is disabled, get channel directly from database
 	if !common.MemoryCacheEnabled {
-		return GetChannel(group, model, retry, requestPath)
+		return GetChannelFromBindings(group, model, retry, requestPath)
 	}
 
 	channelSyncLock.RLock()
@@ -142,11 +226,10 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 
 	uniquePriorities := make(map[int]bool)
 	for _, channelId := range channels {
-		if channel, ok := channelsIDM[channelId]; ok {
-			uniquePriorities[int(channel.GetPriority())] = true
-		} else {
+		if _, ok := channelsIDM[channelId]; !ok {
 			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelId)
 		}
+		uniquePriorities[int(lookupBindingPriority(model, channelId))] = true
 	}
 	var sortedUniquePriorities []int
 	for priority := range uniquePriorities {
@@ -159,53 +242,34 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 	}
 	targetPriority := int64(sortedUniquePriorities[retry])
 
-	// get the priority for the given retry number
 	var sumWeight = 0
 	var targetChannels []*Channel
 	for _, channelId := range channels {
-		if channel, ok := channelsIDM[channelId]; ok {
-			if channel.GetPriority() == targetPriority {
-				sumWeight += channel.GetWeight()
-				targetChannels = append(targetChannels, channel)
-			}
-		} else {
+		channel, ok := channelsIDM[channelId]
+		if !ok {
 			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelId)
+		}
+		if lookupBindingPriority(model, channelId) == targetPriority {
+			sumWeight += lookupBindingWeight(model, channelId)
+			targetChannels = append(targetChannels, channel)
 		}
 	}
 
 	if len(targetChannels) == 0 {
 		return nil, errors.New(fmt.Sprintf("no channel found, group: %s, model: %s, priority: %d", group, model, targetPriority))
 	}
-
-	// smoothing factor and adjustment
-	smoothingFactor := 1
-	smoothingAdjustment := 0
-
-	if sumWeight == 0 {
-		// when all channels have weight 0, set sumWeight to the number of channels and set smoothing adjustment to 100
-		// each channel's effective weight = 100
-		sumWeight = len(targetChannels) * 100
-		smoothingAdjustment = 100
-	} else if sumWeight/len(targetChannels) < 10 {
-		// when the average weight is less than 10, set smoothing factor to 100
-		smoothingFactor = 100
+	if sumWeight <= 0 {
+		return targetChannels[rand.Intn(len(targetChannels))], nil
 	}
 
-	// Calculate the total weight of all channels up to endIdx
-	totalWeight := sumWeight * smoothingFactor
-
-	// Generate a random value in the range [0, totalWeight)
-	randomWeight := rand.Intn(totalWeight)
-
-	// Find a channel based on its weight
+	randomWeight := rand.Intn(sumWeight)
 	for _, channel := range targetChannels {
-		randomWeight -= channel.GetWeight()*smoothingFactor + smoothingAdjustment
+		randomWeight -= lookupBindingWeight(model, channel.Id)
 		if randomWeight < 0 {
 			return channel, nil
 		}
 	}
-	// return null if no channel is not found
-	return nil, errors.New("channel not found")
+	return targetChannels[len(targetChannels)-1], nil
 }
 
 // filterChannelsByRequestPathAndModel restricts candidates by request path and

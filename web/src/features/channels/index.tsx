@@ -16,8 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
 import { Settings2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -28,7 +26,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { useQuery } from '@/lib/query'
 import { ROLE } from '@/lib/roles'
+import { Link } from '@/lib/router'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { getChannelOps } from './api'

@@ -33,6 +33,7 @@ const SOURCE_EXTENSIONS = new Set([
 const EXCLUDED_DIRS = new Set([
   '.git',
   '.rsbuild',
+  '.vite',
   '.turbo',
   'build',
   'coverage',

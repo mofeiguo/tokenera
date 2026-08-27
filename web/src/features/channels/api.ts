@@ -1,3 +1,4 @@
+import type { ModelChannelBinding } from '@/features/models/types'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -102,6 +103,15 @@ export async function searchChannels(
  */
 export async function getChannel(id: number): Promise<GetChannelResponse> {
   const res = await api.get(`/api/channel/${id}`)
+  return res.data
+}
+
+export async function getChannelModelBindings(id: number): Promise<{
+  success: boolean
+  message?: string
+  data: ModelChannelBinding[]
+}> {
+  const res = await api.get(`/api/channel/${id}/model_bindings`)
   return res.data
 }
 
@@ -258,22 +268,6 @@ export async function copyChannel(
     `/api/channel/copy/${id}`,
     null,
     channelActionConfig({ params })
-  )
-  return res.data
-}
-
-/**
- * Fix channel abilities
- */
-export async function fixChannelAbilities(): Promise<{
-  success: boolean
-  message?: string
-  data?: { success: number; fails: number }
-}> {
-  const res = await api.post(
-    '/api/channel/fix',
-    undefined,
-    channelActionConfig()
   )
   return res.data
 }
@@ -544,20 +538,6 @@ export async function fetchModels(data: {
 }
 
 /**
- * Delete an Ollama model from a channel
- */
-export async function deleteOllamaModel(params: {
-  channel_id: number
-  model_name: string
-}): Promise<{ success: boolean; message?: string }> {
-  const res = await api.delete(
-    '/api/channel/ollama/delete',
-    channelActionConfig({ data: params })
-  )
-  return res.data
-}
-
-/**
  * Test all enabled channels
  */
 export async function testAllChannels(): Promise<{
@@ -607,20 +587,6 @@ export async function getEnabledModels(): Promise<{
 }
 
 // ============================================================================
-// Ollama Utilities
-// ============================================================================
-
-/**
- * Check Ollama version for a given channel
- */
-export async function getOllamaVersion(
-  channelId: number
-): Promise<{ success: boolean; message?: string; data?: { version: string } }> {
-  const res = await api.get(`/api/channel/ollama/version/${channelId}`)
-  return res.data
-}
-
-// ============================================================================
 // Group Management
 // ============================================================================
 
@@ -628,21 +594,3 @@ export async function getOllamaVersion(
  * Get all available groups (re-exported from users API for convenience)
  */
 export const getGroups = getUserGroups
-
-// ============================================================================
-// Prefill Groups (Model Groups)
-// ============================================================================
-
-/**
- * Get prefill groups for quick model selection
- */
-export async function getPrefillGroups(
-  type: 'model' | 'group' = 'model'
-): Promise<{
-  success: boolean
-  message?: string
-  data?: Array<{ id: number; name: string; items: string | string[] }>
-}> {
-  const res = await api.get('/api/prefill_group', { params: { type } })
-  return res.data
-}

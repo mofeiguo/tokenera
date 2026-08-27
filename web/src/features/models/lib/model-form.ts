@@ -34,6 +34,31 @@ export const modelFormSchema = z.object({
   description: z.string().default(''),
   icon: z.string().default(''),
   tags: z.array(z.string()).default([]),
+  input_modalities: z
+    .array(z.enum(['text', 'image', 'audio', 'video', 'file']))
+    .default([]),
+  output_modalities: z
+    .array(z.enum(['text', 'image', 'audio', 'video', 'file']))
+    .default([]),
+  capabilities: z
+    .array(
+      z.enum([
+        'function_calling',
+        'streaming',
+        'json_mode',
+        'structured_output',
+        'reasoning',
+        'tools',
+        'system_prompt',
+        'web_search',
+        'code_interpreter',
+        'caching',
+        'embeddings',
+      ])
+    )
+    .default([]),
+  context_length: z.number().int().min(0).default(0),
+  max_output_tokens: z.number().int().min(0).default(0),
   vendor_id: z.number().optional(),
   endpoints: z.string().default(''),
   name_rule: z.number().min(0).max(3).default(0),
@@ -76,6 +101,11 @@ export function transformModelToFormDefaults(model: Model): ModelFormValues {
     description: model.description || '',
     icon: model.icon || '',
     tags: parseTagsFromUtils(model.tags),
+    input_modalities: model.input_modalities || [],
+    output_modalities: model.output_modalities || [],
+    capabilities: model.capabilities || [],
+    context_length: model.context_length || 0,
+    max_output_tokens: model.max_output_tokens || 0,
     vendor_id: model.vendor_id,
     endpoints: model.endpoints || '',
     name_rule: model.name_rule || 0,
@@ -98,6 +128,11 @@ export function transformFormDataToModelPayload(
     description: formData.description || '',
     icon: formData.icon || '',
     tags: formatTagsArray(formData.tags),
+    input_modalities: formData.input_modalities,
+    output_modalities: formData.output_modalities,
+    capabilities: formData.capabilities,
+    context_length: formData.context_length || 0,
+    max_output_tokens: formData.max_output_tokens || 0,
     vendor_id: formData.vendor_id,
     endpoints: formData.endpoints || '',
     name_rule: formData.name_rule,

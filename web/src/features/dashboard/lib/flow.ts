@@ -98,7 +98,7 @@ const DEFAULT_FLOW_SANKEY_LABELS: FlowSankeyLabels = {
   share: 'Share',
 }
 
-const DEFAULT_FLOW_CHART_COLOR = '#1664FF'
+const DEFAULT_FLOW_CHART_COLOR = '#64748b'
 
 const FLOW_NODE_KINDS: readonly FlowNodeKind[] = [
   'user',

@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, Loader2 } from 'lucide-react'
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useForm } from 'react-hook-form'
@@ -34,6 +33,7 @@ import {
   sideDrawerSwitchItemClassName,
 } from '@/components/drawer-layout'
 import { JsonEditor } from '@/components/json-editor'
+import { MultiSelect } from '@/components/multi-select'
 import { TagInput } from '@/components/tag-input'
 import { Button } from '@/components/ui/button'
 import {
@@ -72,19 +72,42 @@ import {
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { getChannels } from '@/features/channels/api'
 import {
   useSystemOptions,
   getOptionValue,
 } from '@/features/system-settings/hooks/use-system-options'
-import { useUpdateOption } from '@/features/system-settings/hooks/use-update-option'
-import { normalizeJsonString } from '@/features/system-settings/models/utils'
 import type { ModelSettings } from '@/features/system-settings/types'
 import { safeJsonParse } from '@/features/system-settings/utils/json-parser'
+import { useQuery, useQueryClient } from '@/lib/query'
 
-import { createModel, updateModel, getModel, getVendors } from '../../api'
+import {
+  createModel,
+  updateModel,
+  getModel,
+  getModelBindings,
+  updateModelBindings,
+  getVendors,
+} from '../../api'
 import { getNameRuleOptions, ENDPOINT_TEMPLATES } from '../../constants'
 import { modelsQueryKeys, vendorsQueryKeys, parseModelTags } from '../../lib'
-import type { Model } from '../../types'
+import type { Model, ModelChannelBinding } from '../../types'
+import { ModelChannelBindingsEditor } from '../model-channel-bindings-editor'
+
+const MODALITY_VALUES = ['text', 'image', 'audio', 'video', 'file'] as const
+const CAPABILITY_VALUES = [
+  'function_calling',
+  'reasoning',
+  'caching',
+  'streaming',
+  'json_mode',
+  'structured_output',
+  'tools',
+  'system_prompt',
+  'web_search',
+  'code_interpreter',
+  'embeddings',
+] as const
 
 // Extended schema for ratio configuration (internal form state only)
 const extendedModelFormSchema = z.object({
@@ -93,6 +116,11 @@ const extendedModelFormSchema = z.object({
   description: z.string(),
   icon: z.string(),
   tags: z.array(z.string()),
+  input_modalities: z.array(z.enum(MODALITY_VALUES)),
+  output_modalities: z.array(z.enum(MODALITY_VALUES)),
+  capabilities: z.array(z.enum(CAPABILITY_VALUES)),
+  context_length: z.number().int().min(0),
+  max_output_tokens: z.number().int().min(0),
   vendor_id: z.number().optional(),
   endpoints: z.string(),
   name_rule: z.number(),
@@ -166,9 +194,60 @@ function lookupModelRatio(
 // the maps from the form and would otherwise drop pricing it never loaded.
 function readPricingConfig(
   settings: ModelSettings | null,
-  modelName: string
+  modelName: string,
+  catalogModel?: Model
 ): PricingConfig {
-  if (!settings || !modelName) return EMPTY_PRICING_CONFIG
+  if (!modelName) return EMPTY_PRICING_CONFIG
+
+  if (
+    catalogModel?.pricing_mode === 'per_request' &&
+    catalogModel.model_price != null
+  ) {
+    return {
+      ...EMPTY_PRICING_CONFIG,
+      mode: 'per-request',
+      fields: {
+        ...EMPTY_PRICING_FIELDS,
+        price: catalogModel.model_price.toString(),
+      },
+    }
+  }
+  if (
+    catalogModel?.pricing_mode === 'per_token' &&
+    catalogModel.model_ratio != null
+  ) {
+    const promptPrice = (catalogModel.model_ratio * 2).toString()
+    return {
+      mode: 'per-token',
+      fields: {
+        price: '',
+        ratio: catalogModel.model_ratio.toString(),
+        cacheRatio: catalogModel.cache_ratio?.toString() || '',
+        completionRatio: catalogModel.completion_ratio?.toString() || '',
+        imageRatio: catalogModel.image_ratio?.toString() || '',
+        audioRatio: catalogModel.audio_ratio?.toString() || '',
+        audioCompletionRatio:
+          catalogModel.audio_completion_ratio?.toString() || '',
+      },
+      promptPrice,
+      completionPrice:
+        catalogModel.completion_ratio != null
+          ? (
+              catalogModel.model_ratio *
+              2 *
+              catalogModel.completion_ratio
+            ).toString()
+          : '',
+      advancedOpen: [
+        catalogModel.cache_ratio,
+        catalogModel.image_ratio,
+        catalogModel.audio_ratio,
+        catalogModel.audio_completion_ratio,
+      ].some((value) => value !== undefined && value !== null),
+    }
+  }
+
+  if (!settings) return EMPTY_PRICING_CONFIG
 
   const price = lookupModelRatio(settings.ModelPrice, modelName)
   const ratio = lookupModelRatio(settings.ModelRatio, modelName)
@@ -247,11 +326,9 @@ export function ModelMutateDrawer({
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [promptPrice, setPromptPrice] = useState('')
   const [completionPrice, setCompletionPrice] = useState('')
-  const [oldModelName, setOldModelName] = useState<string>('')
-  // Model name whose pricing was read into the form when the drawer opened.
-  // Submit may only rewrite pricing for this name, or for a name the user
-  // explicitly priced; anything else it never saw and must leave alone.
-  const [loadedPricingName, setLoadedPricingName] = useState<string>('')
+  const [channelBindings, setChannelBindings] = useState<ModelChannelBinding[]>(
+    []
+  )
   // Keep a ref so the load effect can read the latest modelSettings without
   // depending on it: modelSettings is a fresh object on every system-options
   // refetch, and including it in the deps would reset the form under the user.
@@ -266,6 +343,13 @@ export function ModelMutateDrawer({
 
   const vendors = vendorsData?.data?.items || []
 
+  const { data: channelsData } = useQuery({
+    queryKey: ['channels', 'model-binding-options'],
+    queryFn: () => getChannels({ page_size: 1000 }),
+    enabled: open,
+  })
+  const channels = channelsData?.data?.items || []
+
   // Fetch model detail if editing
   const { data: modelData } = useQuery({
     queryKey: modelsQueryKeys.detail(currentModelId || 0),
@@ -278,10 +362,14 @@ export function ModelMutateDrawer({
     enabled: open && isEditing,
   })
 
+  const { data: bindingsData } = useQuery({
+    queryKey: modelsQueryKeys.bindings(currentModelId || 0),
+    queryFn: () => getModelBindings(currentModelId || 0),
+    enabled: open && isEditing,
+  })
+
   // Fetch system options for ratio configuration
   const { data: systemOptionsData } = useSystemOptions()
-
-  const updateOption = useUpdateOption()
 
   // Get model settings from system options
   const modelSettings = useMemo(() => {
@@ -317,6 +405,7 @@ export function ModelMutateDrawer({
       TopupGroupRatio: '',
       GroupRatio: '',
       UserUsableGroups: '',
+      GroupInherit: '',
       GroupGroupRatio: '',
       AutoGroups: '',
       MaxTokenAutoGroups: 5,
@@ -343,8 +432,6 @@ export function ModelMutateDrawer({
       'channel_affinity_setting.max_entries': 100000,
       'channel_affinity_setting.default_ttl_seconds': 3600,
       'channel_affinity_setting.rules': '[]',
-      'model_deployment.ionet.api_key': '',
-      'model_deployment.ionet.enabled': false,
     }
     return getOptionValue(systemOptionsData.data, defaultModelSettings)
   }, [systemOptionsData])
@@ -358,6 +445,17 @@ export function ModelMutateDrawer({
     modelSettingsRef.current = modelSettings
   })
 
+  useEffect(() => {
+    if (!open) return
+    if (!isEditing) {
+      setChannelBindings([])
+      return
+    }
+    if (bindingsData?.data) {
+      setChannelBindings(bindingsData.data)
+    }
+  }, [open, isEditing, bindingsData])
+
   const form = useForm<ExtendedModelFormValues>({
     resolver: zodResolver(extendedModelFormSchema),
     defaultValues: {
@@ -365,6 +463,11 @@ export function ModelMutateDrawer({
       description: '',
       icon: '',
       tags: [],
+      input_modalities: [],
+      output_modalities: [],
+      capabilities: [],
+      context_length: 0,
+      max_output_tokens: 0,
       vendor_id: undefined,
       endpoints: '',
       name_rule: 0,
@@ -416,13 +519,11 @@ export function ModelMutateDrawer({
   useEffect(() => {
     if (open && isEditing && modelData?.data) {
       const model = modelData.data
-      setOldModelName(model.model_name)
-
       const pricing = readPricingConfig(
         modelSettingsRef.current,
-        model.model_name
+        model.model_name,
+        model
       )
-      setLoadedPricingName(model.model_name)
       setPricingMode(pricing.mode)
       setPromptPrice(pricing.promptPrice)
       setCompletionPrice(pricing.completionPrice)
@@ -433,6 +534,11 @@ export function ModelMutateDrawer({
         description: model.description || '',
         icon: model.icon || '',
         tags: parseModelTags(model.tags),
+        input_modalities: model.input_modalities || [],
+        output_modalities: model.output_modalities || [],
+        capabilities: model.capabilities || [],
+        context_length: model.context_length || 0,
+        max_output_tokens: model.max_output_tokens || 0,
         vendor_id: model.vendor_id,
         endpoints: model.endpoints || '',
         name_rule: model.name_rule || 0,
@@ -441,13 +547,10 @@ export function ModelMutateDrawer({
         ...pricing.fields,
       })
     } else if (open && !isEditing) {
-      // Pre-fill model name if passed from missing models, along with any
-      // pricing that name already has, so the user edits it instead of being
-      // shown an empty form that hides existing configuration.
+      // Pre-fill model name when creating from an existing name, along with
+      // any pricing that name already has.
       const modelName = currentRow?.model_name || ''
       const pricing = readPricingConfig(modelSettingsRef.current, modelName)
-      setOldModelName('')
-      setLoadedPricingName(modelName)
       setPricingSubMode('ratio')
       setPricingMode(pricing.mode)
       setPromptPrice(pricing.promptPrice)
@@ -458,6 +561,11 @@ export function ModelMutateDrawer({
         description: '',
         icon: '',
         tags: [],
+        input_modalities: [],
+        output_modalities: [],
+        capabilities: [],
+        context_length: 0,
+        max_output_tokens: 0,
         vendor_id: undefined,
         endpoints: '',
         name_rule: 0,
@@ -470,14 +578,88 @@ export function ModelMutateDrawer({
 
   const onSubmit = useCallback(
     async (values: ExtendedModelFormValues): Promise<void> => {
+      if (values.name_rule !== 0 && channelBindings.length > 0) {
+        toast.error(t('Only exact models can have channel bindings'))
+        return
+      }
+      if (channelBindings.some((binding) => binding.channel_id <= 0)) {
+        toast.error(t('Select a channel for every binding'))
+        return
+      }
+      if (
+        channelBindings.some((binding) => binding.upstream_model.trim() === '')
+      ) {
+        toast.error(t('Select an upstream model for every binding'))
+        return
+      }
+      const bindingKeys = new Set<string>()
+      for (const binding of channelBindings) {
+        const key = `${binding.channel_id}\n${binding.upstream_model.trim()}`
+        if (bindingKeys.has(key)) {
+          toast.error(
+            t('Duplicate channel and upstream model bindings are not allowed')
+          )
+          return
+        }
+        bindingKeys.add(key)
+      }
       setIsSubmitting(true)
       try {
+        const hasRatioConfig =
+          (pricingMode === 'per-request' &&
+            values.price &&
+            values.price !== '') ||
+          (pricingMode === 'per-token' &&
+            (values.ratio ||
+              values.cacheRatio ||
+              values.completionRatio ||
+              values.imageRatio ||
+              values.audioRatio ||
+              values.audioCompletionRatio))
+        let pricingModeValue: Model['pricing_mode'] = ''
+        if (hasRatioConfig) {
+          pricingModeValue =
+            pricingMode === 'per-request' ? 'per_request' : 'per_token'
+        }
         const submitData = {
           ...values,
           id: isEditing ? currentModelId : undefined,
           tags: Array.isArray(values.tags) ? values.tags.join(',') : '',
           status: values.status ? 1 : 0,
           sync_official: values.sync_official ? 1 : 0,
+          pricing_mode: pricingModeValue,
+          model_price:
+            pricingMode === 'per-request' && values.price
+              ? Number.parseFloat(values.price)
+              : null,
+          model_ratio:
+            pricingMode === 'per-token' && values.ratio
+              ? Number.parseFloat(values.ratio)
+              : null,
+          completion_ratio:
+            pricingMode === 'per-token' && values.completionRatio
+              ? Number.parseFloat(values.completionRatio)
+              : null,
+          cache_ratio:
+            pricingMode === 'per-token' && values.cacheRatio
+              ? Number.parseFloat(values.cacheRatio)
+              : null,
+          create_cache_ratio:
+            pricingMode === 'per-token'
+              ? (modelData?.data?.create_cache_ratio ?? null)
+              : null,
+          image_ratio:
+            pricingMode === 'per-token' && values.imageRatio
+              ? Number.parseFloat(values.imageRatio)
+              : null,
+          audio_ratio:
+            pricingMode === 'per-token' && values.audioRatio
+              ? Number.parseFloat(values.audioRatio)
+              : null,
+          audio_completion_ratio:
+            pricingMode === 'per-token' && values.audioCompletionRatio
+              ? Number.parseFloat(values.audioCompletionRatio)
+              : null,
         }
 
         // Remove ratio fields from model data (they're stored in system settings)
@@ -489,212 +671,33 @@ export function ModelMutateDrawer({
           imageRatio,
           audioRatio,
           audioCompletionRatio,
-          ...modelData
+          ...modelPayload
         } = submitData
 
         const response =
           isEditing && currentModelId
-            ? await updateModel({ ...modelData, id: currentModelId })
-            : await createModel(modelData)
+            ? await updateModel({ ...modelPayload, id: currentModelId })
+            : await createModel(modelPayload)
 
         if (response.success) {
-          // Handle ratio configuration updates in system settings
-          const finalModelName = values.model_name
-          const hasRatioConfig =
-            (pricingMode === 'per-request' &&
-              values.price &&
-              values.price !== '') ||
-            (pricingMode === 'per-token' &&
-              (values.ratio ||
-                values.cacheRatio ||
-                values.completionRatio ||
-                values.imageRatio ||
-                values.audioRatio ||
-                values.audioCompletionRatio))
-
-          // Always process system settings updates if we have modelSettings
-          // This ensures we can remove stale entries even when clearing all pricing fields
-          if (modelSettings) {
-            // Read existing configurations
-            const priceMap = safeJsonParse<Record<string, number>>(
-              modelSettings.ModelPrice,
-              { fallback: {}, silent: true }
-            )
-            const ratioMap = safeJsonParse<Record<string, number>>(
-              modelSettings.ModelRatio,
-              { fallback: {}, silent: true }
-            )
-            const cacheMap = safeJsonParse<Record<string, number>>(
-              modelSettings.CacheRatio,
-              { fallback: {}, silent: true }
-            )
-            const completionMap = safeJsonParse<Record<string, number>>(
-              modelSettings.CompletionRatio,
-              { fallback: {}, silent: true }
-            )
-            const imageMap = safeJsonParse<Record<string, number>>(
-              modelSettings.ImageRatio,
-              { fallback: {}, silent: true }
-            )
-            const audioMap = safeJsonParse<Record<string, number>>(
-              modelSettings.AudioRatio,
-              { fallback: {}, silent: true }
-            )
-            const audioCompletionMap = safeJsonParse<Record<string, number>>(
-              modelSettings.AudioCompletionRatio,
-              { fallback: {}, silent: true }
-            )
-
-            // Remove old model name entries if model name changed (always, even if no new config)
-            if (isEditing && oldModelName && oldModelName !== finalModelName) {
-              delete priceMap[oldModelName]
-              delete ratioMap[oldModelName]
-              delete cacheMap[oldModelName]
-              delete completionMap[oldModelName]
-              delete imageMap[oldModelName]
-              delete audioMap[oldModelName]
-              delete audioCompletionMap[oldModelName]
-            }
-
-            // Rebuild this model name's entries from the form, but only when
-            // the form speaks for that name: it loaded the name's pricing when
-            // the drawer opened, so clearing every field means "remove
-            // pricing", or the user typed pricing in, which then wins outright
-            // (this is also what replaces the old entries across a mode
-            // switch). A name the form never loaded may still have pricing
-            // configured elsewhere, and an untouched pricing section must not
-            // wipe it -- that covers creating a model over an existing name,
-            // and renaming onto one.
-            if (hasRatioConfig || finalModelName === loadedPricingName) {
-              delete priceMap[finalModelName]
-              delete ratioMap[finalModelName]
-              delete cacheMap[finalModelName]
-              delete completionMap[finalModelName]
-              delete imageMap[finalModelName]
-              delete audioMap[finalModelName]
-              delete audioCompletionMap[finalModelName]
-            }
-
-            // Only add new entries if user provided new configuration
-            if (hasRatioConfig) {
-              if (
-                pricingMode === 'per-request' &&
-                values.price &&
-                values.price !== ''
-              ) {
-                priceMap[finalModelName] = Number.parseFloat(values.price)
-              } else if (pricingMode === 'per-token') {
-                if (values.ratio && values.ratio !== '') {
-                  ratioMap[finalModelName] = Number.parseFloat(values.ratio)
-                }
-                if (values.cacheRatio && values.cacheRatio !== '') {
-                  cacheMap[finalModelName] = Number.parseFloat(
-                    values.cacheRatio
-                  )
-                }
-                if (values.completionRatio && values.completionRatio !== '') {
-                  completionMap[finalModelName] = Number.parseFloat(
-                    values.completionRatio
-                  )
-                }
-                if (values.imageRatio && values.imageRatio !== '') {
-                  imageMap[finalModelName] = Number.parseFloat(
-                    values.imageRatio
-                  )
-                }
-                if (values.audioRatio && values.audioRatio !== '') {
-                  audioMap[finalModelName] = Number.parseFloat(
-                    values.audioRatio
-                  )
-                }
-                if (
-                  values.audioCompletionRatio &&
-                  values.audioCompletionRatio !== ''
-                ) {
-                  audioCompletionMap[finalModelName] = Number.parseFloat(
-                    values.audioCompletionRatio
-                  )
-                }
-              }
-            }
-
-            // Update system options if there are changes
-            const updates: Array<{ key: string; value: string }> = []
-
-            const newModelPrice = normalizeJsonString(JSON.stringify(priceMap))
-            if (
-              newModelPrice !== normalizeJsonString(modelSettings.ModelPrice)
-            ) {
-              updates.push({ key: 'ModelPrice', value: newModelPrice })
-            }
-
-            const newModelRatio = normalizeJsonString(JSON.stringify(ratioMap))
-            if (
-              newModelRatio !== normalizeJsonString(modelSettings.ModelRatio)
-            ) {
-              updates.push({ key: 'ModelRatio', value: newModelRatio })
-            }
-
-            const newCacheRatio = normalizeJsonString(JSON.stringify(cacheMap))
-            if (
-              newCacheRatio !== normalizeJsonString(modelSettings.CacheRatio)
-            ) {
-              updates.push({ key: 'CacheRatio', value: newCacheRatio })
-            }
-
-            const newCompletionRatio = normalizeJsonString(
-              JSON.stringify(completionMap)
-            )
-            if (
-              newCompletionRatio !==
-              normalizeJsonString(modelSettings.CompletionRatio)
-            ) {
-              updates.push({
-                key: 'CompletionRatio',
-                value: newCompletionRatio,
-              })
-            }
-
-            const newImageRatio = normalizeJsonString(JSON.stringify(imageMap))
-            if (
-              newImageRatio !== normalizeJsonString(modelSettings.ImageRatio)
-            ) {
-              updates.push({ key: 'ImageRatio', value: newImageRatio })
-            }
-
-            const newAudioRatio = normalizeJsonString(JSON.stringify(audioMap))
-            if (
-              newAudioRatio !== normalizeJsonString(modelSettings.AudioRatio)
-            ) {
-              updates.push({ key: 'AudioRatio', value: newAudioRatio })
-            }
-
-            const newAudioCompletionRatio = normalizeJsonString(
-              JSON.stringify(audioCompletionMap)
-            )
-            if (
-              newAudioCompletionRatio !==
-              normalizeJsonString(modelSettings.AudioCompletionRatio)
-            ) {
-              updates.push({
-                key: 'AudioCompletionRatio',
-                value: newAudioCompletionRatio,
-              })
-            }
-
-            // Apply all updates (including deletions when clearing fields)
-            for (const update of updates) {
-              await updateOption.mutateAsync(update)
-            }
+          const savedModelId = currentModelId || response.data?.id
+          if (savedModelId) {
+            await updateModelBindings(savedModelId, channelBindings)
           }
-
           toast.success(
             isEditing
               ? 'Model updated successfully'
               : 'Model created successfully'
           )
           queryClient.invalidateQueries({ queryKey: modelsQueryKeys.lists() })
+          if (savedModelId) {
+            queryClient.invalidateQueries({
+              queryKey: modelsQueryKeys.bindings(savedModelId),
+            })
+          }
+          queryClient.invalidateQueries({ queryKey: ['channels'] })
           queryClient.invalidateQueries({ queryKey: ['system-options'] })
+          queryClient.invalidateQueries({ queryKey: ['pricing'] })
           onOpenChange(false)
         } else {
           toast.error(response.message || 'Operation failed')
@@ -711,10 +714,9 @@ export function ModelMutateDrawer({
       queryClient,
       onOpenChange,
       pricingMode,
-      oldModelName,
-      loadedPricingName,
-      modelSettings,
-      updateOption,
+      modelData?.data?.create_cache_ratio,
+      channelBindings,
+      t,
     ]
   )
 
@@ -875,6 +877,139 @@ export function ModelMutateDrawer({
                   </FormItem>
                 )}
               />
+
+              <div className='grid gap-4 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='input_modalities'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Input modalities')}</FormLabel>
+                      <FormControl>
+                        <MultiSelect
+                          options={MODALITY_VALUES.map((value) => ({
+                            value,
+                            label: t(value),
+                          }))}
+                          selected={field.value}
+                          onChange={field.onChange}
+                          placeholder={t('Select input modalities')}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='output_modalities'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Output modalities')}</FormLabel>
+                      <FormControl>
+                        <MultiSelect
+                          options={MODALITY_VALUES.map((value) => ({
+                            value,
+                            label: t(value),
+                          }))}
+                          selected={field.value}
+                          onChange={field.onChange}
+                          placeholder={t('Select output modalities')}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name='capabilities'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Capabilities')}</FormLabel>
+                    <FormControl>
+                      <MultiSelect
+                        options={CAPABILITY_VALUES.map((value) => ({
+                          value,
+                          label: t(value.replaceAll('_', ' ')),
+                        }))}
+                        selected={field.value}
+                        onChange={field.onChange}
+                        placeholder={t('Select model capabilities')}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'These capabilities describe the public model catalog.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className='grid gap-4 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='context_length'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Context length')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type='number'
+                          min={0}
+                          placeholder='128000'
+                          value={field.value ? String(field.value) : ''}
+                          onChange={(event) => {
+                            const next = Number.parseInt(event.target.value, 10)
+                            field.onChange(
+                              Number.isNaN(next) || next < 0 ? 0 : next
+                            )
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          'Maximum input context window in tokens. Leave empty if unknown.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='max_output_tokens'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Max output tokens')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type='number'
+                          min={0}
+                          placeholder='16384'
+                          value={field.value ? String(field.value) : ''}
+                          onChange={(event) => {
+                            const next = Number.parseInt(event.target.value, 10)
+                            field.onChange(
+                              Number.isNaN(next) || next < 0 ? 0 : next
+                            )
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          'Maximum tokens generated per response. Leave empty if unknown.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </SideDrawerSection>
 
             {/* Matching Configuration */}
@@ -921,6 +1056,31 @@ export function ModelMutateDrawer({
                   </FormItem>
                 )}
               />
+            </SideDrawerSection>
+
+            <SideDrawerSection>
+              <div className='space-y-1'>
+                <h3 className='text-sm font-semibold'>
+                  {t('Channel model bindings')}
+                </h3>
+                <p className='text-muted-foreground text-sm'>
+                  {t(
+                    'Bind this public model to one upstream model on each channel. Channel groups control who can call it. Priority is tried first; weight splits traffic among bindings with the same priority.'
+                  )}
+                </p>
+              </div>
+              {form.watch('name_rule') === 0 ? (
+                <ModelChannelBindingsEditor
+                  bindings={channelBindings}
+                  channels={channels}
+                  disabled={isSubmitting}
+                  onChange={setChannelBindings}
+                />
+              ) : (
+                <p className='text-muted-foreground rounded-md border border-dashed p-3 text-sm'>
+                  {t('Only exact models can have channel bindings')}
+                </p>
+              )}
             </SideDrawerSection>
 
             {/* Endpoints Configuration */}

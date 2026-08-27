@@ -16,14 +16,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { getRouteApi } from '@tanstack/react-router'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { DataTablePage, useDataTable } from '@/components/data-table'
+import {
+  DataTablePage,
+  DISABLED_ROW_DESKTOP,
+  DISABLED_ROW_MOBILE,
+  useDataTable,
+} from '@/components/data-table'
+import { Button } from '@/components/ui/button'
 import { useMediaQuery } from '@/hooks'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { useQuery } from '@/lib/query'
+import { getRouteApi } from '@/lib/router'
 
 import { getModels, searchModels, getVendors } from '../api'
 import {
@@ -31,7 +37,7 @@ import {
   getModelStatusOptions,
   getSyncStatusOptions,
 } from '../constants'
-import { modelsQueryKeys, vendorsQueryKeys } from '../lib'
+import { isModelEnabled, modelsQueryKeys, vendorsQueryKeys } from '../lib'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { useModelsColumns } from './models-columns'
 import { useModels } from './models-provider'
@@ -40,7 +46,7 @@ const route = getRouteApi('/_authenticated/models/$section')
 
 export function ModelsTable() {
   const { t } = useTranslation()
-  const { selectedVendor } = useModels()
+  const { selectedVendor, setOpen, setCurrentRow } = useModels()
   const isMobile = useMediaQuery('(max-width: 640px)')
 
   // URL state management
@@ -160,9 +166,14 @@ export function ModelsTable() {
     columns,
     totalCount,
     initialColumnVisibility: {
+      id: false,
       description: false,
-      bound_channels: false,
+      tags: false,
+      endpoints: false,
       quota_types: false,
+      sync_official: false,
+      created_time: false,
+      updated_time: false,
     },
     columnFilters,
     pagination,
@@ -198,10 +209,27 @@ export function ModelsTable() {
       emptyDescription={t(
         'No models available. Create your first model to get started.'
       )}
+      emptyAction={
+        <Button
+          size='sm'
+          onClick={() => {
+            setCurrentRow(null)
+            setOpen('create-model')
+          }}
+        >
+          {t('Add Model')}
+        </Button>
+      }
       skeletonKeyPrefix='model-skeleton'
       applyHeaderSize
+      getRowClassName={(row, { isMobile }) => {
+        if (isModelEnabled(row.original)) {
+          return undefined
+        }
+        return isMobile ? DISABLED_ROW_MOBILE : DISABLED_ROW_DESKTOP
+      }}
       toolbarProps={{
-        searchPlaceholder: t('Filter by model name...'),
+        searchPlaceholder: t('Search models'),
         searchDebounceMs: 500,
         filters: [
           {

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type TFunction } from 'i18next'
+import type { TFunction } from 'i18next'
 
 import type { TokenUnit } from './types'
 
@@ -79,6 +79,52 @@ export const ENDPOINT_TYPES = {
 
 export type EndpointTypeOption =
   (typeof ENDPOINT_TYPES)[keyof typeof ENDPOINT_TYPES]
+
+/** Consumer-facing model categories. */
+export const MODEL_INTENTS = {
+  ALL: 'all',
+  CHAT: 'chat',
+  IMAGE: 'image',
+  VIDEO: 'video',
+  EMBEDDINGS: 'embeddings',
+  RERANK: 'rerank',
+} as const
+
+export type ModelIntent = (typeof MODEL_INTENTS)[keyof typeof MODEL_INTENTS]
+
+export function getModelIntentLabels(
+  t: TFunction
+): Record<ModelIntent, string> {
+  return {
+    [MODEL_INTENTS.ALL]: t('All'),
+    [MODEL_INTENTS.CHAT]: t('Chat'),
+    [MODEL_INTENTS.IMAGE]: t('Image'),
+    [MODEL_INTENTS.VIDEO]: t('Video'),
+    [MODEL_INTENTS.EMBEDDINGS]: t('Embeddings'),
+    [MODEL_INTENTS.RERANK]: t('Rerank'),
+  }
+}
+
+export const CAPABILITY_FILTERS = {
+  ALL: 'all',
+  VISION: 'vision',
+  TOOLS: 'tools',
+  REASONING: 'reasoning',
+} as const
+
+export type CapabilityFilter =
+  (typeof CAPABILITY_FILTERS)[keyof typeof CAPABILITY_FILTERS]
+
+export function getCapabilityFilterLabels(
+  t: TFunction
+): Record<CapabilityFilter, string> {
+  return {
+    [CAPABILITY_FILTERS.ALL]: t('All capabilities'),
+    [CAPABILITY_FILTERS.VISION]: t('Vision'),
+    [CAPABILITY_FILTERS.TOOLS]: t('Tools'),
+    [CAPABILITY_FILTERS.REASONING]: t('Reasoning'),
+  }
+}
 
 /** Endpoint type labels */
 export function getEndpointTypeLabels(

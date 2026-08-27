@@ -219,25 +219,10 @@ setting.url_must_http: "URL必须以http://或https://开头"
 setting.saved: "设置已更新"
 
 # Deployment messages (io.net)
-deployment.not_enabled: "io.net 模型部署功能未启用或 API 密钥缺失"
-deployment.id_required: "deployment ID 为必填项"
-deployment.container_id_required: "container ID 为必填项"
-deployment.name_empty: "deployment 名称不能为空"
-deployment.name_taken: "deployment 名称已被使用，请选择其他名称"
-deployment.hardware_id_required: "hardware_id 参数为必填项"
-deployment.hardware_invalid_id: "无效的 hardware_id 参数"
-deployment.api_key_required: "api_key 为必填项"
-deployment.invalid_payload: "无效的请求内容"
-deployment.not_found: "未找到容器详情"
-
 # Performance messages
 performance.disk_cache_cleared: "不活跃的磁盘缓存已清理"
 performance.stats_reset: "统计信息已重置"
 performance.gc_executed: "GC 已执行"
-
-# Ability messages
-ability.db_corrupted: "数据库一致性被破坏"
-ability.repair_running: "已经有一个修复任务在运行中，请稍后再试"
 
 # OAuth messages
 oauth.invalid_code: "无效的授权码"
@@ -273,6 +258,7 @@ distributor.invalid_playground_request: "无效的playground请求，{{.Error}}"
 distributor.group_access_denied: "无权访问该分组"
 distributor.get_channel_failed: "获取分组 {{.Group}} 下模型 {{.Model}} 的可用渠道失败（distributor）：{{.Error}}"
 distributor.no_available_channel: "分组 {{.Group}} 下模型 {{.Model}} 无可用渠道（distributor）"
+distributor.model_not_in_catalog: "模型 {{.Model}} 未启用或未发布到目录（distributor）"
 distributor.invalid_midjourney_request: "无效的midjourney请求，{{.Error}}"
 distributor.invalid_request_parse_model: "无效的请求，无法解析模型"
 

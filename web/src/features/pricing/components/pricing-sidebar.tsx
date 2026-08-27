@@ -16,11 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ChevronDown, RotateCcw } from 'lucide-react'
+import { Check, ChevronDown, RotateCcw } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Collapsible,
@@ -100,25 +99,32 @@ function FilterChip(props: {
     <button
       type='button'
       onClick={props.onClick}
+      aria-pressed={props.active}
       className={cn(
-        'group inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-all',
+        'group flex min-h-9 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors',
         props.active
-          ? 'border-foreground/30 bg-foreground/5 text-foreground shadow-sm'
-          : 'border-border/70 bg-background text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground'
+          ? 'bg-foreground/10 text-foreground'
+          : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
       )}
       title={props.option.label}
     >
+      <span
+        className={cn(
+          'border-border/70 flex size-4 shrink-0 items-center justify-center rounded-full border',
+          props.active && 'border-foreground bg-foreground text-background'
+        )}
+      >
+        {props.active && <Check className='size-2.5' strokeWidth={3} />}
+      </span>
       {props.option.icon && (
         <span className='shrink-0'>{props.option.icon}</span>
       )}
-      <span className='truncate'>{props.option.label}</span>
+      <span className='min-w-0 flex-1 truncate'>{props.option.label}</span>
       {(props.option.suffix || props.option.count != null) && (
         <span
           className={cn(
-            'rounded-md px-1.5 py-0.5 text-[12px]',
-            props.active
-              ? 'bg-background text-foreground'
-              : 'bg-muted text-muted-foreground'
+            'shrink-0 text-xs tabular-nums',
+            props.active ? 'text-foreground/70' : 'text-muted-foreground/70'
           )}
         >
           {props.option.suffix ?? props.option.count}
@@ -132,16 +138,16 @@ function FilterSection(props: FilterSectionProps) {
   return (
     <Collapsible
       defaultOpen
-      className='border-border/70 border-b pb-3 last:border-b-0'
+      className='border-border/60 border-b pb-3 last:border-b-0'
     >
-      <CollapsibleTrigger className='group flex w-full items-center justify-between py-2.5 text-left'>
-        <span className='text-foreground text-sm font-semibold'>
+      <CollapsibleTrigger className='group flex min-h-10 w-full items-center justify-between py-2 text-left'>
+        <span className='text-foreground text-xs font-semibold tracking-wide uppercase'>
           {props.title}
         </span>
         <ChevronDown className='text-muted-foreground size-4 transition-transform group-data-[panel-open]:rotate-180' />
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className='flex flex-wrap gap-1.5'>
+        <div className='space-y-0.5'>
           {props.options.map((option) => (
             <FilterChip
               key={option.value}
@@ -246,11 +252,18 @@ export function PricingSidebar(props: PricingSidebarProps) {
   ]
 
   return (
-    <aside className={cn('rounded-xl border p-3', props.className)}>
-      <div className='mb-2.5 flex items-center justify-between gap-2'>
+    <aside
+      className={cn(
+        'bg-muted/25 ring-foreground/10 rounded-xl p-3 ring-1',
+        props.className
+      )}
+    >
+      <div className='mb-3 flex items-start justify-between gap-2 px-1'>
         <div>
-          <h2 className='text-foreground text-sm font-bold'>{t('Filter')}</h2>
-          <p className='text-muted-foreground mt-1 text-xs'>
+          <h2 className='text-foreground text-sm font-semibold'>
+            {t('Filter')}
+          </h2>
+          <p className='text-muted-foreground mt-1 text-xs leading-5'>
             {t('Refine models by provider, group, type, and tags.')}
           </p>
         </div>
@@ -266,12 +279,6 @@ export function PricingSidebar(props: PricingSidebarProps) {
           {t('Reset')}
         </Button>
       </div>
-
-      {props.hasActiveFilters && (
-        <Badge variant='secondary' className='mb-3'>
-          {t('Filters active')}
-        </Badge>
-      )}
 
       <div className='space-y-1'>
         <FilterSection

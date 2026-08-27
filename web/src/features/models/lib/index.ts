@@ -24,6 +24,7 @@ export * from './model-utils'
 
 // Form schemas and transformers
 export * from './model-form'
+export * from './ensure-catalog'
 
 // Actions
 export * from './model-actions'

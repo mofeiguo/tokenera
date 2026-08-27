@@ -22,6 +22,8 @@ import {
   QUOTA_TYPES,
   QUOTA_TYPE_VALUES,
   ENDPOINT_TYPES,
+  MODEL_INTENTS,
+  CAPABILITY_FILTERS,
 } from '../constants'
 import type { PricingModel } from '../types'
 
@@ -44,7 +46,10 @@ export function filterBySearch(
       m.model_name?.toLowerCase().includes(lowerQuery) ||
       m.description?.toLowerCase().includes(lowerQuery) ||
       m.tags?.toLowerCase().includes(lowerQuery) ||
-      m.vendor_name?.toLowerCase().includes(lowerQuery)
+      m.vendor_name?.toLowerCase().includes(lowerQuery) ||
+      m.supported_endpoint_types?.some((endpoint) =>
+        endpoint.toLowerCase().includes(lowerQuery)
+      )
   )
 }
 
@@ -98,6 +103,55 @@ export function filterByEndpointType(
   )
 }
 
+export function filterByModelIntent(
+  models: PricingModel[],
+  intent: string
+): PricingModel[] {
+  if (intent === MODEL_INTENTS.ALL) return models
+
+  const endpointsByIntent: Record<string, string[]> = {
+    [MODEL_INTENTS.CHAT]: [
+      ENDPOINT_TYPES.OPENAI,
+      ENDPOINT_TYPES.OPENAI_RESPONSE,
+      ENDPOINT_TYPES.ANTHROPIC,
+      ENDPOINT_TYPES.GEMINI,
+    ],
+    [MODEL_INTENTS.IMAGE]: [ENDPOINT_TYPES.IMAGE_GENERATION],
+    [MODEL_INTENTS.VIDEO]: [ENDPOINT_TYPES.OPENAI_VIDEO],
+    [MODEL_INTENTS.EMBEDDINGS]: [ENDPOINT_TYPES.EMBEDDINGS],
+    [MODEL_INTENTS.RERANK]: [ENDPOINT_TYPES.JINA_RERANK],
+  }
+  const matchingEndpoints = endpointsByIntent[intent]
+  if (!matchingEndpoints) return models
+
+  return models.filter((model) =>
+    model.supported_endpoint_types?.some((endpoint) =>
+      matchingEndpoints.includes(endpoint)
+    )
+  )
+}
+
+export function filterByCapability(
+  models: PricingModel[],
+  capability: string
+): PricingModel[] {
+  if (capability === CAPABILITY_FILTERS.ALL) return models
+  if (capability === CAPABILITY_FILTERS.VISION) {
+    return models.filter((model) => model.input_modalities?.includes('image'))
+  }
+  if (capability === CAPABILITY_FILTERS.TOOLS) {
+    return models.filter((model) =>
+      model.capabilities?.some((item) =>
+        ['function_calling', 'tools'].includes(item)
+      )
+    )
+  }
+  if (capability === CAPABILITY_FILTERS.REASONING) {
+    return models.filter((model) => model.capabilities?.includes('reasoning'))
+  }
+  return models
+}
+
 /**
  * Get model price for sorting
  */
@@ -138,20 +192,24 @@ export function filterAndSortModels(
   models: PricingModel[],
   filters: {
     search: string
+    intent: string
     vendor: string
     group: string
     quotaType: string
     endpointType: string
     tag: string
+    capability: string
     sortBy: string
   }
 ): PricingModel[] {
   let result = filterBySearch(models, filters.search)
+  result = filterByModelIntent(result, filters.intent)
   result = filterByVendor(result, filters.vendor)
   result = filterByGroup(result, filters.group)
   result = filterByQuotaType(result, filters.quotaType)
   result = filterByEndpointType(result, filters.endpointType)
   result = filterByTag(result, filters.tag)
+  result = filterByCapability(result, filters.capability)
   result = sortModels(result, filters.sortBy)
 
   return result
@@ -183,7 +241,7 @@ export function extractAllTags(models: PricingModel[]): string[] {
     }
   })
 
-  return Array.from(tagSet).sort((a, b) => a.localeCompare(b))
+  return [...tagSet].sort((a, b) => a.localeCompare(b))
 }
 
 /**

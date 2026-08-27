@@ -1,13 +1,18 @@
 package model
 
 import (
+	"strings"
+
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
 func IsChannelEnabledForGroupModel(group string, modelName string, channelID int) bool {
-	if group == "" || modelName == "" || channelID <= 0 {
+	if modelName == "" || channelID <= 0 {
 		return false
+	}
+	if strings.TrimSpace(group) == "" {
+		group = DefaultServingGroup
 	}
 	if !common.MemoryCacheEnabled {
 		return isChannelEnabledForGroupModelDB(group, modelName, channelID)
@@ -43,22 +48,32 @@ func IsChannelEnabledForAnyGroupModel(groups []string, modelName string, channel
 }
 
 func isChannelEnabledForGroupModelDB(group string, modelName string, channelID int) bool {
-	var count int64
-	err := DB.Model(&Ability{}).
-		Where(commonGroupCol+" = ? and model = ? and channel_id = ? and enabled = ?", group, modelName, channelID, true).
-		Count(&count).Error
-	if err == nil && count > 0 {
+	check := func(name string) bool {
+		var rows []struct {
+			Groups string
+		}
+		err := DB.Table("model_bindings").
+			Select("channels."+commonGroupCol+" AS groups").
+			Joins("JOIN models ON models.id = model_bindings.model_id").
+			Joins("JOIN channels ON channels.id = model_bindings.channel_id").
+			Where("models.model_name = ? AND model_bindings.channel_id = ? AND model_bindings.enabled = ? AND model_bindings.deleted = ? AND channels.status = ?",
+				name, channelID, true, false, common.ChannelStatusEnabled).
+			Scan(&rows).Error
+		if err != nil {
+			return false
+		}
+		for _, row := range rows {
+			if servingGroupsContain(row.Groups, group) {
+				return true
+			}
+		}
+		return false
+	}
+	if check(modelName) {
 		return true
 	}
 	normalized := ratio_setting.FormatMatchingModelName(modelName)
-	if normalized == "" || normalized == modelName {
-		return false
-	}
-	count = 0
-	err = DB.Model(&Ability{}).
-		Where(commonGroupCol+" = ? and model = ? and channel_id = ? and enabled = ?", group, normalized, channelID, true).
-		Count(&count).Error
-	return err == nil && count > 0
+	return normalized != "" && normalized != modelName && check(normalized)
 }
 
 func isChannelIDInList(list []int, channelID int) bool {

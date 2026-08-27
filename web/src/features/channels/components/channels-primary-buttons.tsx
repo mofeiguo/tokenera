@@ -16,11 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQueryClient } from '@tanstack/react-query'
 import {
   Plus,
   MoreHorizontal,
-  Settings2,
   Trash2,
   Tags,
   TestTube,
@@ -56,11 +54,11 @@ import {
   ADMIN_PERMISSION_RESOURCES,
   hasPermission,
 } from '@/lib/admin-permissions'
+import { useQueryClient } from '@/lib/query'
 import { useAuthStore } from '@/stores/auth-store'
 
 import {
   handleDeleteAllDisabled,
-  handleFixAbilities,
   handleTestAllChannels,
   handleUpdateAllBalances,
 } from '../lib'
@@ -81,8 +79,6 @@ export function ChannelsPrimaryButtons() {
   } = useChannels()
   const queryClient = useQueryClient()
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [showConsistencyDialog, setShowConsistencyDialog] = useState(false)
-  const [isRepairingConsistency, setIsRepairingConsistency] = useState(false)
   const currentUser = useAuthStore((s) => s.auth.user)
   const canEditSensitive = hasPermission(
     currentUser,
@@ -256,20 +252,6 @@ export function ChannelsPrimaryButtons() {
             <DropdownMenuItem
               onSelect={(e) => {
                 e.preventDefault()
-                setShowConsistencyDialog(true)
-              }}
-            >
-              {t('Repair Channel Consistency')}
-              <DropdownMenuShortcut>
-                <Settings2 className='h-4 w-4' />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault()
                 if (!canEditSensitive) return
                 setShowDeleteDialog(true)
               }}
@@ -300,29 +282,6 @@ export function ChannelsPrimaryButtons() {
             console.log(`Deleted ${_count} channels`)
           })
           setShowDeleteDialog(false)
-        }}
-      />
-
-      <ConfirmDialog
-        open={showConsistencyDialog}
-        onOpenChange={setShowConsistencyDialog}
-        title={t('Repair channel consistency?')}
-        desc={t(
-          'This will rebuild the channel routing index from every channel configuration, including supported models, groups, priorities, and weights. Routing may be briefly incomplete while the rebuild is running. Continue?'
-        )}
-        confirmText={t('Repair')}
-        isLoading={isRepairingConsistency}
-        handleConfirm={async () => {
-          setIsRepairingConsistency(true)
-          try {
-            await handleFixAbilities(queryClient, (_result) => {
-              // eslint-disable-next-line no-console
-              console.log('Repair channel consistency result:', _result)
-            })
-            setShowConsistencyDialog(false)
-          } finally {
-            setIsRepairingConsistency(false)
-          }
         }}
       />
     </>

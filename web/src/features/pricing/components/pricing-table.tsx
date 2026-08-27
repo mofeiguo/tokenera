@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { Row, PaginationState } from '@tanstack/react-table'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -59,6 +59,10 @@ export function PricingTable(props: PricingTableProps) {
     pageIndex: 0,
     pageSize: DEFAULT_PRICING_PAGE_SIZE,
   })
+
+  useEffect(() => {
+    setPagination((current) => ({ ...current, pageIndex: 0 }))
+  }, [models])
 
   const columns = usePricingColumns({
     tokenUnit,
@@ -103,8 +107,16 @@ export function PricingTable(props: PricingTableProps) {
           <DataTableRow
             key={row.id}
             row={row}
-            className='hover:bg-muted/30 cursor-pointer transition-colors'
+            tabIndex={0}
+            aria-label={`${t('Details')}: ${row.original.model_name}`}
+            className='hover:bg-muted/40 focus-visible:ring-ring/40 cursor-pointer transition-colors focus-visible:ring-2 focus-visible:outline-none'
             onClick={() => handleRowClick(row.original)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                handleRowClick(row.original)
+              }
+            }}
           />
         )}
       />
