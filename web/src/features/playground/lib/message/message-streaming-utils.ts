@@ -178,10 +178,13 @@ export function isPendingAssistantMessage(message?: Message): boolean {
 
 type ChatCompletionChoice = ChatCompletionResponse['choices'][number]
 
-export function hasChatCompletionChoice(
-  response: ChatCompletionResponse
-): boolean {
-  return Boolean(response.choices?.[0])
+export type PlaygroundAssistantOutput = {
+  content: string
+  reasoning?: string
+}
+
+export function hasChatCompletionChoice(response: unknown): boolean {
+  return Boolean(getPlaygroundAssistantOutput(response))
 }
 
 export function applyChatCompletionChoice(
@@ -197,17 +200,205 @@ export function applyChatCompletionChoice(
   })
 }
 
-export function applyChatCompletionResponse(
-  message: Message,
-  response: ChatCompletionResponse
-): Message | null {
-  const choice = response.choices?.[0]
+export function getPlaygroundAssistantOutput(
+  response: unknown
+): PlaygroundAssistantOutput | null {
+  if (!response || typeof response !== 'object') {
+    return null
+  }
+  const payload = response as Record<string, unknown>
 
-  if (!choice) {
+  const choice = Array.isArray(payload.choices)
+    ? (payload.choices[0] as ChatCompletionChoice | undefined)
+    : undefined
+  if (choice?.message) {
+    return {
+      content: choice.message.content || '',
+      reasoning: choice.message.reasoning_content,
+    }
+  }
+
+  if (typeof payload.output_text === 'string' && payload.output_text) {
+    return { content: payload.output_text }
+  }
+
+  const responsesText = extractResponsesOutput(payload.output)
+  if (responsesText !== null) {
+    return responsesText
+  }
+
+  const anthropicText = extractAnthropicText(payload.content)
+  if (anthropicText !== null) {
+    return anthropicText
+  }
+
+  const geminiText = extractGeminiText(payload.candidates)
+  if (geminiText !== null) {
+    return geminiText
+  }
+
+  return null
+}
+
+function extractResponsesOutput(
+  output: unknown
+): PlaygroundAssistantOutput | null {
+  if (!Array.isArray(output)) {
     return null
   }
 
-  return applyChatCompletionChoice(message, choice)
+  const texts: string[] = []
+  const reasoning: string[] = []
+
+  for (const item of output) {
+    if (!item || typeof item !== 'object') {
+      continue
+    }
+    const block = item as {
+      type?: string
+      role?: string
+      content?: unknown
+      summary?: unknown
+    }
+    if (block.type === 'reasoning') {
+      collectResponsesText(reasoning, block.content)
+      collectResponsesText(reasoning, block.summary)
+      continue
+    }
+    if (block.type !== 'message') {
+      continue
+    }
+    if (block.role && block.role !== 'assistant') {
+      continue
+    }
+    collectResponsesText(texts, block.content)
+  }
+
+  if (texts.length === 0) {
+    for (const item of output) {
+      if (!item || typeof item !== 'object') {
+        continue
+      }
+      collectResponsesText(
+        texts,
+        (item as { content?: unknown }).content
+      )
+    }
+  }
+
+  if (texts.length === 0 && reasoning.length === 0) {
+    return null
+  }
+  return {
+    content: texts.join(''),
+    reasoning: reasoning.length > 0 ? reasoning.join('') : undefined,
+  }
+}
+
+function collectResponsesText(target: string[], parts: unknown) {
+  if (!Array.isArray(parts)) {
+    return
+  }
+  for (const part of parts) {
+    if (!part || typeof part !== 'object') {
+      continue
+    }
+    const item = part as { type?: string; text?: string }
+    if (!item.text) {
+      continue
+    }
+    if (
+      item.type &&
+      item.type !== 'output_text' &&
+      item.type !== 'summary_text' &&
+      item.type !== 'reasoning_text'
+    ) {
+      continue
+    }
+    target.push(item.text)
+  }
+}
+
+function extractAnthropicText(
+  content: unknown
+): PlaygroundAssistantOutput | null {
+  if (!Array.isArray(content)) {
+    return null
+  }
+  const texts: string[] = []
+  const reasoning: string[] = []
+  for (const block of content) {
+    if (!block || typeof block !== 'object') {
+      continue
+    }
+    const item = block as { type?: string; text?: string; thinking?: string }
+    if (item.type === 'thinking' && item.thinking) {
+      reasoning.push(item.thinking)
+    }
+    if (item.type === 'text' && item.text) {
+      texts.push(item.text)
+    }
+  }
+  if (texts.length === 0 && reasoning.length === 0) {
+    return null
+  }
+  return {
+    content: texts.join('\n'),
+    reasoning: reasoning.length > 0 ? reasoning.join('\n') : undefined,
+  }
+}
+
+function extractGeminiText(candidates: unknown): PlaygroundAssistantOutput | null {
+  if (!Array.isArray(candidates)) {
+    return null
+  }
+  const parts = (candidates[0] as { content?: { parts?: unknown[] } } | undefined)
+    ?.content?.parts
+  if (!Array.isArray(parts)) {
+    return null
+  }
+  const texts: string[] = []
+  const reasoning: string[] = []
+  for (const part of parts) {
+    if (!part || typeof part !== 'object') {
+      continue
+    }
+    const item = part as { text?: string; thought?: boolean }
+    if (!item.text) {
+      continue
+    }
+    if (item.thought) {
+      reasoning.push(item.text)
+      continue
+    }
+    texts.push(item.text)
+  }
+  if (texts.length === 0 && reasoning.length === 0) {
+    return null
+  }
+  return {
+    content: texts.join(''),
+    reasoning: reasoning.length > 0 ? reasoning.join('') : undefined,
+  }
+}
+
+export function applyChatCompletionResponse(
+  message: Message,
+  response: unknown
+): Message | null {
+  const output = getPlaygroundAssistantOutput(response)
+
+  if (!output) {
+    return null
+  }
+
+  return completeAssistantTiming({
+    ...finalizeMessage(
+      updateCurrentVersionContent(message, output.content),
+      output.reasoning
+    ),
+    status: MESSAGE_STATUS.COMPLETE,
+  })
 }
 
 /**

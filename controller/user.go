@@ -579,12 +579,11 @@ func generateDefaultSidebarConfig(userRole int) string {
 
 	// 控制台区域 - 所有用户都可以访问
 	defaultConfig["console"] = map[string]interface{}{
-		"enabled":    true,
-		"detail":     true,
-		"token":      true,
-		"log":        true,
-		"midjourney": true,
-		"task":       true,
+		"enabled": true,
+		"detail":  true,
+		"token":   true,
+		"log":     true,
+		"task":    true,
 	}
 
 	// 个人中心区域 - 所有用户都可以访问
@@ -638,10 +637,21 @@ func GetUserModels(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	model.GetPricing()
+	modelNames := service.GetGroupsEnabledModels(setting.GetAccessibleGroups(user.Group))
+	endpointTypes := make(map[string][]constant.EndpointType, len(modelNames))
+	for _, modelName := range modelNames {
+		supported := model.GetModelSupportEndpointTypes(modelName)
+		if len(supported) == 0 {
+			continue
+		}
+		endpointTypes[modelName] = supported
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    service.GetGroupsEnabledModels(setting.GetAccessibleGroups(user.Group)),
+		"success":                  true,
+		"message":                  "",
+		"data":                     modelNames,
+		"supported_endpoint_types": endpointTypes,
 	})
 }
 

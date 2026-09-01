@@ -19,21 +19,19 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 
 import { API_ENDPOINTS } from './constants'
-import type {
-  ChatCompletionRequest,
-  ChatCompletionResponse,
-  ModelOption,
-  GroupOption,
-} from './types'
+import type { ModelOption, GroupOption } from './types'
+
+export type PlaygroundRequestPayload = Record<string, unknown>
 
 /**
- * Send chat completion request (non-streaming)
+ * Send playground request (non-streaming)
  */
 export async function sendChatCompletion(
-  payload: ChatCompletionRequest,
+  url: string,
+  payload: PlaygroundRequestPayload,
   signal?: AbortSignal
-): Promise<ChatCompletionResponse> {
-  const res = await api.post(API_ENDPOINTS.CHAT_COMPLETIONS, payload, {
+): Promise<unknown> {
+  const res = await api.post(url, payload, {
     signal,
     skipErrorHandler: true,
   } as Record<string, unknown>)
@@ -53,9 +51,14 @@ export async function getUserModels(group: string): Promise<ModelOption[]> {
     return []
   }
 
+  const endpointMap =
+    (data.supported_endpoint_types as Record<string, string[]> | undefined) ??
+    {}
+
   return data.data.map((model: string) => ({
     label: model,
     value: model,
+    supportedEndpointTypes: endpointMap[model] ?? [],
   }))
 }
 

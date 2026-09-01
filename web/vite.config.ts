@@ -30,11 +30,11 @@ export default defineConfig(({ mode }) => {
   const serverUrl =
     process.env.VITE_REACT_APP_SERVER_URL ||
     env.VITE_REACT_APP_SERVER_URL ||
-    'http://localhost:3000'
+    'http://localhost:3007'
 
   const isProd = mode === 'production'
   const proxy = Object.fromEntries(
-    (['/api', '/mj', '/pg'] as const).map((key) => [
+    (['/api', '/pg'] as const).map((key) => [
       key,
       {
         target: serverUrl,

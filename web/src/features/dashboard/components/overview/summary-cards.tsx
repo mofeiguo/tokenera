@@ -16,26 +16,31 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ArrowRight, Flame, ShieldCheck, TrendingDown } from 'lucide-react'
+import {
+  Activity,
+  CircleDollarSign,
+  CreditCard,
+  Crown,
+  Flame,
+  Hash,
+  Layers,
+  ShieldCheck,
+  TrendingDown,
+  type LucideIcon,
+} from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { StaggerContainer, StaggerItem } from '@/components/page-transition'
-import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { getUserQuotaDates } from '@/features/dashboard/api'
-import { useSummaryCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
 import type { QuotaDataItem } from '@/features/dashboard/types'
-import { useStatus } from '@/hooks/use-status'
-import { getCurrencyLabel, isCurrencyDisplayEnabled } from '@/lib/currency'
-import { formatNumber, formatQuota } from '@/lib/format'
+import { formatCompactNumber, formatNumber, formatQuota } from '@/lib/format'
 import { useQuery } from '@/lib/query'
-import { Link } from '@/lib/router'
 import { computeTimeRange } from '@/lib/time'
-import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { DASHBOARD_PANEL_FRAME, DASHBOARD_STAT_CELL } from '../ui/panel-surface'
-import { StatCard } from '../ui/stat-card'
+import { MetricCard } from './metric-card'
 
 const SUMMARY_SPARKLINE_BUCKETS = 12
 
@@ -50,6 +55,10 @@ function getBucketIndex(
   if (end <= start) return 0
   const ratio = (timestamp - start) / (end - start)
   return Math.min(bucketCount - 1, Math.max(0, Math.floor(ratio * bucketCount)))
+}
+
+function asQuotaItems(data: unknown): QuotaDataItem[] {
+  return Array.isArray(data) ? data : []
 }
 
 function buildSummarySparklines(
@@ -91,15 +100,6 @@ function buildSummarySparklines(
   }
 }
 
-function getSummarySparkline(
-  key: string,
-  sparklineData: Record<SummarySparklineKey, number[]>
-): number[] | undefined {
-  if (key === 'usage') return sparklineData.usage
-  if (key === 'requests') return sparklineData.requests
-  return undefined
-}
-
 function getRunwayDays(
   remainQuota: number,
   recentUsage: number
@@ -119,28 +119,64 @@ function getHealthLevel(remainQuota: number, recentUsage: number): HealthLevel {
   return 'healthy'
 }
 
-const HEALTH_CONFIG: Record<
-  HealthLevel,
-  { dotClass: string; labelKey: string }
-> = {
-  healthy: {
-    dotClass: 'bg-success',
-    labelKey: 'Healthy',
-  },
-  caution: {
-    dotClass: 'bg-warning',
-    labelKey: 'Low balance',
-  },
-  critical: {
-    dotClass: 'bg-destructive',
-    labelKey: 'Balance depleted',
-  },
+function getTopModel(data: QuotaDataItem[]): {
+  name: string
+  quota: number
+} | null {
+  const totals = new Map<string, number>()
+  for (const item of data) {
+    const name = item.model_name?.trim()
+    if (!name) continue
+    totals.set(name, (totals.get(name) ?? 0) + (Number(item.quota) || 0))
+  }
+  let top: { name: string; quota: number } | null = null
+  for (const [name, quota] of totals) {
+    if (!top || quota > top.quota) {
+      top = { name, quota }
+    }
+  }
+  return top
+}
+
+function TokenStatSub(props: { loading?: boolean; sub?: string }) {
+  if (props.loading) {
+    return <Skeleton className='mt-1.5 h-3 w-24' />
+  }
+  if (!props.sub) return null
+  return (
+    <p className='text-muted-foreground mt-0.5 truncate text-xs'>{props.sub}</p>
+  )
+}
+
+function TokenStat(props: {
+  icon: LucideIcon
+  label: string
+  value: string
+  sub?: string
+  loading?: boolean
+}) {
+  const Icon = props.icon
+  return (
+    <div className='min-w-0 lg:px-6 lg:first:pl-0 lg:last:pr-0'>
+      <div className='text-muted-foreground flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase'>
+        <Icon className='size-3.5' />
+        <span className='truncate'>{props.label}</span>
+      </div>
+      {props.loading ? (
+        <Skeleton className='mt-2 h-6 w-20' />
+      ) : (
+        <p className='mt-1.5 truncate text-lg font-semibold tabular-nums'>
+          {props.value}
+        </p>
+      )}
+      <TokenStatSub loading={props.loading} sub={props.sub} />
+    </div>
+  )
 }
 
 export function SummaryCards() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
-  const { status, loading } = useStatus()
 
   const summaryTimeRange = useMemo(() => computeTimeRange(1), [])
   const remainQuota = Number(user?.quota ?? 0)
@@ -164,54 +200,47 @@ export function SummaryCards() {
     staleTime: 60 * 1000,
   })
 
-  const summaryValues = useMemo(() => {
-    return {
-      usedDisplay: formatQuota(usedQuota),
-      requestCountDisplay: formatNumber(requestCount),
-    }
-  }, [requestCount, usedQuota])
-
-  const currencyEnabledFromStore = isCurrencyDisplayEnabled()
-  const statusCurrencyFlag =
-    typeof status?.display_in_currency === 'boolean'
-      ? Boolean(status.display_in_currency)
-      : undefined
-  const currencyEnabled =
-    statusCurrencyFlag !== undefined
-      ? statusCurrencyFlag
-      : currencyEnabledFromStore
-  const currencyLabel = currencyEnabled ? getCurrencyLabel() : 'Tokens'
+  const quotaItems = asQuotaItems(usageTrendQuery.data?.data)
+  const loading = usageTrendQuery.isLoading && !user
 
   const sparklineData = useMemo(
     () =>
       buildSummarySparklines(
-        usageTrendQuery.data?.data ?? [],
+        quotaItems,
         remainQuota,
         summaryTimeRange.start_timestamp,
         summaryTimeRange.end_timestamp
       ),
     [
+      quotaItems,
       remainQuota,
       summaryTimeRange.end_timestamp,
       summaryTimeRange.start_timestamp,
-      usageTrendQuery.data?.data,
     ]
   )
 
   const recentUsage = useMemo(
     () =>
-      (usageTrendQuery.data?.data ?? []).reduce(
-        (total, item) => total + (Number(item.quota) || 0),
+      quotaItems.reduce((total, item) => total + (Number(item.quota) || 0), 0),
+    [quotaItems]
+  )
+  const recentTokens = useMemo(
+    () =>
+      quotaItems.reduce(
+        (total, item) => total + (Number(item.token_used) || 0),
         0
       ),
-    [usageTrendQuery.data?.data]
+    [quotaItems]
   )
+  const recentRequests = useMemo(
+    () =>
+      quotaItems.reduce((total, item) => total + (Number(item.count) || 0), 0),
+    [quotaItems]
+  )
+  const topModel = useMemo(() => getTopModel(quotaItems), [quotaItems])
 
   const healthLevel = getHealthLevel(remainQuota, recentUsage)
-  const healthCfg = HEALTH_CONFIG[healthLevel]
   const runwayDays = getRunwayDays(remainQuota, recentUsage)
-
-  const todayUsageDisplay = formatQuota(recentUsage)
   let runwayDisplay: string
   if (runwayDays !== null) {
     if (runwayDays < 1) {
@@ -227,127 +256,85 @@ export function SummaryCards() {
     runwayDisplay = t('No recent usage')
   }
 
-  const items = useSummaryCardsConfig({
-    ...summaryValues,
-    todayUsageDisplay,
-    currencyEnabled,
-    currencyLabel,
-  }).map((config, index) => {
-    const tones = ['accent-1', 'accent-2', 'accent-3'] as const
-
-    return {
-      key: config.key,
-      title: config.title,
-      value: config.value,
-      desc: config.description,
-      icon: config.icon,
-      tone: tones[index] ?? 'accent-3',
-      sparkline:
-        config.key === 'todayUsage'
-          ? sparklineData.usage
-          : getSummarySparkline(config.key, sparklineData),
-      sparklineVariant: 'line' as const,
-    }
-  })
+  const runwayAccent =
+    healthLevel === 'critical' || healthLevel === 'caution' ? 'purple' : 'green'
+  const RunwayIcon =
+    healthLevel === 'critical' || healthLevel === 'caution'
+      ? TrendingDown
+      : ShieldCheck
 
   return (
-    <div className={DASHBOARD_PANEL_FRAME}>
-      <div className='grid xl:grid-cols-[minmax(0,1fr)_17.5rem]'>
-        <div className='flex flex-col gap-2.5 p-3 sm:gap-3 sm:p-4'>
-          <div className='flex flex-wrap items-start justify-between gap-3'>
-            <div className='flex flex-col gap-0.5'>
-              <h3 className='text-sm font-semibold'>
-                {t('Usage at a glance')}
-              </h3>
-              <p className='text-muted-foreground text-xs'>
-                {t('Monitor balance, usage, and request volume')}
-              </p>
-            </div>
-          </div>
-          <StaggerContainer className='grid grid-cols-3 gap-1.5 sm:gap-2.5'>
-            {items.map((it) => (
-              <StaggerItem key={it.key} className={DASHBOARD_STAT_CELL}>
-                <StatCard
-                  title={it.title}
-                  value={it.value}
-                  description={it.desc}
-                  icon={it.icon}
-                  tone={it.tone}
-                  sparkline={it.sparkline}
-                  sparklineVariant={it.sparklineVariant}
-                  loading={loading}
-                  compactMobile
-                />
-              </StaggerItem>
-            ))}
-          </StaggerContainer>
-        </div>
-
-        <div className='bg-muted/25 flex flex-col justify-between gap-3 border-t p-3 sm:gap-4 sm:p-4 xl:border-t-0 xl:border-l'>
-          <div className='flex flex-col gap-2 sm:gap-3'>
-            <div className='flex items-center justify-between'>
-              <span className='text-muted-foreground text-xs font-medium'>
-                {t('Credit remaining')}
-              </span>
-              <span className='flex items-center gap-1.5'>
-                <span
-                  className={cn('size-1.5 rounded-full', healthCfg.dotClass)}
-                  aria-hidden='true'
-                />
-                <span className='text-muted-foreground text-[11px] font-medium'>
-                  {t(healthCfg.labelKey)}
-                </span>
-              </span>
-            </div>
-
-            <div className='font-mono text-xl font-semibold tracking-tight sm:text-2xl'>
-              {formatQuota(remainQuota)}
-            </div>
-
-            <div className='grid grid-cols-2 gap-2'>
-              <div className='bg-background/70 rounded-lg border px-2.5 py-2'>
-                <div className='text-muted-foreground flex items-center gap-1 text-[11px] leading-none font-medium'>
-                  <Flame className='size-3 shrink-0' aria-hidden='true' />
-                  <span className='truncate'>{t('Last 24h usage')}</span>
-                </div>
-                <div className='text-foreground mt-1.5 truncate text-xs font-semibold tabular-nums'>
-                  {formatQuota(recentUsage)}
-                </div>
-              </div>
-              <div className='bg-background/70 rounded-lg border px-2.5 py-2'>
-                <div className='text-muted-foreground flex items-center gap-1 text-[11px] leading-none font-medium'>
-                  {runwayDays !== null && runwayDays < 3 ? (
-                    <TrendingDown
-                      className='size-3 shrink-0'
-                      aria-hidden='true'
-                    />
-                  ) : (
-                    <ShieldCheck
-                      className='size-3 shrink-0'
-                      aria-hidden='true'
-                    />
-                  )}
-                  <span className='truncate'>{t('Runway')}</span>
-                </div>
-                <div
-                  className={cn(
-                    'mt-1.5 truncate text-xs font-semibold tabular-nums',
-                    healthLevel === 'critical' && 'text-destructive',
-                    healthLevel === 'caution' && 'text-warning'
-                  )}
-                >
-                  {runwayDisplay}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <Button className='justify-between' render={<Link to='/wallet' />}>
-            <span>{t('Wallet')}</span>
-            <ArrowRight data-icon='inline-end' />
-          </Button>
-        </div>
+    <div className='space-y-4'>
+      <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4'>
+        <MetricCard
+          label={t('Credit remaining')}
+          value={formatQuota(remainQuota)}
+          subtitle={t('Available balance')}
+          icon={<CreditCard className='size-4' />}
+          accent='blue'
+          trend={sparklineData.balance}
+          loading={loading}
+        />
+        <MetricCard
+          label={t('Total Requests')}
+          value={formatNumber(requestCount)}
+          subtitle={t('Total requests made')}
+          icon={<Activity className='size-4' />}
+          accent='purple'
+          trend={sparklineData.requests}
+          loading={loading}
+        />
+        <MetricCard
+          label={t('Total Spend')}
+          value={formatQuota(usedQuota)}
+          subtitle={t('Total consumed')}
+          icon={<CircleDollarSign className='size-4' />}
+          accent='blue'
+          trend={sparklineData.usage}
+          loading={loading}
+        />
+        <MetricCard
+          label={t('Runway')}
+          value={runwayDisplay}
+          subtitle={`${t('Last 24h usage')}: ${formatQuota(recentUsage)}`}
+          icon={<RunwayIcon className='size-4' />}
+          accent={runwayAccent}
+          loading={loading}
+        />
       </div>
+
+      <Card size='sm' className='py-5'>
+        <CardContent className='lg:divide-border/60 grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-4 lg:gap-0 lg:divide-x'>
+          <TokenStat
+            icon={Flame}
+            label={t('Last 24h usage')}
+            value={formatQuota(recentUsage)}
+            sub={t('Consumed in the last 24 hours')}
+            loading={usageTrendQuery.isLoading}
+          />
+          <TokenStat
+            icon={Layers}
+            label={t('Total Tokens')}
+            value={formatCompactNumber(recentTokens)}
+            sub={t('Statistical tokens')}
+            loading={usageTrendQuery.isLoading}
+          />
+          <TokenStat
+            icon={Hash}
+            label={t('Requests')}
+            value={formatNumber(recentRequests)}
+            sub={t('Daily request volume')}
+            loading={usageTrendQuery.isLoading}
+          />
+          <TokenStat
+            icon={Crown}
+            label={t('Top model')}
+            value={topModel?.name ?? '—'}
+            sub={topModel ? formatQuota(topModel.quota) : t('No usage yet')}
+            loading={usageTrendQuery.isLoading}
+          />
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -24,6 +24,7 @@ import {
   usePlaygroundOptions,
   usePlaygroundState,
 } from './hooks'
+import { resolvePlaygroundEndpointType } from './lib'
 
 export function Playground() {
   const {
@@ -69,6 +70,7 @@ export function Playground() {
   const { isLoadingModels } = usePlaygroundOptions({
     currentGroup: config.group,
     currentModel: config.model,
+    currentEndpointType: config.endpointType,
     setGroups,
     setModels,
     updateConfig,
@@ -107,7 +109,18 @@ export function Playground() {
           onGroupChange={(value) => updateConfig('group', value)}
           onConfigChange={updateConfig}
           onClearMessages={handleClearMessages}
-          onModelChange={(value) => updateConfig('model', value)}
+          onModelChange={(value) => {
+            updateConfig('model', value)
+            const selected = models.find((model) => model.value === value)
+            updateConfig(
+              'endpointType',
+              resolvePlaygroundEndpointType(
+                selected?.supportedEndpointTypes,
+                ''
+              )
+            )
+          }}
+          onEndpointChange={(value) => updateConfig('endpointType', value)}
           onParameterEnabledChange={updateParameterEnabled}
           onStop={stopGeneration}
           onSubmit={handleSendMessage}

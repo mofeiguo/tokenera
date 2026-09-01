@@ -18,14 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   ArrowRight,
-  BookOpen,
   Check,
   ChevronDown,
   ChevronUp,
   Circle,
   Copy,
   CreditCard,
-  FileText,
   KeyRound,
   ListChecks,
   RadioTower,
@@ -65,8 +63,10 @@ import { AnnouncementsPanel } from './announcements-panel'
 import { ApiInfoPanel } from './api-info-panel'
 import { FAQPanel } from './faq-panel'
 import { PerformanceHealthPanel } from './performance-health-panel'
+import { QuickActionsCard } from './quick-actions-card'
 import { SummaryCards } from './summary-cards'
 import { UptimePanel } from './uptime-panel'
+import { UsageOverviewCard } from './usage-overview-card'
 
 const SETUP_GUIDE_VISIBILITY_STORAGE_KEY =
   'dashboard_overview_setup_guide_expanded'
@@ -96,14 +96,6 @@ interface StartStep {
   to: DashboardActionPath
   icon: LucideIcon
   completed: boolean
-}
-
-interface QuickAction {
-  title: string
-  description: string
-  to: DashboardActionPath
-  icon: LucideIcon
-  adminOnly?: boolean
 }
 
 interface RequestExample {
@@ -416,46 +408,6 @@ function RequestPreview(props: {
   )
 }
 
-function QuickActionItem(props: { action: QuickAction }) {
-  const Icon = props.action.icon
-
-  return (
-    <Button
-      variant='outline'
-      className='h-auto justify-start rounded-xl px-3 py-3 text-left'
-      render={<Link to={props.action.to} />}
-    >
-      <span className='bg-muted flex size-9 shrink-0 items-center justify-center rounded-lg'>
-        <Icon className='size-4' aria-hidden='true' />
-      </span>
-      <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
-        <span className='truncate text-sm font-medium'>
-          {props.action.title}
-        </span>
-        <span className='text-muted-foreground line-clamp-2 text-xs leading-relaxed'>
-          {props.action.description}
-        </span>
-      </span>
-    </Button>
-  )
-}
-
-function CompactQuickAction(props: { action: QuickAction }) {
-  const Icon = props.action.icon
-
-  return (
-    <Button
-      variant='outline'
-      size='sm'
-      className='bg-background/70 h-8 min-w-24 gap-1.5 px-2.5'
-      render={<Link to={props.action.to} />}
-    >
-      <Icon data-icon='inline-start' />
-      <span>{props.action.title}</span>
-    </Button>
-  )
-}
-
 export function OverviewDashboard() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
@@ -525,42 +477,6 @@ export function OverviewDashboard() {
     [preferredKey, remainQuota, requestCount, t, usedQuota]
   )
 
-  const quickActions = useMemo<QuickAction[]>(
-    () => [
-      {
-        title: t('API Keys'),
-        description: t('Create a key for your app or service'),
-        to: '/keys',
-        icon: KeyRound,
-      },
-      {
-        title: t('Channels'),
-        description: t('Configure upstream providers and routing.'),
-        to: '/channels',
-        icon: RadioTower,
-        adminOnly: true,
-      },
-      {
-        title: t('Usage Logs'),
-        description: t('Inspect requests, errors, and billing details'),
-        to: '/usage-logs',
-        icon: FileText,
-      },
-      {
-        title: t('Pricing'),
-        description: t('Review model rates before scaling traffic'),
-        to: '/pricing',
-        icon: BookOpen,
-      },
-    ],
-    [t]
-  )
-
-  const visibleQuickActions = useMemo(
-    () => quickActions.filter((action) => !action.adminOnly || isAdmin),
-    [isAdmin, quickActions]
-  )
-
   const heroSignals = useMemo<HeroSignal[]>(
     () => [
       {
@@ -620,10 +536,17 @@ export function OverviewDashboard() {
 
   return (
     <div className='flex flex-col gap-4'>
+      <SummaryCards />
+
+      <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-7'>
+        <UsageOverviewCard className='min-w-0 lg:col-span-4' />
+        <QuickActionsCard className='min-w-0 lg:col-span-3' />
+      </div>
+
       {setupGuideExpanded ? (
-        <CardStaggerContainer className='grid items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]'>
-          <CardStaggerItem className={cn(DASHBOARD_PANEL_FRAME, 'h-full')}>
-            <div className='relative h-full overflow-hidden p-4 sm:p-5'>
+        <CardStaggerContainer>
+          <CardStaggerItem className={DASHBOARD_PANEL_FRAME}>
+            <div className='relative overflow-hidden p-4 sm:p-5'>
               <SetupGuideBackdrop />
               <div className='relative grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem]'>
                 <div className='flex min-w-0 flex-col gap-5'>
@@ -642,20 +565,14 @@ export function OverviewDashboard() {
                         )}
                       </p>
                     </div>
-                    <div className='flex flex-wrap items-center gap-2'>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={handleSetupGuideToggle}
-                      >
-                        <ChevronUp data-icon='inline-start' />
-                        {t('Hide setup guide')}
-                      </Button>
-                      <Button size='sm' render={<Link to='/keys' />}>
-                        <KeyRound data-icon='inline-start' />
-                        {t('Create API Key')}
-                      </Button>
-                    </div>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={handleSetupGuideToggle}
+                    >
+                      <ChevronUp data-icon='inline-start' />
+                      {t('Hide setup guide')}
+                    </Button>
                   </div>
 
                   <ol className='bg-background/60 rounded-xl border p-2'>
@@ -674,26 +591,6 @@ export function OverviewDashboard() {
                   example={requestExample}
                   signals={heroSignals}
                 />
-              </div>
-            </div>
-          </CardStaggerItem>
-
-          <CardStaggerItem
-            className={cn(DASHBOARD_PANEL_FRAME, 'h-full p-4 sm:p-5')}
-          >
-            <div className='flex h-full flex-col gap-4'>
-              <div className='flex flex-col gap-1'>
-                <div className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
-                  {t('Recommended actions')}
-                </div>
-                <h3 className='text-lg font-semibold tracking-tight'>
-                  {t('Keep the platform ready')}
-                </h3>
-              </div>
-              <div className='grid gap-2'>
-                {visibleQuickActions.map((action) => (
-                  <QuickActionItem key={action.title} action={action} />
-                ))}
               </div>
             </div>
           </CardStaggerItem>
@@ -732,27 +629,20 @@ export function OverviewDashboard() {
                   </div>
                 </div>
 
-                <div className='flex flex-wrap items-center gap-2'>
-                  {visibleQuickActions.map((action) => (
-                    <CompactQuickAction key={action.title} action={action} />
-                  ))}
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    className='bg-background/70 h-8 min-w-28'
-                    onClick={handleSetupGuideToggle}
-                  >
-                    <ChevronDown data-icon='inline-start' />
-                    {t('Show setup guide')}
-                  </Button>
-                </div>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  className='bg-background/70 h-8 min-w-28'
+                  onClick={handleSetupGuideToggle}
+                >
+                  <ChevronDown data-icon='inline-start' />
+                  {t('Show setup guide')}
+                </Button>
               </div>
             </div>
           </CardStaggerItem>
         </CardStaggerContainer>
       )}
-
-      <SummaryCards />
 
       {showContentPanels && (
         <CardStaggerContainer

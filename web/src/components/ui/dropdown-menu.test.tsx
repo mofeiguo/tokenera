@@ -55,7 +55,7 @@ describe('DropdownMenuItem onSelect compatibility', () => {
     expect(event.baseUIHandlerPrevented).toBe(false)
   })
 
-  test('keeps the Base UI menu open when onSelect prevents default', () => {
+  test('keeps the menu open when onSelect prevents default', () => {
     const event = createMenuEvent()
 
     handleDropdownMenuItemSelect(event, undefined, (selectEvent) => {

@@ -86,12 +86,12 @@ export async function updateModelBindings(
 }> {
   const res = await api.put(`/api/models/${id}/bindings`, {
     bindings: bindings.map(
-      ({ channel_id, upstream_model, enabled, priority, weight }) => ({
+      ({ channel_id, enabled, priority, weight, upstream_model }) => ({
         channel_id,
-        upstream_model,
         enabled,
         priority: priority ?? 0,
         weight: weight ?? 0,
+        upstream_model: upstream_model ?? '',
       })
     ),
   })

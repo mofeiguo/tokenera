@@ -16,11 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { mergeProps } from '@base-ui/react/merge-props'
-import { useRender } from '@base-ui/react/use-render'
+import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 import * as React from 'react'
+import type { ReactNode } from 'react'
 
+import { hasAsChild, mergeRenderChild } from '@/components/ui/compose-as-child'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 
@@ -78,24 +79,28 @@ function Item({
   className,
   variant = 'default',
   size = 'default',
+  asChild = false,
   render,
+  children,
   ...props
-}: useRender.ComponentProps<'div'> & VariantProps<typeof itemVariants>) {
-  return useRender({
-    defaultTagName: 'div',
-    props: mergeProps<'div'>(
-      {
-        className: cn(itemVariants({ variant, size, className })),
-      },
-      props
-    ),
-    render,
-    state: {
-      slot: 'item',
-      variant,
-      size,
-    },
-  })
+}: React.ComponentProps<'div'> &
+  VariantProps<typeof itemVariants> & {
+    asChild?: boolean
+    render?: ReactNode
+  }) {
+  const Comp = hasAsChild(asChild, render) ? Slot : 'div'
+
+  return (
+    <Comp
+      data-slot='item'
+      data-variant={variant}
+      data-size={size}
+      className={cn(itemVariants({ variant, size, className }))}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </Comp>
+  )
 }
 
 const itemMediaVariants = cva(

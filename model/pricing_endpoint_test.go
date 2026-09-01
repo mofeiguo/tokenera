@@ -57,11 +57,10 @@ func insertPricingEndpointBinding(t *testing.T, channelID int, modelName string)
 		NameRule:  NameRuleExact,
 	}).Error)
 	require.NoError(t, DB.Create(&ModelBinding{
-		ModelId:       catalogModel.Id,
-		ChannelId:     channelID,
-		UpstreamModel: modelName,
-		Enabled:       true,
-		GroupsRaw:     "default",
+		ModelId:   catalogModel.Id,
+		ChannelId: channelID,
+		Enabled:   true,
+		GroupsRaw: "default",
 	}).Error)
 }
 
@@ -87,7 +86,7 @@ func pricingEndpointTypesFromPricing(pricings []Pricing) map[string][]constant.E
 	return byModel
 }
 
-func TestPricingAdvancedCustomUsesConfiguredEndpointTypes(t *testing.T) {
+func TestPricingDoesNotInferEndpointsFromChannelRoutes(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 
 	insertPricingEndpointChannel(t, 101, constant.ChannelTypeAdvancedCustom, pricingEndpointAdvancedCustomConfig(
@@ -107,16 +106,11 @@ func TestPricingAdvancedCustomUsesConfiguredEndpointTypes(t *testing.T) {
 
 	byModel := pricingEndpointTypesByModel(t)
 
-	assert.Equal(t, []constant.EndpointType{
-		constant.EndpointTypeOpenAI,
-		constant.EndpointTypeOpenAIResponse,
-	}, byModel["gemini-2.5-flash"])
-	assert.Equal(t, []constant.EndpointType{
-		constant.EndpointTypeOpenAI,
-	}, byModel["gpt-4o"])
+	assert.Empty(t, byModel["gemini-2.5-flash"])
+	assert.Empty(t, byModel["gpt-4o"])
 }
 
-func TestPricingModelMetadataEndpointsMergeWithAdvancedCustomInference(t *testing.T) {
+func TestPricingUsesOnlyCatalogEndpoints(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 
 	insertPricingEndpointChannel(t, 103, constant.ChannelTypeAdvancedCustom, pricingEndpointAdvancedCustomConfig(
@@ -138,10 +132,7 @@ func TestPricingModelMetadataEndpointsMergeWithAdvancedCustomInference(t *testin
 
 	byModel := pricingEndpointTypesByModel(t)
 
-	assert.Equal(t, []constant.EndpointType{
-		constant.EndpointTypeOpenAIResponse,
-		constant.EndpointTypeOpenAI,
-	}, byModel["gemini-2.5-flash"])
+	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAI}, byModel["gemini-2.5-flash"])
 }
 
 func TestPricingModelMetadataEndpointsCanProvideEndpointWithoutChannelInference(t *testing.T) {
@@ -169,7 +160,7 @@ func TestPricingModelMetadataEndpointsCanProvideEndpointWithoutChannelInference(
 	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAI}, byModel["metadata-only-model"])
 }
 
-func TestPricingAdvancedCustomMissingConfigFallsBackToChannelType(t *testing.T) {
+func TestPricingMissingCatalogEndpointsStayEmpty(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 
 	insertPricingEndpointChannel(t, 102, constant.ChannelTypeAdvancedCustom, dto.ChannelOtherSettings{})
@@ -177,10 +168,10 @@ func TestPricingAdvancedCustomMissingConfigFallsBackToChannelType(t *testing.T) 
 
 	byModel := pricingEndpointTypesByModel(t)
 
-	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAI}, byModel["gpt-4o"])
+	assert.Empty(t, byModel["gpt-4o"])
 }
 
-func TestPricingNativeChannelEndpointTypesUnchanged(t *testing.T) {
+func TestPricingNativeChannelDoesNotInferEndpointTypes(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 
 	insertPricingEndpointChannel(t, 201, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
@@ -192,13 +183,9 @@ func TestPricingNativeChannelEndpointTypesUnchanged(t *testing.T) {
 
 	byModel := pricingEndpointTypesByModel(t)
 
-	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAI}, byModel["gpt-4o"])
-	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeGemini, constant.EndpointTypeOpenAI}, byModel["gemini-2.5-flash"])
-	assert.Equal(t, []constant.EndpointType{
-		constant.EndpointTypeOpenAI,
-		constant.EndpointTypeOpenAIResponse,
-		constant.EndpointTypeAnthropic,
-	}, byModel["claude-3-5-sonnet"])
+	assert.Empty(t, byModel["gpt-4o"])
+	assert.Empty(t, byModel["gemini-2.5-flash"])
+	assert.Empty(t, byModel["claude-3-5-sonnet"])
 }
 
 func TestPricingRequiresPublishedCatalogModelAndExposesCapabilities(t *testing.T) {
@@ -464,12 +451,12 @@ func TestDeletingBoundCatalogModelIsRejected(t *testing.T) {
 	assert.Equal(t, int64(1), count)
 }
 
-func TestExplicitModelBindingsDriveChannelSelectionAndUpstreamModel(t *testing.T) {
+func TestExplicitModelBindingsDriveChannelSelection(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 210, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointChannel(t, 211, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 210).Update("models", "vendor-a/model-v1").Error)
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 211).Update("models", "vendor-b/model-v2").Error)
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 210).Update("models", "public-sku").Error)
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 211).Update("models", "public-sku").Error)
 	catalogModel := &Model{
 		ModelName: "public-sku",
 		Status:    1,
@@ -478,25 +465,22 @@ func TestExplicitModelBindingsDriveChannelSelectionAndUpstreamModel(t *testing.T
 	require.NoError(t, catalogModel.Insert())
 
 	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 210, UpstreamModel: "vendor-a/model-v1", Enabled: true, Priority: 0},
-		{ChannelId: 211, UpstreamModel: "vendor-b/model-v2", Enabled: true, Priority: 10},
+		{ChannelId: 210, Enabled: true, Priority: 0},
+		{ChannelId: 211, Enabled: true, Priority: 10},
 	}))
 
 	selected, err := GetRandomSatisfiedChannel("default", "public-sku", 0, "/v1/chat/completions")
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 	assert.Equal(t, 211, selected.Id)
-	upstreamModel, ok := ResolveModelBindingUpstream("public-sku", selected.Id)
-	require.True(t, ok)
-	assert.Equal(t, "vendor-b/model-v2", upstreamModel)
 }
 
 func TestBindingPriorityIgnoresChannelPriority(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 230, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointChannel(t, 231, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 230).Update("models", "vendor-low").Error)
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 231).Update("models", "vendor-high").Error)
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 230).Update("models", "priority-sku").Error)
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 231).Update("models", "priority-sku").Error)
 	highChannelPriority := int64(99)
 	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 230).Update("priority", highChannelPriority).Error)
 
@@ -507,8 +491,8 @@ func TestBindingPriorityIgnoresChannelPriority(t *testing.T) {
 	}
 	require.NoError(t, catalogModel.Insert())
 	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 230, UpstreamModel: "vendor-low", Enabled: true, Priority: 1},
-		{ChannelId: 231, UpstreamModel: "vendor-high", Enabled: true, Priority: 5},
+		{ChannelId: 230, Enabled: true, Priority: 1},
+		{ChannelId: 231, Enabled: true, Priority: 5},
 	}))
 
 	selected, err := GetRandomSatisfiedChannel("default", "priority-sku", 0, "/v1/chat/completions")
@@ -522,11 +506,11 @@ func TestBindingWeightIgnoresChannelWeight(t *testing.T) {
 	insertPricingEndpointChannel(t, 250, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointChannel(t, 251, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 250).Updates(map[string]any{
-		"models": "vendor-channel-heavy",
+		"models": "weight-sku",
 		"weight": 999,
 	}).Error)
 	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 251).Updates(map[string]any{
-		"models": "vendor-binding-heavy",
+		"models": "weight-sku",
 		"weight": 0,
 	}).Error)
 
@@ -537,8 +521,8 @@ func TestBindingWeightIgnoresChannelWeight(t *testing.T) {
 	}
 	require.NoError(t, catalogModel.Insert())
 	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 250, UpstreamModel: "vendor-channel-heavy", Enabled: true, Priority: 1, Weight: 0},
-		{ChannelId: 251, UpstreamModel: "vendor-binding-heavy", Enabled: true, Priority: 1, Weight: 10},
+		{ChannelId: 250, Enabled: true, Priority: 1, Weight: 0},
+		{ChannelId: 251, Enabled: true, Priority: 1, Weight: 10},
 	}))
 
 	selected, err := GetRandomSatisfiedChannel("default", "weight-sku", 0, "/v1/chat/completions")
@@ -551,8 +535,8 @@ func TestBindingPriorityBeatsWeight(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 260, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointChannel(t, 261, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 260).Update("models", "vendor-heavy-weight").Error)
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 261).Update("models", "vendor-high-priority").Error)
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 260).Update("models", "priority-beats-weight-sku").Error)
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 261).Update("models", "priority-beats-weight-sku").Error)
 
 	catalogModel := &Model{
 		ModelName: "priority-beats-weight-sku",
@@ -561,8 +545,8 @@ func TestBindingPriorityBeatsWeight(t *testing.T) {
 	}
 	require.NoError(t, catalogModel.Insert())
 	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 260, UpstreamModel: "vendor-heavy-weight", Enabled: true, Priority: 1, Weight: 1000},
-		{ChannelId: 261, UpstreamModel: "vendor-high-priority", Enabled: true, Priority: 10, Weight: 0},
+		{ChannelId: 260, Enabled: true, Priority: 1, Weight: 1000},
+		{ChannelId: 261, Enabled: true, Priority: 10, Weight: 0},
 	}))
 
 	selected, err := GetRandomSatisfiedChannel("default", "priority-beats-weight-sku", 0, "/v1/chat/completions")
@@ -576,11 +560,11 @@ func TestChannelGroupFiltersBindingSelection(t *testing.T) {
 	insertPricingEndpointChannel(t, 270, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointChannel(t, 271, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 270).Updates(map[string]any{
-		"models": "vendor-vip",
+		"models": "group-filter-sku",
 		"group":  "vip",
 	}).Error)
 	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 271).Updates(map[string]any{
-		"models": "vendor-default",
+		"models": "group-filter-sku",
 		"group":  "default",
 	}).Error)
 
@@ -591,8 +575,8 @@ func TestChannelGroupFiltersBindingSelection(t *testing.T) {
 	}
 	require.NoError(t, catalogModel.Insert())
 	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 270, UpstreamModel: "vendor-vip", Enabled: true, Priority: 1},
-		{ChannelId: 271, UpstreamModel: "vendor-default", Enabled: true, Priority: 1},
+		{ChannelId: 270, Enabled: true, Priority: 1},
+		{ChannelId: 271, Enabled: true, Priority: 1},
 	}))
 
 	selected, err := GetRandomSatisfiedChannel("default", "group-filter-sku", 0, "/v1/chat/completions")
@@ -610,7 +594,7 @@ func TestEmptyChannelGroupServesDefault(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 280, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 280).Updates(map[string]any{
-		"models": "vendor-empty",
+		"models": "empty-group-sku",
 		"group":  "",
 	}).Error)
 
@@ -621,7 +605,7 @@ func TestEmptyChannelGroupServesDefault(t *testing.T) {
 	}
 	require.NoError(t, catalogModel.Insert())
 	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 280, UpstreamModel: "vendor-empty", Enabled: true},
+		{ChannelId: 280, Enabled: true},
 	}))
 
 	selected, err := GetRandomSatisfiedChannel("default", "empty-group-sku", 0, "/v1/chat/completions")
@@ -638,7 +622,7 @@ func TestBindingGroupsAreIgnoredForChannelSelection(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 290, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 290).Updates(map[string]any{
-		"models": "vendor-channel-default",
+		"models": "ignore-binding-group-sku",
 		"group":  "default",
 	}).Error)
 
@@ -649,7 +633,7 @@ func TestBindingGroupsAreIgnoredForChannelSelection(t *testing.T) {
 	}
 	require.NoError(t, catalogModel.Insert())
 	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 290, UpstreamModel: "vendor-channel-default", Enabled: true},
+		{ChannelId: 290, Enabled: true},
 	}))
 	require.NoError(t, DB.Model(&ModelBinding{}).
 		Where("model_id = ? AND channel_id = ?", catalogModel.Id, 290).
@@ -665,10 +649,10 @@ func TestBindingGroupsAreIgnoredForChannelSelection(t *testing.T) {
 	assert.Nil(t, selected)
 }
 
-func TestExplicitModelBindingsAllowSameChannelMultipleUpstreams(t *testing.T) {
+func TestReplaceModelBindingsRejectsDuplicateChannel(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 220, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 220).Update("models", "vendor/model-a,vendor/model-b").Error)
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 220).Update("models", "multi-upstream-sku").Error)
 	catalogModel := &Model{
 		ModelName: "multi-upstream-sku",
 		Status:    1,
@@ -676,43 +660,18 @@ func TestExplicitModelBindingsAllowSameChannelMultipleUpstreams(t *testing.T) {
 	}
 	require.NoError(t, catalogModel.Insert())
 
-	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 220, UpstreamModel: "vendor/model-a", Enabled: true},
-		{ChannelId: 220, UpstreamModel: "vendor/model-b", Enabled: true},
-	}))
-
-	bindings, err := GetModelBindings(catalogModel.Id)
-	require.NoError(t, err)
-	require.Len(t, bindings, 2)
-	assert.Equal(t, "multi-upstream-sku", bindings[0].ModelName)
-	assert.Equal(t, "multi-upstream-sku", bindings[1].ModelName)
-
-	channelBindings, err := GetChannelModelBindings(220)
-	require.NoError(t, err)
-	require.Len(t, channelBindings, 2)
-	for _, binding := range channelBindings {
-		assert.Equal(t, "multi-upstream-sku", binding.ModelName)
-	}
-
-	selected, err := GetRandomSatisfiedChannel("default", "multi-upstream-sku", 0, "/v1/chat/completions")
-	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Equal(t, 220, selected.Id)
-
-	seen := map[string]bool{}
-	for i := 0; i < 20; i++ {
-		upstreamModel, ok := ResolveModelBindingUpstream("multi-upstream-sku", selected.Id)
-		require.True(t, ok)
-		seen[upstreamModel] = true
-	}
-	assert.Contains(t, seen, "vendor/model-a")
-	assert.Contains(t, seen, "vendor/model-b")
+	err := ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
+		{ChannelId: 220, Enabled: true},
+		{ChannelId: 220, Enabled: true},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bound more than once")
 }
 
-func TestReplaceModelBindingsRejectsUpstreamOutsideChannelModels(t *testing.T) {
+func TestReplaceModelBindingsRejectsModelOutsideChannelModels(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 240, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 240).Update("models", "allowed-upstream").Error)
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 240).Update("models", "allowed-sku").Error)
 
 	catalogModel := &Model{
 		ModelName: "restricted-sku",
@@ -722,63 +681,75 @@ func TestReplaceModelBindingsRejectsUpstreamOutsideChannelModels(t *testing.T) {
 	require.NoError(t, catalogModel.Insert())
 
 	err := ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 240, UpstreamModel: "not-allowed-upstream", Enabled: true},
+		{ChannelId: 240, Enabled: true},
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not in channel 240 restricted models")
 
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 240).Update("models", "restricted-sku").Error)
 	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 240, UpstreamModel: "allowed-upstream", Enabled: true},
+		{ChannelId: 240, Enabled: true},
 	}))
 }
 
-func TestInitChannelCacheInvalidatesPricingCache(t *testing.T) {
+func TestReplaceModelBindingsUsesChannelUpstreamModel(t *testing.T) {
+	resetPricingEndpointTestTables(t)
+	insertPricingEndpointChannel(t, 250, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 250).Update("models", "deepseek-v4-pro").Error)
+
+	catalogModel := &Model{
+		ModelName: "my-alias",
+		Status:    1,
+		NameRule:  NameRuleExact,
+	}
+	require.NoError(t, catalogModel.Insert())
+
+	err := ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
+		{ChannelId: 250, Enabled: true},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not in channel 250 restricted models")
+
+	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
+		{ChannelId: 250, Enabled: true, UpstreamModel: "deepseek-v4-pro"},
+	}))
+
+	bindings, err := GetModelBindings(catalogModel.Id)
+	require.NoError(t, err)
+	require.Len(t, bindings, 1)
+	assert.Equal(t, "deepseek-v4-pro", bindings[0].UpstreamModel)
+	assert.Equal(t, "deepseek-v4-pro", GetBindingUpstreamModel("my-alias", 250))
+}
+
+func TestInvalidatePricingCacheRefreshesCatalogEndpoints(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 
-	insertPricingEndpointChannel(t, 301, constant.ChannelTypeAdvancedCustom, pricingEndpointAdvancedCustomConfig(
-		dto.AdvancedCustomRoute{
-			IncomingPath: "/v1/chat/completions",
-			UpstreamPath: "/v1/chat/completions",
-		},
-	))
+	insertPricingEndpointChannel(t, 301, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointBinding(t, 301, "gemini-3.5-flash")
-	InitChannelCache()
 
 	initial := pricingEndpointTypesByModel(t)
-	require.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAI}, initial["gemini-3.5-flash"])
+	require.Empty(t, initial["gemini-3.5-flash"])
 
-	var channel Channel
-	require.NoError(t, DB.First(&channel, "id = ?", 301).Error)
-	channel.SetOtherSettings(pricingEndpointAdvancedCustomConfig(
-		dto.AdvancedCustomRoute{
-			IncomingPath: "/v1/chat/completions",
-			UpstreamPath: "/v1/chat/completions",
-		},
-		dto.AdvancedCustomRoute{
-			IncomingPath: "/v1/responses",
-			UpstreamPath: "/v1beta/models/{model}:generateContent",
-			Converter:    "openai_responses_to_gemini_generate_content",
-			Models:       []string{"re:^gemini-"},
-		},
-	))
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 301).Update("settings", channel.OtherSettings).Error)
-	InitChannelCache()
+	require.NoError(t, DB.Model(&Model{}).Where("model_name = ?", "gemini-3.5-flash").Update("endpoints", `{
+		"openai": "/v1/chat/completions",
+		"openai-response": "/v1/responses"
+	}`).Error)
 
-	updated := pricingEndpointTypesByModel(t)
+	cached := pricingEndpointTypesFromPricing(GetPricing())
+	require.Empty(t, cached["gemini-3.5-flash"])
+
+	InvalidatePricingCache()
+	updated := pricingEndpointTypesFromPricing(GetPricing())
 	assert.Equal(t, []constant.EndpointType{
 		constant.EndpointTypeOpenAI,
 		constant.EndpointTypeOpenAIResponse,
 	}, updated["gemini-3.5-flash"])
 }
 
-func TestInitChannelCacheInvalidatesStartupPricingBuiltBeforeChannelCache(t *testing.T) {
+func TestCatalogEndpointsDoNotDependOnChannelCache(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 
 	insertPricingEndpointChannel(t, 302, constant.ChannelTypeAdvancedCustom, pricingEndpointAdvancedCustomConfig(
-		dto.AdvancedCustomRoute{
-			IncomingPath: "/v1/chat/completions",
-			UpstreamPath: "/v1/chat/completions",
-		},
 		dto.AdvancedCustomRoute{
 			IncomingPath: "/v1/responses",
 			UpstreamPath: "/v1beta/models/{model}:generateContent",
@@ -787,17 +758,18 @@ func TestInitChannelCacheInvalidatesStartupPricingBuiltBeforeChannelCache(t *tes
 		},
 	))
 	insertPricingEndpointBinding(t, 302, "gemini-3.5-flash")
+	require.NoError(t, DB.Model(&Model{}).Where("model_name = ?", "gemini-3.5-flash").Update("endpoints", `{
+		"openai": "/v1/chat/completions"
+	}`).Error)
+	InvalidatePricingCache()
 
-	staleByModel := pricingEndpointTypesFromPricing(GetPricing())
-	require.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAI}, staleByModel["gemini-3.5-flash"])
+	beforeCache := pricingEndpointTypesFromPricing(GetPricing())
+	require.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAI}, beforeCache["gemini-3.5-flash"])
 
 	InitChannelCache()
 
-	rebuiltByModel := pricingEndpointTypesFromPricing(GetPricing())
-	assert.Equal(t, []constant.EndpointType{
-		constant.EndpointTypeOpenAI,
-		constant.EndpointTypeOpenAIResponse,
-	}, rebuiltByModel["gemini-3.5-flash"])
+	afterCache := pricingEndpointTypesFromPricing(GetPricing())
+	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAI}, afterCache["gemini-3.5-flash"])
 }
 
 func TestCacheUpdateChannelSyncsAdvancedCustomConfig(t *testing.T) {

@@ -19,11 +19,10 @@ const (
 )
 
 type BoundChannel struct {
-	Id            int    `json:"id"`
-	Name          string `json:"name"`
-	Type          int    `json:"type"`
-	UpstreamModel string `json:"upstream_model"`
-	Enabled       bool   `json:"enabled"`
+	Id      int    `json:"id"`
+	Name    string `json:"name"`
+	Type    int    `json:"type"`
+	Enabled bool   `json:"enabled"`
 }
 
 type CatalogStringList []string
@@ -344,16 +343,15 @@ func GetBoundChannelsByModelsMap(modelNames []string) (map[string][]BoundChannel
 		return result, nil
 	}
 	type row struct {
-		Model         string
-		Id            int
-		Name          string
-		Type          int
-		UpstreamModel string
-		Enabled       bool
+		Model   string
+		Id      int
+		Name    string
+		Type    int
+		Enabled bool
 	}
 	var rows []row
 	err := DB.Table("model_bindings").
-		Select("models.model_name AS model, channels.id, channels.name, channels.type, model_bindings.upstream_model, model_bindings.enabled").
+		Select("models.model_name AS model, channels.id, channels.name, channels.type, model_bindings.enabled").
 		Joins("JOIN models ON models.id = model_bindings.model_id").
 		Joins("JOIN channels ON channels.id = model_bindings.channel_id").
 		Where("models.model_name IN ? AND model_bindings.deleted = ?", modelNames, false).
@@ -364,11 +362,10 @@ func GetBoundChannelsByModelsMap(modelNames []string) (map[string][]BoundChannel
 	}
 	for _, r := range rows {
 		result[r.Model] = append(result[r.Model], BoundChannel{
-			Id:            r.Id,
-			Name:          r.Name,
-			Type:          r.Type,
-			UpstreamModel: r.UpstreamModel,
-			Enabled:       r.Enabled,
+			Id:      r.Id,
+			Name:    r.Name,
+			Type:    r.Type,
+			Enabled: r.Enabled,
 		})
 	}
 	return result, nil

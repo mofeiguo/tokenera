@@ -1,4 +1,4 @@
-import { Loader2, Search, Info, ChevronDown } from 'lucide-react'
+import { Loader2, Search, ChevronDown } from 'lucide-react'
 import { useState, useEffect, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -14,17 +14,11 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { useQueryClient } from '@/lib/query'
 
 import { fetchUpstreamModels, updateChannel } from '../../api'
 import {
   categorizeModels,
-  categorizeModelsWithRedirect,
   channelsQueryKeys,
   normalizeModelName,
   parseModelsString,
@@ -38,8 +32,6 @@ function normalizeModelNameList(models: readonly string[]): string[] {
 type FetchModelsDialogBaseProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  redirectModels?: string[]
-  redirectSourceModels?: string[]
   customFetcher?: () => Promise<string[]>
   channelName?: string | null
 }
@@ -60,8 +52,6 @@ export function FetchModelsDialog({
   open,
   onOpenChange,
   onModelsSelected,
-  redirectModels = [],
-  redirectSourceModels = [],
   customFetcher,
   existingModelsOverride,
   channelName,
@@ -83,36 +73,24 @@ export function FetchModelsDialog({
     [existingModelsOverride, activeChannel?.models]
   )
 
-  // Categorize models with redirect models
-  const modelCategories = useMemo(
-    () => categorizeModelsWithRedirect(existingModels, redirectModels),
-    [existingModels, redirectModels]
+  const classificationSet = useMemo(
+    () => new Set(normalizeModelNameList(existingModels)),
+    [existingModels]
   )
-
-  const { classificationSet, redirectOnlySet } = modelCategories
 
   const fetchedModelSet = useMemo(
     () => new Set(normalizeModelNameList(fetchedModels)),
     [fetchedModels]
   )
 
-  // Source keys in model_mapping are aliases, not real upstream IDs, so we
-  // must skip them when computing "removed upstream" entries to avoid false
-  // positives.
-  const redirectSourceKeysSet = useMemo(
-    () => new Set(normalizeModelNameList(redirectSourceModels)),
-    [redirectSourceModels]
-  )
-
   const removedModels = useMemo(() => {
     const kw = searchKeyword.toLowerCase().trim()
     return normalizeModelNameList(selectedModels).filter((model) => {
       if (fetchedModelSet.has(model)) return false
-      if (redirectSourceKeysSet.has(model)) return false
       if (!kw) return true
       return model.toLowerCase().includes(kw)
     })
-  }, [fetchedModelSet, redirectSourceKeysSet, searchKeyword, selectedModels])
+  }, [fetchedModelSet, searchKeyword, selectedModels])
 
   useEffect(() => {
     if (open && (activeChannel || customFetcher)) {
@@ -305,16 +283,6 @@ export function FetchModelsDialog({
                   className='flex cursor-pointer items-center gap-1.5 text-sm font-normal'
                 >
                   <span>{model}</span>
-                  {redirectOnlySet.has(normalizeModelName(model)) && (
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={<Info className='h-3.5 w-3.5 text-amber-500' />}
-                      />
-                      <TooltipContent>
-                        {t('From model redirect, not yet added to models list')}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
                 </Label>
               </div>
             ))}
@@ -444,7 +412,7 @@ export function FetchModelsDialog({
             >
               <p className='text-muted-foreground text-xs'>
                 {t(
-                  'These models are still in your selection but were not returned by the upstream listing. Entries that are only model_mapping source aliases are omitted. Toggle to adjust before saving.'
+                  'These models are still in your selection but were not returned by the upstream listing. Toggle to adjust before saving.'
                 )}
               </p>
               {renderModelCategory(t('Removed'), removedModels)}

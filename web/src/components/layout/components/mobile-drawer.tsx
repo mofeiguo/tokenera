@@ -55,12 +55,12 @@ function BrandLogo({
   return (
     <Link
       to={homeUrl}
-      className='flex items-center gap-2 text-xl font-bold'
+      className='inline-flex items-center gap-2 text-xl leading-none font-bold tracking-tight'
       onClick={onClick}
     >
-      <div className='relative h-6 w-6'>
+      <div className='relative size-[1em] overflow-hidden rounded-[0.2em]'>
         {loading || !logoLoaded ? (
-          <Skeleton className='absolute inset-0 rounded-full' />
+          <Skeleton className='absolute inset-0 rounded-lg' />
         ) : null}
         {displayLogo}
       </div>

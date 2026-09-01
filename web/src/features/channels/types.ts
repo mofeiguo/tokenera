@@ -53,14 +53,12 @@ export const channelSchema = z.object({
   models: z.string().default(''),
   group: z.string().default('default'),
   used_quota: z.number().default(0),
-  model_mapping: z.string().nullish(),
   status_code_mapping: z.string().nullish(),
   priority: z.number().nullish(),
   auto_ban: z.number().nullish(),
   other_info: z.string().default(''),
   tag: z.string().nullish(),
   setting: z.string().nullish(),
-  param_override: z.string().nullish(),
   header_override: z.string().nullish(),
   remark: z.string().default(''),
   max_input_tokens: z.number().default(0),
@@ -83,25 +81,13 @@ export interface ChannelSettings {
   force_format?: boolean
   thinking_to_content?: boolean
   proxy?: string
-  pass_through_body_enabled?: boolean
-  system_prompt?: string
-  system_prompt_override?: boolean
   http_protocol?: 'auto' | 'http1' | string
   http2_connection_shards?: number
 }
 
 export interface ChannelOtherSettings {
-  azure_responses_version?: string
-  vertex_key_type?: 'json' | 'api_key'
   openrouter_enterprise?: boolean
   aws_key_type?: 'ak_sk' | 'api_key'
-  allow_service_tier?: boolean
-  disable_store?: boolean
-  allow_safety_identifier?: boolean
-  allow_include_obfuscation?: boolean
-  allow_inference_geo?: boolean
-  allow_speed?: boolean
-  claude_beta_query?: boolean
   disable_task_polling_sleep?: boolean
   upstream_model_update_check_enabled?: boolean
   upstream_model_update_auto_sync_enabled?: boolean
@@ -331,7 +317,6 @@ export interface TagOperationParams {
   new_tag?: string
   priority?: number
   weight?: number
-  model_mapping?: string
   models?: string
   groups?: string
 }
@@ -348,7 +333,6 @@ export interface ChannelFormData {
   openai_organization?: string
   models: string
   group: string
-  model_mapping?: string
   priority?: number
   weight?: number
   test_model?: string
@@ -358,7 +342,6 @@ export interface ChannelFormData {
   tag?: string
   remark?: string
   setting?: string
-  param_override?: string
   header_override?: string
   settings?: string
   other?: string

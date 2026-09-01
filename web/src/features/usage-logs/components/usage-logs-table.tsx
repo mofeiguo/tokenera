@@ -202,7 +202,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         isCommon ? (
           <CommonLogsFilterBar table={table} />
         ) : (
-          <TaskLogsFilterBar table={table} logCategory={logCategory} />
+          <TaskLogsFilterBar table={table} logCategory='task' />
         )
       }
       renderRow={(row) => {

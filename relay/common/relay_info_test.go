@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -157,6 +158,17 @@ func TestGenRelayInfoCapturesRequestReasoningEffort(t *testing.T) {
 	}
 }
 
+func TestGenRelayInfoUsesModelSuffixEffortForBilling(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("POST", "/v1/messages", nil)
+	ctx.Set("original_model", "claude-opus-4-7-high")
+
+	info, err := GenRelayInfo(ctx, types.RelayFormatClaude, &dto.ClaudeRequest{Model: "claude-opus-4-7-high"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "high", info.ReasoningEffort)
+}
+
 func TestInitChannelMetaRestoresRequestReasoningEffortForRetry(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -175,4 +187,54 @@ func TestInitChannelMetaRestoresRequestReasoningEffortForRetry(t *testing.T) {
 	info.SetReasoningEffort("low")
 	info.InitChannelMeta(ctx)
 	assert.Equal(t, "max", info.ReasoningEffort)
+}
+
+func TestGenRelayInfoResponsesRejectsNilRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("POST", "/pg/responses", nil)
+
+	_, err := GenRelayInfo(ctx, types.RelayFormatOpenAIResponses, nil, nil)
+	require.EqualError(t, err, "request is not a OpenAIResponsesRequest")
+}
+
+func TestIncomingEndpointType(t *testing.T) {
+	tests := []struct {
+		name       string
+		format     types.RelayFormat
+		mode       int
+		want       constant.EndpointType
+		wantMapped bool
+	}{
+		{name: "chat", format: types.RelayFormatOpenAI, want: constant.EndpointTypeOpenAI, wantMapped: true},
+		{name: "responses", format: types.RelayFormatOpenAIResponses, want: constant.EndpointTypeOpenAIResponse, wantMapped: true},
+		{name: "messages", format: types.RelayFormatClaude, want: constant.EndpointTypeAnthropic, wantMapped: true},
+		{name: "gemini", format: types.RelayFormatGemini, want: constant.EndpointTypeGemini, wantMapped: true},
+		{name: "embeddings", format: types.RelayFormatEmbedding, want: constant.EndpointTypeEmbeddings, wantMapped: true},
+		{name: "image", format: types.RelayFormatOpenAIImage, want: constant.EndpointTypeImageGeneration, wantMapped: true},
+		{name: "audio skipped", format: types.RelayFormatOpenAIAudio, wantMapped: false},
+		{name: "realtime skipped", format: types.RelayFormatOpenAIRealtime, wantMapped: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &RelayInfo{RelayFormat: tt.format, RelayMode: tt.mode}
+			got, ok := info.IncomingEndpointType()
+			assert.Equal(t, tt.wantMapped, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestRewriteRequestURLPathModel(t *testing.T) {
+	assert.Equal(
+		t,
+		"/v1beta/models/gemini-2.5-flash:streamGenerateContent",
+		RewriteRequestURLPathModel(
+			"/v1beta/models/my-alias:streamGenerateContent",
+			"my-alias",
+			"gemini-2.5-flash",
+		),
+	)
+	assert.Equal(t, "/v1/messages", RewriteRequestURLPathModel("/v1/messages", "my-alias", "claude-sonnet"))
 }

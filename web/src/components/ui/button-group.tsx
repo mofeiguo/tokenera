@@ -16,10 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { mergeProps } from '@base-ui/react/merge-props'
-import { useRender } from '@base-ui/react/use-render'
+import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
+import type { ReactNode } from 'react'
 
+import { hasAsChild, mergeRenderChild } from '@/components/ui/compose-as-child'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 
@@ -58,25 +59,28 @@ function ButtonGroup({
 
 function ButtonGroupText({
   className,
+  asChild = false,
   render,
+  children,
   ...props
-}: useRender.ComponentProps<'div'>) {
-  return useRender({
-    defaultTagName: 'div',
-    props: mergeProps<'div'>(
-      {
-        className: cn(
-          "flex items-center gap-2 rounded-lg border bg-muted px-2.5 text-sm font-medium [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
-          className
-        ),
-      },
-      props
-    ),
-    render,
-    state: {
-      slot: 'button-group-text',
-    },
-  })
+}: React.ComponentProps<'div'> & {
+  asChild?: boolean
+  render?: ReactNode
+}) {
+  const Comp = hasAsChild(asChild, render) ? Slot : 'div'
+
+  return (
+    <Comp
+      data-slot='button-group-text'
+      className={cn(
+        "flex items-center gap-2 rounded-lg border bg-muted px-2.5 text-sm font-medium [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
+        className
+      )}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </Comp>
+  )
 }
 
 function ButtonGroupSeparator({

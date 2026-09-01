@@ -10,52 +10,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAdvancedCustomValidateResponsesToChatConverterPath(t *testing.T) {
-	valid := &AdvancedCustomConfig{
+func TestAdvancedCustomValidateCoercesLegacyConvertersToNone(t *testing.T) {
+	config := &AdvancedCustomConfig{
 		Routes: []AdvancedCustomRoute{
 			{
 				IncomingPath: "/v1/responses",
 				UpstreamPath: "/v1/chat/completions",
 				Converter:    advancedCustomConverterOpenAIResponsesToOpenAIChat,
 			},
-		},
-	}
-	require.NoError(t, valid.Validate())
-
-	validGemini := &AdvancedCustomConfig{
-		Routes: []AdvancedCustomRoute{
 			{
-				IncomingPath: "/v1/responses",
-				UpstreamPath: "/v1beta/models/{model}:generateContent",
-				Converter:    advancedCustomConverterOpenAIResponsesToGemini,
+				IncomingPath: "/v1/alpha/search",
+				UpstreamPath: "/v1/alpha/search",
+				Converter:    advancedCustomConverterOpenAIChatToGeminiContent,
 			},
 		},
 	}
-	require.NoError(t, validGemini.Validate())
-
-	tests := []struct {
-		name         string
-		incomingPath string
-	}{
-		{name: "chat completions", incomingPath: "/v1/chat/completions"},
-		{name: "responses compact", incomingPath: "/v1/responses/compact"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := &AdvancedCustomConfig{
-				Routes: []AdvancedCustomRoute{
-					{
-						IncomingPath: tt.incomingPath,
-						UpstreamPath: "/v1/chat/completions",
-						Converter:    advancedCustomConverterOpenAIResponsesToOpenAIChat,
-					},
-				},
-			}
-			err := config.Validate()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "converter does not match incoming_path")
-		})
+	require.NoError(t, config.Validate())
+	for _, route := range config.Routes {
+		assert.Equal(t, advancedCustomConverterNone, route.Converter)
 	}
 }
 
@@ -86,17 +58,6 @@ func TestAdvancedCustomValidateModelListRouteConstraints(t *testing.T) {
 				},
 			},
 			want: "models must be empty",
-		},
-		{
-			name: "converter",
-			routes: []AdvancedCustomRoute{
-				{
-					IncomingPath: AdvancedCustomModelListPath,
-					UpstreamPath: "/v1/models",
-					Converter:    advancedCustomConverterOpenAIChatToOpenAIResponses,
-				},
-			},
-			want: "converter must be none",
 		},
 		{
 			name: "model placeholder",
@@ -174,15 +135,6 @@ func TestAdvancedCustomValidateBalanceRouteConstraints(t *testing.T) {
 				Models:       []string{"gpt-4o"},
 			}},
 			want: "models must be empty",
-		},
-		{
-			name: "converter",
-			routes: []AdvancedCustomRoute{{
-				IncomingPath: AdvancedCustomBalancePath,
-				UpstreamPath: "/provider/balance",
-				Converter:    advancedCustomConverterOpenAIChatToOpenAIResponses,
-			}},
-			want: "converter must be none",
 		},
 		{
 			name: "model placeholder",
@@ -324,15 +276,15 @@ func TestAdvancedCustomMatchPathForModel(t *testing.T) {
 
 	geminiRoute, ok := config.MatchPathForModel("/v1/responses", "gemini-2.5-flash")
 	require.True(t, ok)
-	assert.Equal(t, advancedCustomConverterOpenAIResponsesToGemini, geminiRoute.Converter)
+	assert.Equal(t, "/v1beta/models/{model}:generateContent", geminiRoute.UpstreamPath)
 
 	chatRoute, ok := config.MatchPathForModel("/v1/responses", "gpt-4o")
 	require.True(t, ok)
-	assert.Equal(t, advancedCustomConverterOpenAIResponsesToOpenAIChat, chatRoute.Converter)
+	assert.Equal(t, "/v1/chat/completions", chatRoute.UpstreamPath)
 
 	fallbackRoute, ok := config.MatchPathForModel("/v1/responses", "unknown-model")
 	require.True(t, ok)
-	assert.Equal(t, advancedCustomConverterNone, fallbackRoute.Converter)
+	assert.Equal(t, "/v1/responses", fallbackRoute.UpstreamPath)
 }
 
 func TestAdvancedCustomMatchPathForModelRegexRules(t *testing.T) {
@@ -361,15 +313,15 @@ func TestAdvancedCustomMatchPathForModelRegexRules(t *testing.T) {
 
 	geminiRoute, ok := config.MatchPathForModel("/v1/responses", "gemini-2.5-flash")
 	require.True(t, ok)
-	assert.Equal(t, advancedCustomConverterOpenAIResponsesToGemini, geminiRoute.Converter)
+	assert.Equal(t, "/v1beta/models/{model}:generateContent", geminiRoute.UpstreamPath)
 
 	chatRoute, ok := config.MatchPathForModel("/v1/responses", "oai-test")
 	require.True(t, ok)
-	assert.Equal(t, advancedCustomConverterOpenAIResponsesToOpenAIChat, chatRoute.Converter)
+	assert.Equal(t, "/v1/chat/completions", chatRoute.UpstreamPath)
 
 	fallbackRoute, ok := config.MatchPathForModel("/v1/responses", "gpt-4o")
 	require.True(t, ok)
-	assert.Equal(t, advancedCustomConverterNone, fallbackRoute.Converter)
+	assert.Equal(t, "/v1/responses", fallbackRoute.UpstreamPath)
 }
 
 func TestAdvancedCustomRouteModelRegexRulesAreCachedCompiled(t *testing.T) {
@@ -490,7 +442,7 @@ func TestAdvancedCustomMatchPathForModelUsesFirstMatchingRegexRoute(t *testing.T
 
 	route, ok := config.MatchPathForModel("/v1/responses", "gemini-2.5-flash")
 	require.True(t, ok)
-	assert.Equal(t, advancedCustomConverterOpenAIResponsesToGemini, route.Converter)
+	assert.Equal(t, "/v1beta/models/{model}:generateContent", route.UpstreamPath)
 }
 
 func TestAdvancedCustomSupportedEndpointTypesForModel(t *testing.T) {
@@ -543,46 +495,21 @@ func TestAdvancedCustomSupportedEndpointTypesForModel(t *testing.T) {
 	}, config.SupportedEndpointTypesForModel("other-model"))
 }
 
-func TestAdvancedCustomValidateAlphaSearchConverterPath(t *testing.T) {
+func TestAdvancedCustomValidateAlphaSearchAllowsLegacyConverter(t *testing.T) {
 	valid := &AdvancedCustomConfig{
 		Routes: []AdvancedCustomRoute{
 			{
 				IncomingPath: "/v1/alpha/search",
 				UpstreamPath: "/v1/alpha/search",
-				Converter:    advancedCustomConverterNone,
+				Converter:    advancedCustomConverterOpenAIChatToOpenAIResponses,
 			},
 		},
 	}
 	require.NoError(t, valid.Validate())
+	assert.Equal(t, advancedCustomConverterNone, valid.Routes[0].Converter)
 	assert.Equal(t, []types.EndpointType{
 		types.EndpointTypeOpenAIAlphaSearch,
 	}, valid.SupportedEndpointTypesForModel("gpt-5.1"))
-
-	nonNoneConverters := []string{
-		advancedCustomConverterClaudeMessagesToOpenAIChat,
-		advancedCustomConverterOpenAIChatToClaudeMessages,
-		advancedCustomConverterOpenAIChatToOpenAIResponses,
-		advancedCustomConverterOpenAIResponsesToOpenAIChat,
-		advancedCustomConverterOpenAIResponsesToGemini,
-		advancedCustomConverterGeminiContentToOpenAIChat,
-		advancedCustomConverterOpenAIChatToGeminiContent,
-	}
-	for _, converter := range nonNoneConverters {
-		t.Run(converter, func(t *testing.T) {
-			config := &AdvancedCustomConfig{
-				Routes: []AdvancedCustomRoute{
-					{
-						IncomingPath: "/v1/alpha/search",
-						UpstreamPath: "/v1/alpha/search",
-						Converter:    converter,
-					},
-				},
-			}
-			err := config.Validate()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "converter does not match incoming_path")
-		})
-	}
 }
 
 func TestChannelSettingsHTTPTransportJSONRoundTrip(t *testing.T) {

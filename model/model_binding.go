@@ -14,12 +14,12 @@ import (
 
 type ModelBinding struct {
 	Id            int    `json:"id"`
-	ModelId       int    `json:"model_id" gorm:"not null;uniqueIndex:uk_model_channel_upstream,priority:1;index"`
-	ChannelId     int    `json:"channel_id" gorm:"not null;uniqueIndex:uk_model_channel_upstream,priority:2;index"`
-	UpstreamModel string `json:"upstream_model" gorm:"type:varchar(255);not null;uniqueIndex:uk_model_channel_upstream,priority:3"`
+	ModelId       int    `json:"model_id" gorm:"not null;uniqueIndex:uk_model_channel,priority:1;index"`
+	ChannelId     int    `json:"channel_id" gorm:"not null;uniqueIndex:uk_model_channel,priority:2;index"`
 	Priority      int64  `json:"priority" gorm:"bigint;default:0;index"`
 	Weight        int    `json:"weight" gorm:"default:0"`
 	Enabled       bool   `json:"enabled" gorm:"index"`
+	UpstreamModel string `json:"upstream_model" gorm:"size:128;column:upstream_model"`
 	Deleted       bool   `json:"-" gorm:"index"`
 	CreatedTime   int64  `json:"created_time" gorm:"bigint"`
 	UpdatedTime   int64  `json:"updated_time" gorm:"bigint"`
@@ -33,10 +33,10 @@ type ModelBinding struct {
 
 type ModelBindingInput struct {
 	ChannelId     int    `json:"channel_id"`
-	UpstreamModel string `json:"upstream_model"`
 	Priority      int64  `json:"priority"`
 	Weight        int    `json:"weight"`
 	Enabled       bool   `json:"enabled"`
+	UpstreamModel string `json:"upstream_model"`
 }
 
 func GetModelBindings(modelId int) ([]ModelBinding, error) {
@@ -61,7 +61,7 @@ func GetChannelModelBindings(channelId int) ([]ModelBinding, error) {
 		Joins("JOIN models ON models.id = model_bindings.model_id").
 		Joins("JOIN channels ON channels.id = model_bindings.channel_id").
 		Where("model_bindings.channel_id = ? AND model_bindings.deleted = ?", channelId, false).
-		Order("model_bindings.upstream_model ASC, models.model_name ASC").
+		Order("models.model_name ASC").
 		Scan(&bindings).Error
 	if err != nil {
 		return nil, err
@@ -103,32 +103,28 @@ func ReplaceModelBindings(modelId int, inputs []ModelBindingInput) error {
 	}
 
 	normalized := make([]ModelBindingInput, 0, len(inputs))
-	seenBindings := make(map[string]struct{}, len(inputs))
-	channelIds := make([]int, 0, len(inputs))
 	seenChannelIds := make(map[int]struct{}, len(inputs))
+	channelIds := make([]int, 0, len(inputs))
 	for _, input := range inputs {
 		if input.ChannelId <= 0 {
 			return fmt.Errorf("channel_id must be positive")
 		}
-		input.UpstreamModel = strings.TrimSpace(input.UpstreamModel)
-		if input.UpstreamModel == "" {
-			input.UpstreamModel = catalogModel.ModelName
+		if _, exists := seenChannelIds[input.ChannelId]; exists {
+			return fmt.Errorf("channel %d is bound more than once", input.ChannelId)
 		}
-		key := fmt.Sprintf("%d\n%s", input.ChannelId, input.UpstreamModel)
-		if _, exists := seenBindings[key]; exists {
-			return fmt.Errorf("channel %d upstream model %s is bound more than once", input.ChannelId, input.UpstreamModel)
-		}
-		seenBindings[key] = struct{}{}
-		if _, exists := seenChannelIds[input.ChannelId]; !exists {
-			seenChannelIds[input.ChannelId] = struct{}{}
-			channelIds = append(channelIds, input.ChannelId)
-		}
+		seenChannelIds[input.ChannelId] = struct{}{}
+		channelIds = append(channelIds, input.ChannelId)
 		if input.Weight < 0 {
 			return fmt.Errorf("weight must be non-negative")
 		}
+		upstreamModel := strings.TrimSpace(input.UpstreamModel)
+		if upstreamModel == "" {
+			upstreamModel = catalogModel.ModelName
+		}
+		input.UpstreamModel = upstreamModel
 		normalized = append(normalized, input)
 	}
-	allowedUpstreamByChannel := make(map[int]map[string]struct{}, len(channelIds))
+	allowedModelsByChannel := make(map[int]map[string]struct{}, len(channelIds))
 	if len(channelIds) > 0 {
 		var channels []Channel
 		if err := DB.Select("id", "models").Where("id IN ?", channelIds).Find(&channels).Error; err != nil {
@@ -142,12 +138,12 @@ func ReplaceModelBindings(modelId int, inputs []ModelBindingInput) error {
 			for _, modelName := range splitNormalizedList(channel.Models) {
 				allowed[modelName] = struct{}{}
 			}
-			allowedUpstreamByChannel[channel.Id] = allowed
+			allowedModelsByChannel[channel.Id] = allowed
 		}
 	}
 	for _, input := range normalized {
-		if _, ok := allowedUpstreamByChannel[input.ChannelId][input.UpstreamModel]; !ok {
-			return fmt.Errorf("upstream model %s is not in channel %d restricted models", input.UpstreamModel, input.ChannelId)
+		if _, ok := allowedModelsByChannel[input.ChannelId][input.UpstreamModel]; !ok {
+			return fmt.Errorf("model %s is not in channel %d restricted models", input.UpstreamModel, input.ChannelId)
 		}
 	}
 
@@ -164,10 +160,10 @@ func ReplaceModelBindings(modelId int, inputs []ModelBindingInput) error {
 			binding := ModelBinding{
 				ModelId:       modelId,
 				ChannelId:     input.ChannelId,
-				UpstreamModel: input.UpstreamModel,
 				Priority:      input.Priority,
 				Weight:        input.Weight,
 				Enabled:       input.Enabled,
+				UpstreamModel: input.UpstreamModel,
 				Deleted:       false,
 				CreatedTime:   now,
 				UpdatedTime:   now,
@@ -176,14 +172,14 @@ func ReplaceModelBindings(modelId int, inputs []ModelBindingInput) error {
 				Columns: []clause.Column{
 					{Name: "model_id"},
 					{Name: "channel_id"},
-					{Name: "upstream_model"},
 				},
 				DoUpdates: clause.Assignments(map[string]any{
-					"priority":     input.Priority,
-					"weight":       input.Weight,
-					"enabled":      input.Enabled,
-					"deleted":      false,
-					"updated_time": now,
+					"priority":       input.Priority,
+					"weight":         input.Weight,
+					"enabled":        input.Enabled,
+					"upstream_model": input.UpstreamModel,
+					"deleted":        false,
+					"updated_time":   now,
 				}),
 			}).Create(&binding).Error; err != nil {
 				return err
@@ -198,73 +194,59 @@ func ReplaceModelBindings(modelId int, inputs []ModelBindingInput) error {
 	return err
 }
 
+func GetBindingUpstreamModel(catalogModel string, channelId int) string {
+	catalogModel = strings.TrimSpace(catalogModel)
+	if catalogModel == "" || channelId <= 0 {
+		return catalogModel
+	}
+	if common.MemoryCacheEnabled {
+		channelSyncLock.RLock()
+		name := lookupBindingUpstreamModel(catalogModel, channelId)
+		channelSyncLock.RUnlock()
+		if name != "" {
+			return name
+		}
+		return catalogModel
+	}
+	return getBindingUpstreamModelFromDB(catalogModel, channelId)
+}
+
+func getBindingUpstreamModelFromDB(catalogModel string, channelId int) string {
+	var row struct {
+		UpstreamModel string
+		ModelName     string
+	}
+	err := DB.Table("model_bindings").
+		Select("model_bindings.upstream_model, models.model_name").
+		Joins("JOIN models ON models.id = model_bindings.model_id").
+		Where("models.model_name = ? AND model_bindings.channel_id = ? AND model_bindings.enabled = ? AND model_bindings.deleted = ?", catalogModel, channelId, true, false).
+		Limit(1).
+		Scan(&row).Error
+	if err != nil {
+		return catalogModel
+	}
+	if strings.TrimSpace(row.UpstreamModel) != "" {
+		return strings.TrimSpace(row.UpstreamModel)
+	}
+	if row.ModelName != "" {
+		return row.ModelName
+	}
+	return catalogModel
+}
+
 func EnsureModelBindingIndexes() error {
 	migrator := DB.Migrator()
-	if migrator.HasIndex(&ModelBinding{}, "uk_model_channel") {
-		if err := migrator.DropIndex(&ModelBinding{}, "uk_model_channel"); err != nil {
+	if migrator.HasIndex(&ModelBinding{}, "uk_model_channel_upstream") {
+		if err := migrator.DropIndex(&ModelBinding{}, "uk_model_channel_upstream"); err != nil {
 			return err
 		}
 	}
-	if !migrator.HasIndex(&ModelBinding{}, "uk_model_channel_upstream") {
-		if err := migrator.CreateIndex(&ModelBinding{}, "uk_model_channel_upstream"); err != nil {
+	if !migrator.HasIndex(&ModelBinding{}, "uk_model_channel") {
+		if err := migrator.CreateIndex(&ModelBinding{}, "uk_model_channel"); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func ResolveModelBindingUpstream(modelName string, channelId int) (string, bool) {
-	return ResolveModelBindingUpstreamForGroup(modelName, channelId, "")
-}
-
-func ResolveModelBindingUpstreamForGroup(modelName string, channelId int, _ string) (string, bool) {
-	channelSyncLock.RLock()
-	if upstreamByChannel, ok := model2channel2upstream[modelName]; ok {
-		upstreams, found := upstreamByChannel[channelId]
-		channelSyncLock.RUnlock()
-		if found {
-			return pickUpstreamModel(upstreams)
-		}
-	} else {
-		channelSyncLock.RUnlock()
-	}
-
-	loadUpstreams := func(name string) []string {
-		var rows []struct {
-			UpstreamModel string
-		}
-		err := DB.Table("model_bindings").
-			Select("model_bindings.upstream_model").
-			Joins("JOIN models ON models.id = model_bindings.model_id").
-			Where("models.model_name = ? AND model_bindings.channel_id = ? AND model_bindings.enabled = ? AND model_bindings.deleted = ?", name, channelId, true, false).
-			Find(&rows).Error
-		if err != nil {
-			return nil
-		}
-		upstreams := make([]string, 0, len(rows))
-		for _, row := range rows {
-			upstreams = append(upstreams, row.UpstreamModel)
-		}
-		return upstreams
-	}
-	if upstreams := loadUpstreams(modelName); len(upstreams) > 0 {
-		return pickUpstreamModel(upstreams)
-	}
-	normalized := ratio_setting.FormatMatchingModelName(modelName)
-	if normalized == "" || normalized == modelName {
-		return "", false
-	}
-	return pickUpstreamModel(loadUpstreams(normalized))
-}
-
-func pickUpstreamModel(upstreams []string) (string, bool) {
-	if len(upstreams) == 0 {
-		return "", false
-	}
-	if len(upstreams) == 1 {
-		return upstreams[0], true
-	}
-	return upstreams[common.GetRandomInt(len(upstreams))], true
 }
 
 type bindingChannelCandidate struct {

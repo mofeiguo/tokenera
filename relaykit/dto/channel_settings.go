@@ -11,12 +11,9 @@ import (
 )
 
 type ChannelSettings struct {
-	ForceFormat            bool   `json:"force_format,omitempty"`
-	ThinkingToContent      bool   `json:"thinking_to_content,omitempty"`
-	Proxy                  string `json:"proxy"`
-	PassThroughBodyEnabled bool   `json:"pass_through_body_enabled,omitempty"`
-	SystemPrompt           string `json:"system_prompt,omitempty"`
-	SystemPromptOverride   bool   `json:"system_prompt_override,omitempty"`
+	ForceFormat       bool   `json:"force_format,omitempty"`
+	ThinkingToContent bool   `json:"thinking_to_content,omitempty"`
+	Proxy             string `json:"proxy"`
 	// HTTPProtocol controls outbound HTTP version negotiation for this channel.
 	// Accepted values: "", "auto" (default), "http1".
 	HTTPProtocol string `json:"http_protocol,omitempty"`
@@ -51,13 +48,6 @@ func (s *ChannelSettings) ValidateHTTPTransport() error {
 	return nil
 }
 
-type VertexKeyType string
-
-const (
-	VertexKeyTypeJSON   VertexKeyType = "json"
-	VertexKeyTypeAPIKey VertexKeyType = "api_key"
-)
-
 type AwsKeyType string
 
 const (
@@ -66,16 +56,7 @@ const (
 )
 
 type ChannelOtherSettings struct {
-	AzureResponsesVersion                 string                `json:"azure_responses_version,omitempty"`
-	VertexKeyType                         VertexKeyType         `json:"vertex_key_type,omitempty"` // "json" or "api_key"
 	OpenRouterEnterprise                  *bool                 `json:"openrouter_enterprise,omitempty"`
-	ClaudeBetaQuery                       bool                  `json:"claude_beta_query,omitempty"`          // Claude 渠道是否强制追加 ?beta=true
-	AllowServiceTier                      bool                  `json:"allow_service_tier,omitempty"`         // 是否允许 service_tier 透传（默认过滤以避免额外计费）
-	AllowInferenceGeo                     bool                  `json:"allow_inference_geo,omitempty"`        // 是否允许 inference_geo 透传（仅 Claude，默认过滤以满足数据驻留合规
-	AllowSpeed                            bool                  `json:"allow_speed,omitempty"`                // 是否允许 speed 透传（仅 Claude，默认过滤以避免意外切换推理速度模式）
-	AllowSafetyIdentifier                 bool                  `json:"allow_safety_identifier,omitempty"`    // 是否允许 safety_identifier 透传（默认过滤以保护用户隐私）
-	DisableStore                          bool                  `json:"disable_store,omitempty"`              // 是否禁用 store 透传（默认允许透传，禁用后可能导致 Codex 无法使用）
-	AllowIncludeObfuscation               bool                  `json:"allow_include_obfuscation,omitempty"`  // 是否允许 stream_options.include_obfuscation 透传（默认过滤以避免关闭流混淆保护）
 	DisableTaskPollingSleep               bool                  `json:"disable_task_polling_sleep,omitempty"` // 是否跳过异步任务轮询间隔
 	AwsKeyType                            AwsKeyType            `json:"aws_key_type,omitempty"`
 	UpstreamModelUpdateCheckEnabled       bool                  `json:"upstream_model_update_check_enabled,omitempty"`        // 是否检测上游模型更新
@@ -352,19 +333,8 @@ func matchAdvancedCustomIncomingPathTemplate(configuredPath string, requestPath 
 }
 
 func IsAdvancedCustomConverterAllowed(converter string) bool {
-	switch converter {
-	case advancedCustomConverterNone,
-		advancedCustomConverterClaudeMessagesToOpenAIChat,
-		advancedCustomConverterOpenAIChatToClaudeMessages,
-		advancedCustomConverterOpenAIChatToOpenAIResponses,
-		advancedCustomConverterOpenAIResponsesToOpenAIChat,
-		advancedCustomConverterOpenAIResponsesToGemini,
-		advancedCustomConverterGeminiContentToOpenAIChat,
-		advancedCustomConverterOpenAIChatToGeminiContent:
-		return true
-	default:
-		return false
-	}
+	converter = strings.TrimSpace(converter)
+	return converter == "" || converter == advancedCustomConverterNone
 }
 
 func (c *AdvancedCustomConfig) Validate() error {
@@ -382,10 +352,10 @@ func (c *AdvancedCustomConfig) Validate() error {
 		route := c.Routes[i]
 		route.IncomingPath = strings.TrimSpace(route.IncomingPath)
 		upstreamPath := strings.TrimSpace(route.UpstreamPath)
-		route.Converter = strings.TrimSpace(route.Converter)
-		if route.Converter == "" {
-			route.Converter = advancedCustomConverterNone
-		}
+		// Live relay no longer rewrites the body; keep stored converters only as
+		// a no-op so existing channel JSON still validates.
+		route.Converter = advancedCustomConverterNone
+		c.Routes[i].Converter = advancedCustomConverterNone
 
 		if route.IncomingPath == "" {
 			return fmt.Errorf("advanced_custom.advanced_routes[%d].incoming_path is required", i)
@@ -431,12 +401,6 @@ func (c *AdvancedCustomConfig) Validate() error {
 			return err
 		}
 
-		if !IsAdvancedCustomConverterAllowed(route.Converter) {
-			return fmt.Errorf("advanced_custom.advanced_routes[%d].converter is not registered: %s", i, route.Converter)
-		}
-		if err := validateAdvancedCustomConverterPath(i, route.IncomingPath, route.Converter); err != nil {
-			return err
-		}
 		if err := validateAdvancedCustomRouteAuth(i, route.Auth); err != nil {
 			return err
 		}
@@ -534,42 +498,6 @@ func validateAdvancedCustomUpstreamTarget(index int, upstreamPath string) error 
 		return fmt.Errorf("advanced_custom.advanced_routes[%d].upstream_path must use http or https", index)
 	}
 	return nil
-}
-
-func validateAdvancedCustomConverterPath(index int, incomingPath string, converter string) error {
-	if incomingPath == advancedCustomEndpointPathOpenAIAlphaSearch {
-		if converter == advancedCustomConverterNone {
-			return nil
-		}
-		return fmt.Errorf("advanced_custom.advanced_routes[%d].converter does not match incoming_path: %s", index, converter)
-	}
-	switch converter {
-	case advancedCustomConverterNone:
-		return nil
-	case advancedCustomConverterClaudeMessagesToOpenAIChat:
-		if incomingPath == "/v1/messages" {
-			return nil
-		}
-	case advancedCustomConverterOpenAIChatToClaudeMessages,
-		advancedCustomConverterOpenAIChatToOpenAIResponses,
-		advancedCustomConverterOpenAIChatToGeminiContent:
-		if incomingPath == "/v1/chat/completions" {
-			return nil
-		}
-	case advancedCustomConverterOpenAIResponsesToOpenAIChat:
-		if incomingPath == "/v1/responses" {
-			return nil
-		}
-	case advancedCustomConverterOpenAIResponsesToGemini:
-		if incomingPath == "/v1/responses" {
-			return nil
-		}
-	case advancedCustomConverterGeminiContentToOpenAIChat:
-		if strings.Contains(incomingPath, ":generateContent") || strings.Contains(incomingPath, ":streamGenerateContent") {
-			return nil
-		}
-	}
-	return fmt.Errorf("advanced_custom.advanced_routes[%d].converter does not match incoming_path: %s", index, converter)
 }
 
 func validateAdvancedCustomRouteAuth(index int, auth *AdvancedCustomRouteAuth) error {

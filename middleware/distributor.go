@@ -12,7 +12,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -247,36 +246,7 @@ func getJSONStringValue(result gjson.Result, field string) (string, error) {
 func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 	var modelRequest ModelRequest
 	shouldSelectChannel := true
-	var err error
-	if strings.Contains(c.Request.URL.Path, "/mj/") {
-		relayMode := relayconstant.Path2RelayModeMidjourney(c.Request.URL.Path)
-		if relayMode == relayconstant.RelayModeMidjourneyTaskFetch ||
-			relayMode == relayconstant.RelayModeMidjourneyTaskFetchByCondition ||
-			relayMode == relayconstant.RelayModeMidjourneyNotify ||
-			relayMode == relayconstant.RelayModeMidjourneyTaskImageSeed {
-			shouldSelectChannel = false
-		} else {
-			midjourneyRequest := taskdto.MidjourneyRequest{}
-			err = common.UnmarshalBodyReusable(c, &midjourneyRequest)
-			if err != nil {
-				return nil, false, errors.New(i18n.T(c, i18n.MsgDistributorInvalidMidjourney, map[string]any{"Error": err.Error()}))
-			}
-			midjourneyModel, mjErr, success := service.GetMjRequestModel(relayMode, &midjourneyRequest)
-			if mjErr != nil {
-				return nil, false, fmt.Errorf("%s", mjErr.Description)
-			}
-			if midjourneyModel == "" {
-				if !success {
-					return nil, false, fmt.Errorf("%s", i18n.T(c, i18n.MsgDistributorInvalidParseModel))
-				} else {
-					// task fetch, task fetch by condition, notify
-					shouldSelectChannel = false
-				}
-			}
-			modelRequest.Model = midjourneyModel
-		}
-		c.Set("relay_mode", relayMode)
-	} else if strings.Contains(c.Request.URL.Path, "/suno/") {
+	if strings.Contains(c.Request.URL.Path, "/suno/") {
 		relayMode := relayconstant.Path2RelaySuno(c.Request.Method, c.Request.URL.Path)
 		if relayMode == relayconstant.RelayModeSunoFetch ||
 			relayMode == relayconstant.RelayModeSunoFetchByID {
@@ -330,7 +300,9 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		if _, ok := c.Get("relay_mode"); !ok {
 			c.Set("relay_mode", relayMode)
 		}
-	} else if strings.HasPrefix(c.Request.URL.Path, "/v1beta/models/") || strings.HasPrefix(c.Request.URL.Path, "/v1/models/") {
+	} else if strings.HasPrefix(c.Request.URL.Path, "/v1beta/models/") ||
+		strings.HasPrefix(c.Request.URL.Path, "/v1/models/") ||
+		strings.HasPrefix(c.Request.URL.Path, "/pg/models/") {
 		// Gemini API 路径处理: /v1beta/models/gemini-2.0-flash:generateContent
 		relayMode := relayconstant.RelayModeGemini
 		modelName := extractModelNameFromGeminiPath(c.Request.URL.Path)
@@ -434,29 +406,23 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	if channel == nil {
 		return types.NewError(errors.New("channel is nil"), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
+	upstreamModel := model.GetBindingUpstreamModel(modelName, channel.Id)
+	if upstreamModel == "" {
+		upstreamModel = modelName
+	}
+	common.SetContextKey(c, constant.ContextKeyUpstreamModel, upstreamModel)
 	common.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)
 	common.SetContextKey(c, constant.ContextKeyChannelName, channel.Name)
 	common.SetContextKey(c, constant.ContextKeyChannelType, channel.Type)
 	common.SetContextKey(c, constant.ContextKeyChannelCreateTime, channel.CreatedTime)
 	common.SetContextKey(c, constant.ContextKeyChannelSetting, channel.GetSetting())
 	common.SetContextKey(c, constant.ContextKeyChannelOtherSetting, channel.GetOtherSettings())
-	paramOverride := channel.GetParamOverride()
 	headerOverride := channel.GetHeaderOverride()
-	if mergedParam, applied := service.ApplyChannelAffinityOverrideTemplate(c, paramOverride); applied {
-		paramOverride = mergedParam
-	}
-	common.SetContextKey(c, constant.ContextKeyChannelParamOverride, paramOverride)
 	common.SetContextKey(c, constant.ContextKeyChannelHeaderOverride, headerOverride)
 	if nil != channel.OpenAIOrganization && *channel.OpenAIOrganization != "" {
 		common.SetContextKey(c, constant.ContextKeyChannelOrganization, *channel.OpenAIOrganization)
 	}
 	common.SetContextKey(c, constant.ContextKeyChannelAutoBan, channel.GetAutoBan())
-	common.SetContextKey(c, constant.ContextKeyChannelModelMapping, channel.GetModelMapping())
-	common.SetContextKey(c, constant.ContextKeyChannelUpstreamModel, "")
-	matchedGroup := common.GetContextKeyString(c, constant.ContextKeyMatchedGroup)
-	if upstreamModel, ok := model.ResolveModelBindingUpstreamForGroup(modelName, channel.Id, matchedGroup); ok {
-		common.SetContextKey(c, constant.ContextKeyChannelUpstreamModel, upstreamModel)
-	}
 	common.SetContextKey(c, constant.ContextKeyChannelStatusCodeMapping, channel.GetStatusCodeMapping())
 
 	key, index, newAPIError := channel.GetNextEnabledKey()
@@ -474,17 +440,9 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	common.SetContextKey(c, constant.ContextKeyChannelKey, key)
 	common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, channel.GetBaseURL())
 
-	common.SetContextKey(c, constant.ContextKeySystemPromptOverride, false)
-
 	// TODO: api_version统一
 	switch channel.Type {
-	case constant.ChannelTypeAzure:
-		c.Set("api_version", channel.Other)
-	case constant.ChannelTypeVertexAi:
-		c.Set("region", channel.Other)
 	case constant.ChannelTypeXunfei:
-		c.Set("api_version", channel.Other)
-	case constant.ChannelTypeGemini:
 		c.Set("api_version", channel.Other)
 	case constant.ChannelTypeAli:
 		c.Set("plugin", channel.Other)

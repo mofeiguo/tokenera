@@ -1,49 +1,47 @@
 import { describe, expect, test } from 'vitest'
 
-import { groupChannelBindingsByUpstream } from '../channel-model-bindings'
+import { sortChannelBindings } from '../channel-model-bindings'
 
-describe('groupChannelBindingsByUpstream', () => {
-  test('groups multiple public models under the same upstream model', () => {
-    const groups = groupChannelBindingsByUpstream([
+describe('sortChannelBindings', () => {
+  test('returns a flat list of public models sorted by name', () => {
+    const bindings = sortChannelBindings([
       {
         channel_id: 1,
-        upstream_model: 'deepseek-chat',
         enabled: true,
         model_name: 'deepseek-v4-flash',
       },
       {
         channel_id: 1,
-        upstream_model: 'deepseek-chat',
         enabled: false,
         model_name: 'deepseek-lite',
       },
       {
-        channel_id: 1,
-        upstream_model: 'gpt-4o-mini',
+        channel_id: 2,
         enabled: true,
         model_name: 'gpt-4o-mini',
       },
     ])
 
-    expect(groups).toHaveLength(2)
-    expect(groups[0]?.upstreamModel).toBe('deepseek-chat')
-    expect(groups[0]?.bindings.map((binding) => binding.model_name)).toEqual([
+    expect(bindings.map((binding) => binding.model_name)).toEqual([
       'deepseek-lite',
       'deepseek-v4-flash',
+      'gpt-4o-mini',
     ])
-    expect(groups[1]?.upstreamModel).toBe('gpt-4o-mini')
   })
 
-  test('ignores bindings without upstream model names', () => {
-    const groups = groupChannelBindingsByUpstream([
+  test('keeps bindings that only have a channel and enabled flag', () => {
+    const bindings = sortChannelBindings([
       {
         channel_id: 1,
-        upstream_model: '   ',
         enabled: true,
-        model_name: 'ignored',
       },
     ])
 
-    expect(groups).toEqual([])
+    expect(bindings).toEqual([
+      {
+        channel_id: 1,
+        enabled: true,
+      },
+    ])
   })
 })

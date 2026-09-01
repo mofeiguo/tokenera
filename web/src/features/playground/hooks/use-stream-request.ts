@@ -21,15 +21,17 @@ import { SSE } from 'sse.js'
 
 import { getFreshAuthHeaders } from '@/lib/api'
 
-import { API_ENDPOINTS, ERROR_MESSAGES } from '../constants'
+import { ERROR_MESSAGES } from '../constants'
 import {
   getStreamReadyStateError,
   isStreamClosedReadyState,
   isStreamDoneMessage,
   parseStreamErrorDetails,
   parseStreamMessageUpdates,
+  shouldCompleteOnStreamClose,
+  forwardNamedSseEventsAsMessage,
 } from '../lib'
-import type { ChatCompletionRequest } from '../types'
+import type { PlaygroundRequest } from '../lib/streaming/payload-builder'
 
 interface StreamEventSource {
   readyState?: number
@@ -39,6 +41,7 @@ interface StreamEventSource {
   ) => void
   close: () => void
   stream: () => void
+  dispatchEvent?: (event: Event) => boolean
 }
 
 interface StreamRequestCallbacks {
@@ -50,7 +53,7 @@ interface StreamRequestCallbacks {
 interface StreamRequestControllerRuntime {
   getHeaders: () => Promise<Record<string, string>>
   createSource: (
-    payload: ChatCompletionRequest,
+    request: PlaygroundRequest,
     headers: Record<string, string>
   ) => StreamEventSource
   setStreaming: (streaming: boolean) => void
@@ -71,7 +74,7 @@ export function createStreamRequestController(
   }
 
   const send = async (
-    payload: ChatCompletionRequest,
+    request: PlaygroundRequest,
     callbacks: StreamRequestCallbacks
   ) => {
     const requestGeneration = generation + 1
@@ -95,7 +98,15 @@ export function createStreamRequestController(
     }
     if (generation !== requestGeneration) return
 
-    const nextSource = runtime.createSource(payload, headers)
+    const createdSource = runtime.createSource(request, headers)
+    const nextSource =
+      typeof createdSource.dispatchEvent === 'function'
+        ? forwardNamedSseEventsAsMessage(
+            createdSource as StreamEventSource & {
+              dispatchEvent: (event: Event) => boolean
+            }
+          )
+        : createdSource
     source = nextSource
     runtime.setStreaming(true)
     let completed = false
@@ -152,6 +163,13 @@ export function createStreamRequestController(
 
       if (errorMessage) {
         handleError(errorMessage)
+        return
+      }
+
+      if (shouldCompleteOnStreamClose(event.readyState, nextSource)) {
+        completed = true
+        closeActiveSource(nextSource)
+        callbacks.onComplete()
       }
     })
 
@@ -191,11 +209,11 @@ export function useStreamRequest() {
   if (!controllerRef.current) {
     controllerRef.current = createStreamRequestController({
       getHeaders: getFreshAuthHeaders,
-      createSource: (payload, headers) =>
-        new SSE(API_ENDPOINTS.CHAT_COMPLETIONS, {
+      createSource: (request, headers) =>
+        new SSE(request.url, {
           headers,
           method: 'POST',
-          payload: JSON.stringify(payload),
+          payload: JSON.stringify(request.payload),
         }) as StreamEventSource,
       setStreaming: setIsStreaming,
     })
@@ -203,7 +221,7 @@ export function useStreamRequest() {
 
   const sendStreamRequest = useCallback(
     (
-      payload: ChatCompletionRequest,
+      payload: PlaygroundRequest,
       onUpdate: (type: 'reasoning' | 'content', chunk: string) => void,
       onComplete: () => void,
       onError: (error: string, errorCode?: string) => void

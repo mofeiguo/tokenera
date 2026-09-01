@@ -1,12 +1,10 @@
 package hailuo
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -41,38 +39,9 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
 }
 
-func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	return fmt.Sprintf("%s%s", a.baseURL, TextToVideoEndpoint), nil
-}
-
 func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) error {
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a.apiKey)
 	return nil
-}
-
-func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
-	v, exists := c.Get("task_request")
-	if !exists {
-		return nil, fmt.Errorf("request not found in context")
-	}
-	req, ok := v.(relaycommon.TaskSubmitReq)
-	if !ok {
-		return nil, fmt.Errorf("invalid request type in context")
-	}
-
-	body, err := a.convertToRequestPayload(&req, info)
-	if err != nil {
-		return nil, errors.Wrap(err, "convert request payload failed")
-	}
-
-	data, err := common.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(data), nil
 }
 
 func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (*http.Response, error) {
@@ -141,45 +110,6 @@ func (a *TaskAdaptor) GetModelList() []string {
 
 func (a *TaskAdaptor) GetChannelName() string {
 	return ChannelName
-}
-
-func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*VideoRequest, error) {
-	modelConfig := GetModelConfig(info.UpstreamModelName)
-	duration := DefaultDuration
-	if req.Duration > 0 {
-		duration = req.Duration
-	}
-	resolution := modelConfig.DefaultResolution
-	if req.Size != "" {
-		resolution = a.parseResolutionFromSize(req.Size, modelConfig)
-	}
-
-	videoRequest := &VideoRequest{
-		Model:      info.UpstreamModelName,
-		Prompt:     req.Prompt,
-		Duration:   &duration,
-		Resolution: resolution,
-	}
-	if err := req.UnmarshalMetadata(&videoRequest); err != nil {
-		return nil, errors.Wrap(err, "unmarshal metadata to video request failed")
-	}
-
-	return videoRequest, nil
-}
-
-func (a *TaskAdaptor) parseResolutionFromSize(size string, modelConfig ModelConfig) string {
-	switch {
-	case strings.Contains(size, "1080"):
-		return Resolution1080P
-	case strings.Contains(size, "768"):
-		return Resolution768P
-	case strings.Contains(size, "720"):
-		return Resolution720P
-	case strings.Contains(size, "512"):
-		return Resolution512P
-	default:
-		return modelConfig.DefaultResolution
-	}
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
@@ -282,22 +212,4 @@ func (a *TaskAdaptor) buildVideoURL(_, fileID string) string {
 	}
 
 	return retrieveResp.File.DownloadURL
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}
-
-func containsInt(slice []int, item int) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }

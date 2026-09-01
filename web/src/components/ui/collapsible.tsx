@@ -16,21 +16,65 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Collapsible as CollapsiblePrimitive } from '@base-ui/react/collapsible'
+import * as CollapsiblePrimitive from '@radix-ui/react-collapsible'
+import type { ReactNode } from 'react'
 
-function Collapsible({ ...props }: CollapsiblePrimitive.Root.Props) {
-  return <CollapsiblePrimitive.Root data-slot='collapsible' {...props} />
-}
+import { hasAsChild, mergeRenderChild } from '@/components/ui/compose-as-child'
 
-function CollapsibleTrigger({ ...props }: CollapsiblePrimitive.Trigger.Props) {
+function Collapsible({
+  asChild,
+  render,
+  children,
+  ...props
+}: React.ComponentProps<typeof CollapsiblePrimitive.Root> & {
+  render?: ReactNode
+}) {
   return (
-    <CollapsiblePrimitive.Trigger data-slot='collapsible-trigger' {...props} />
+    <CollapsiblePrimitive.Root
+      data-slot='collapsible'
+      asChild={hasAsChild(asChild, render)}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </CollapsiblePrimitive.Root>
   )
 }
 
-function CollapsibleContent({ ...props }: CollapsiblePrimitive.Panel.Props) {
+function CollapsibleTrigger({
+  asChild,
+  render,
+  children,
+  ...props
+}: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleTrigger> & {
+  render?: ReactNode
+}) {
   return (
-    <CollapsiblePrimitive.Panel data-slot='collapsible-content' {...props} />
+    <CollapsiblePrimitive.CollapsibleTrigger
+      data-slot='collapsible-trigger'
+      asChild={hasAsChild(asChild, render)}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </CollapsiblePrimitive.CollapsibleTrigger>
+  )
+}
+
+function CollapsibleContent({
+  asChild,
+  render,
+  children,
+  ...props
+}: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleContent> & {
+  render?: ReactNode
+}) {
+  return (
+    <CollapsiblePrimitive.CollapsibleContent
+      data-slot='collapsible-content'
+      asChild={hasAsChild(asChild, render)}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </CollapsiblePrimitive.CollapsibleContent>
   )
 }
 

@@ -3,8 +3,6 @@ package controller
 import (
 	"errors"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -12,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	taskdto "github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
@@ -33,51 +32,69 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func relayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
-	var err *types.NewAPIError
-	switch info.RelayMode {
-	case relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits:
-		err = relay.ImageHelper(c, info)
-	case relayconstant.RelayModeAudioSpeech:
-		fallthrough
-	case relayconstant.RelayModeAudioTranslation:
-		fallthrough
-	case relayconstant.RelayModeAudioTranscription:
-		err = relay.AudioHelper(c, info)
-	case relayconstant.RelayModeRerank:
-		err = relay.RerankHelper(c, info)
-	case relayconstant.RelayModeEmbeddings:
-		err = relay.EmbeddingHelper(c, info)
-	case relayconstant.RelayModeResponses, relayconstant.RelayModeResponsesCompact:
-		err = relay.ResponsesHelper(c, info)
-	case relayconstant.RelayModeAlphaSearch:
-		err = relay.AlphaSearchHelper(c, info)
+func dispatchRelay(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
+	switch info.RelayFormat {
+	case types.RelayFormatOpenAIRealtime:
+		return relay.WssHelper(c, info)
+	case types.RelayFormatClaude:
+		return relay.ClaudeHelper(c, info)
+	case types.RelayFormatGemini:
+		if strings.Contains(c.Request.URL.Path, "embed") {
+			return relay.GeminiEmbeddingHandler(c, info)
+		}
+		return relay.GeminiHelper(c, info)
 	default:
-		err = relay.TextHelper(c, info)
+		switch info.RelayMode {
+		case relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits:
+			return relay.ImageHelper(c, info)
+		case relayconstant.RelayModeAudioSpeech, relayconstant.RelayModeAudioTranslation, relayconstant.RelayModeAudioTranscription:
+			return relay.AudioHelper(c, info)
+		case relayconstant.RelayModeRerank:
+			return relay.RerankHelper(c, info)
+		case relayconstant.RelayModeEmbeddings:
+			return relay.EmbeddingHelper(c, info)
+		case relayconstant.RelayModeResponses, relayconstant.RelayModeResponsesCompact:
+			return relay.ResponsesHelper(c, info)
+		case relayconstant.RelayModeAlphaSearch:
+			return relay.AlphaSearchHelper(c, info)
+		default:
+			return relay.TextHelper(c, info)
+		}
 	}
-	return err
 }
 
-func geminiRelayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
-	var err *types.NewAPIError
-	if strings.Contains(c.Request.URL.Path, "embed") {
-		err = relay.GeminiEmbeddingHandler(c, info)
-	} else {
-		err = relay.GeminiHelper(c, info)
+func writeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *websocket.Conn, requestId string, newAPIError *types.NewAPIError) {
+	if newAPIError == nil {
+		return
 	}
-	return err
+	logger.LogError(c, fmt.Sprintf("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
+	newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
+	switch relayFormat {
+	case types.RelayFormatOpenAIRealtime:
+		helper.WssError(c, ws, newAPIError.ToOpenAIError())
+	case types.RelayFormatClaude:
+		c.JSON(newAPIError.StatusCode, gin.H{
+			"type":  "error",
+			"error": newAPIError.ToClaudeError(),
+		})
+	default:
+		c.JSON(newAPIError.StatusCode, gin.H{
+			"error": newAPIError.ToOpenAIError(),
+		})
+	}
+}
+
+func newRelayRequestError(err error) *types.NewAPIError {
+	if common.IsRequestBodyTooLargeError(err) || errors.Is(err, common.ErrRequestBodyTooLarge) {
+		return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusRequestEntityTooLarge, types.ErrOptionWithSkipRetry())
+	}
+	return types.NewError(err, types.ErrorCodeInvalidRequest)
 }
 
 func Relay(c *gin.Context, relayFormat types.RelayFormat) {
-
 	requestId := c.GetString(common.RequestIdKey)
-	//group := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
-	//originalModel := common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
-
-	var (
-		newAPIError *types.NewAPIError
-		ws          *websocket.Conn
-	)
+	var newAPIError *types.NewAPIError
+	var ws *websocket.Conn
 
 	if relayFormat == types.RelayFormatOpenAIRealtime {
 		var err error
@@ -90,33 +107,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 
 	defer func() {
-		if newAPIError != nil {
-			logger.LogError(c, fmt.Sprintf("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
-			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
-			switch relayFormat {
-			case types.RelayFormatOpenAIRealtime:
-				helper.WssError(c, ws, newAPIError.ToOpenAIError())
-			case types.RelayFormatClaude:
-				c.JSON(newAPIError.StatusCode, gin.H{
-					"type":  "error",
-					"error": newAPIError.ToClaudeError(),
-				})
-			default:
-				c.JSON(newAPIError.StatusCode, gin.H{
-					"error": newAPIError.ToOpenAIError(),
-				})
-			}
-		}
+		writeRelayError(c, relayFormat, ws, requestId, newAPIError)
 	}()
 
 	request, err := helper.GetAndValidateRequest(c, relayFormat)
 	if err != nil {
-		// Map "request body too large" to 413 so clients can handle it correctly
-		if common.IsRequestBodyTooLargeError(err) || errors.Is(err, common.ErrRequestBodyTooLarge) {
-			newAPIError = types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusRequestEntityTooLarge, types.ErrOptionWithSkipRetry())
-		} else {
-			newAPIError = types.NewError(err, types.ErrorCodeInvalidRequest)
-		}
+		newAPIError = newRelayRequestError(err)
 		return
 	}
 
@@ -126,9 +122,22 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
+	if endpointType, ok := relayInfo.IncomingEndpointType(); ok &&
+		!model.ModelSupportsIncomingEndpoint(relayInfo.OriginModelName, endpointType) {
+		newAPIError = types.NewErrorWithStatusCode(
+			fmt.Errorf("%s", i18n.T(c, i18n.MsgRelayModelEndpointUnsupported, map[string]any{
+				"Model":    relayInfo.OriginModelName,
+				"Endpoint": string(endpointType),
+			})),
+			types.ErrorCodeInvalidRequest,
+			http.StatusBadRequest,
+			types.ErrOptionWithSkipRetry(),
+		)
+		return
+	}
+
 	needSensitiveCheck := setting.ShouldCheckPromptSensitive()
 	needCountToken := constant.CountToken
-	// Avoid building huge CombineText (strings.Join) when token counting and sensitive check are both disabled.
 	var meta *types.TokenCountMeta
 	if needSensitiveCheck || needCountToken {
 		meta = request.GetTokenCountMeta()
@@ -140,7 +149,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		contains, words := service.CheckSensitiveText(meta.CombineText)
 		if contains {
 			logger.LogWarn(c, fmt.Sprintf("user sensitive words detected: %s", strings.Join(words, ", ")))
-			newAPIError = types.NewError(err, types.ErrorCodeSensitiveWordsDetected)
+			newAPIError = types.NewError(fmt.Errorf("user sensitive words detected: %s", strings.Join(words, ", ")), types.ErrorCodeSensitiveWordsDetected)
 			return
 		}
 	}
@@ -159,8 +168,6 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
-	// common.SetContextKey(c, constant.ContextKeyTokenCountMeta, meta)
-
 	if priceData.FreeModel {
 		logger.LogInfo(c, fmt.Sprintf("模型 %s 免费，跳过预扣费", relayInfo.OriginModelName))
 	} else {
@@ -171,7 +178,6 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 
 	defer func() {
-		// Only return quota if downstream failed and quota was actually pre-consumed
 		if newAPIError != nil {
 			newAPIError = service.NormalizeViolationFeeError(newAPIError)
 			if relayInfo.Billing != nil {
@@ -181,6 +187,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 	}()
 
+	newAPIError = runRelayAttempts(c, relayInfo)
+}
+
+func runRelayAttempts(c *gin.Context, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
 	retryParam := &service.RetryParam{
 		Ctx:         c,
 		TokenGroup:  relayInfo.TokenGroup,
@@ -191,6 +201,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
 
+	var newAPIError *types.NewAPIError
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
 		relayInfo.RetryIndex = retryParam.GetRetry()
 		channel, channelErr := getChannel(c, relayInfo, retryParam)
@@ -205,39 +216,15 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 
-		bodyStorage, bodyErr := common.GetBodyStorage(c)
-		if bodyErr != nil {
-			// Ensure consistent 413 for oversized bodies even when error occurs later (e.g., retry path)
-			if common.IsRequestBodyTooLargeError(bodyErr) || errors.Is(bodyErr, common.ErrRequestBodyTooLarge) {
-				newAPIError = types.NewErrorWithStatusCode(bodyErr, types.ErrorCodeReadRequestBodyFailed, http.StatusRequestEntityTooLarge, types.ErrOptionWithSkipRetry())
-			} else {
-				newAPIError = types.NewErrorWithStatusCode(bodyErr, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
-			}
-			break
-		}
-		c.Request.Body = io.NopCloser(bodyStorage)
-
-		switch relayFormat {
-		case types.RelayFormatOpenAIRealtime:
-			newAPIError = relay.WssHelper(c, relayInfo)
-		case types.RelayFormatClaude:
-			newAPIError = relay.ClaudeHelper(c, relayInfo)
-		case types.RelayFormatGemini:
-			newAPIError = geminiRelayHandler(c, relayInfo)
-		default:
-			newAPIError = relayHandler(c, relayInfo)
-		}
-
+		newAPIError = dispatchRelay(c, relayInfo)
 		if newAPIError == nil {
 			relayInfo.LastError = nil
-			return
+			return nil
 		}
 
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError
-
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
-
 		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) {
 			break
 		}
@@ -253,6 +240,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
 		})
 	}
+	return newAPIError
 }
 
 var upgrader = websocket.Upgrader{
@@ -407,49 +395,6 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 
 }
 
-func RelayMidjourney(c *gin.Context) {
-	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatMjProxy, nil, nil)
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"description": fmt.Sprintf("failed to generate relay info: %s", err.Error()),
-			"type":        "upstream_error",
-			"code":        4,
-		})
-		return
-	}
-
-	var mjErr *taskdto.MidjourneyResponse
-	switch relayInfo.RelayMode {
-	case relayconstant.RelayModeMidjourneyNotify:
-		mjErr = relay.RelayMidjourneyNotify(c)
-	case relayconstant.RelayModeMidjourneyTaskFetch, relayconstant.RelayModeMidjourneyTaskFetchByCondition:
-		mjErr = relay.RelayMidjourneyTask(c, relayInfo.RelayMode)
-	case relayconstant.RelayModeMidjourneyTaskImageSeed:
-		mjErr = relay.RelayMidjourneyTaskImageSeed(c)
-	case relayconstant.RelayModeSwapFace:
-		mjErr = relay.RelaySwapFace(c, relayInfo)
-	default:
-		mjErr = relay.RelayMidjourneySubmit(c, relayInfo)
-	}
-	//err = relayMidjourneySubmit(c, relayMode)
-	log.Println(mjErr)
-	if mjErr != nil {
-		statusCode := http.StatusBadRequest
-		if mjErr.Code == 30 {
-			mjErr.Result = "当前分组负载已饱和，请稍后再试，或升级账户以提升服务质量。"
-			statusCode = http.StatusTooManyRequests
-		}
-		c.JSON(statusCode, gin.H{
-			"description": fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result),
-			"type":        "upstream_error",
-			"code":        mjErr.Code,
-		})
-		channelId := c.GetInt("channel_id")
-		logger.LogError(c, fmt.Sprintf("relay error (channel #%d, status code %d): %s", channelId, statusCode, fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result)))
-	}
-}
-
 func RelayNotImplemented(c *gin.Context) {
 	err := types.OpenAIError{
 		Message: "API not implemented",
@@ -543,16 +488,6 @@ func RelayTask(c *gin.Context) {
 		}
 
 		addUsedChannel(c, channel.Id)
-		bodyStorage, bodyErr := common.GetBodyStorage(c)
-		if bodyErr != nil {
-			if common.IsRequestBodyTooLargeError(bodyErr) || errors.Is(bodyErr, common.ErrRequestBodyTooLarge) {
-				taskErr = service.TaskErrorWrapperLocal(bodyErr, "read_request_body_failed", http.StatusRequestEntityTooLarge)
-			} else {
-				taskErr = service.TaskErrorWrapperLocal(bodyErr, "read_request_body_failed", http.StatusBadRequest)
-			}
-			break
-		}
-		c.Request.Body = io.NopCloser(bodyStorage)
 
 		result, taskErr = relay.RelayTaskSubmit(c, relayInfo)
 		if taskErr == nil {

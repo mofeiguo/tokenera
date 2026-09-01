@@ -503,22 +503,6 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		}
 	}
 
-	// VertexAI 特殊校验
-	if channel.Type == constant.ChannelTypeVertexAi {
-		if channel.Other == "" {
-			return fmt.Errorf("部署地区不能为空")
-		}
-
-		regionMap, err := common.StrToMap(channel.Other)
-		if err != nil {
-			return fmt.Errorf("部署地区必须是标准的Json格式，例如{\"default\": \"us-central1\", \"region2\": \"us-east1\"}")
-		}
-
-		if regionMap["default"] == nil {
-			return fmt.Errorf("部署地区必须包含default字段")
-		}
-	}
-
 	return nil
 }
 
@@ -561,38 +545,6 @@ type AddChannelRequest struct {
 	Channel                   *model.Channel        `json:"channel"`
 }
 
-func getVertexArrayKeys(keys string) ([]string, error) {
-	if keys == "" {
-		return nil, nil
-	}
-	var keyArray []interface{}
-	err := common.Unmarshal([]byte(keys), &keyArray)
-	if err != nil {
-		return nil, fmt.Errorf("批量添加 Vertex AI 必须使用标准的JsonArray格式，例如[{key1}, {key2}...]，请检查输入: %w", err)
-	}
-	cleanKeys := make([]string, 0, len(keyArray))
-	for _, key := range keyArray {
-		var keyStr string
-		switch v := key.(type) {
-		case string:
-			keyStr = strings.TrimSpace(v)
-		default:
-			bytes, err := json.Marshal(v)
-			if err != nil {
-				return nil, fmt.Errorf("Vertex AI key JSON 编码失败: %w", err)
-			}
-			keyStr = string(bytes)
-		}
-		if keyStr != "" {
-			cleanKeys = append(cleanKeys, keyStr)
-		}
-	}
-	if len(cleanKeys) == 0 {
-		return nil, fmt.Errorf("批量添加 Vertex AI 的 keys 不能为空")
-	}
-	return cleanKeys, nil
-}
-
 func AddChannel(c *gin.Context) {
 	addChannelRequest := AddChannelRequest{}
 	err := c.ShouldBindJSON(&addChannelRequest)
@@ -616,44 +568,19 @@ func AddChannel(c *gin.Context) {
 	case "multi_to_single":
 		addChannelRequest.Channel.ChannelInfo.IsMultiKey = true
 		addChannelRequest.Channel.ChannelInfo.MultiKeyMode = addChannelRequest.MultiKeyMode
-		if addChannelRequest.Channel.Type == constant.ChannelTypeVertexAi && addChannelRequest.Channel.GetOtherSettings().VertexKeyType != dto.VertexKeyTypeAPIKey {
-			array, err := getVertexArrayKeys(addChannelRequest.Channel.Key)
-			if err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": err.Error(),
-				})
-				return
+		cleanKeys := make([]string, 0)
+		for _, key := range strings.Split(addChannelRequest.Channel.Key, "\n") {
+			if key == "" {
+				continue
 			}
-			addChannelRequest.Channel.ChannelInfo.MultiKeySize = len(array)
-			addChannelRequest.Channel.Key = strings.Join(array, "\n")
-		} else {
-			cleanKeys := make([]string, 0)
-			for _, key := range strings.Split(addChannelRequest.Channel.Key, "\n") {
-				if key == "" {
-					continue
-				}
-				key = strings.TrimSpace(key)
-				cleanKeys = append(cleanKeys, key)
-			}
-			addChannelRequest.Channel.ChannelInfo.MultiKeySize = len(cleanKeys)
-			addChannelRequest.Channel.Key = strings.Join(cleanKeys, "\n")
+			key = strings.TrimSpace(key)
+			cleanKeys = append(cleanKeys, key)
 		}
+		addChannelRequest.Channel.ChannelInfo.MultiKeySize = len(cleanKeys)
+		addChannelRequest.Channel.Key = strings.Join(cleanKeys, "\n")
 		keys = []string{addChannelRequest.Channel.Key}
 	case "batch":
-		if addChannelRequest.Channel.Type == constant.ChannelTypeVertexAi && addChannelRequest.Channel.GetOtherSettings().VertexKeyType != dto.VertexKeyTypeAPIKey {
-			// multi json
-			keys, err = getVertexArrayKeys(addChannelRequest.Channel.Key)
-			if err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": err.Error(),
-				})
-				return
-			}
-		} else {
-			keys = strings.Split(addChannelRequest.Channel.Key, "\n")
-		}
+		keys = strings.Split(addChannelRequest.Channel.Key, "\n")
 	case "single":
 		keys = []string{addChannelRequest.Channel.Key}
 	default:
@@ -758,10 +685,8 @@ type ChannelTag struct {
 	NewTag         *string `json:"new_tag"`
 	Priority       *int64  `json:"priority"`
 	Weight         *uint   `json:"weight"`
-	ModelMapping   *string `json:"model_mapping"`
 	Models         *string `json:"models"`
 	Groups         *string `json:"groups"`
-	ParamOverride  *string `json:"param_override"`
 	HeaderOverride *string `json:"header_override"`
 }
 
@@ -834,21 +759,10 @@ func EditTagChannels(c *gin.Context) {
 		})
 		return
 	}
-	if (channelTag.ParamOverride != nil || channelTag.HeaderOverride != nil) &&
+	if channelTag.HeaderOverride != nil &&
 		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {
 		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
 		return
-	}
-	if channelTag.ParamOverride != nil {
-		trimmed := strings.TrimSpace(*channelTag.ParamOverride)
-		if trimmed != "" && !json.Valid([]byte(trimmed)) {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "参数覆盖必须是合法的 JSON 格式",
-			})
-			return
-		}
-		channelTag.ParamOverride = common.GetPointer[string](trimmed)
 	}
 	if channelTag.HeaderOverride != nil {
 		trimmed := strings.TrimSpace(*channelTag.HeaderOverride)
@@ -861,7 +775,7 @@ func EditTagChannels(c *gin.Context) {
 		}
 		channelTag.HeaderOverride = common.GetPointer[string](trimmed)
 	}
-	err = model.EditChannelByTag(channelTag.Tag, channelTag.NewTag, channelTag.ModelMapping, channelTag.Models, channelTag.Groups, channelTag.Priority, channelTag.Weight, channelTag.ParamOverride, channelTag.HeaderOverride)
+	err = model.EditChannelByTag(channelTag.Tag, channelTag.NewTag, channelTag.Models, channelTag.Groups, channelTag.Priority, channelTag.Weight, channelTag.HeaderOverride)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -1012,31 +926,11 @@ func UpdateChannel(c *gin.Context) {
 					existingKeys = strings.Split(strings.Trim(originChannel.Key, "\n"), "\n")
 				}
 
-				// 处理 Vertex AI 的特殊情况
-				if channel.Type == constant.ChannelTypeVertexAi && channel.GetOtherSettings().VertexKeyType != dto.VertexKeyTypeAPIKey {
-					// 尝试解析新密钥为JSON数组
-					if strings.HasPrefix(strings.TrimSpace(channel.Key), "[") {
-						array, err := getVertexArrayKeys(channel.Key)
-						if err != nil {
-							c.JSON(http.StatusOK, gin.H{
-								"success": false,
-								"message": "追加密钥解析失败: " + err.Error(),
-							})
-							return
-						}
-						newKeys = array
-					} else {
-						// 单个JSON密钥
-						newKeys = []string{channel.Key}
-					}
-				} else {
-					// 普通渠道的处理
-					inputKeys := strings.Split(channel.Key, "\n")
-					for _, key := range inputKeys {
-						key = strings.TrimSpace(key)
-						if key != "" {
-							newKeys = append(newKeys, key)
-						}
+				inputKeys := strings.Split(channel.Key, "\n")
+				for _, key := range inputKeys {
+					key = strings.TrimSpace(key)
+					if key != "" {
+						newKeys = append(newKeys, key)
 					}
 				}
 

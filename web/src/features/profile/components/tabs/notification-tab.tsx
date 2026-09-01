@@ -142,7 +142,8 @@ export function NotificationTab({ profile, onUpdate }: NotificationTabProps) {
         <ToggleGroup
           value={[notifyType]}
           onValueChange={(value) => {
-            const nextValue = value.find((item) => item !== notifyType)
+            const selected = Array.isArray(value) ? value : [value]
+            const nextValue = selected.find((item) => item !== notifyType)
             if (nextValue)
               updateField('notify_type', normalizeNotifyType(nextValue))
           }}

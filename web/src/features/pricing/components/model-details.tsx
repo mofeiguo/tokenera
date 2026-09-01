@@ -657,13 +657,8 @@ export function ModelDetails() {
   const search = useSearch({ from: '/pricing/$modelId/' })
   const navigate = useNavigate()
 
-  const {
-    models,
-    endpointMap,
-    isLoading,
-    priceRate,
-    usdExchangeRate,
-  } = usePricingData()
+  const { models, endpointMap, isLoading, priceRate, usdExchangeRate } =
+    usePricingData()
 
   const tokenUnit: TokenUnit =
     search.tokenUnit === 'K' ? 'K' : DEFAULT_TOKEN_UNIT

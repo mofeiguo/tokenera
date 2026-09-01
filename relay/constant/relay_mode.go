@@ -15,23 +15,6 @@ const (
 	RelayModeImagesEdits
 	RelayModeEdits
 
-	RelayModeMidjourneyImagine
-	RelayModeMidjourneyDescribe
-	RelayModeMidjourneyBlend
-	RelayModeMidjourneyChange
-	RelayModeMidjourneySimpleChange
-	RelayModeMidjourneyNotify
-	RelayModeMidjourneyTaskFetch
-	RelayModeMidjourneyTaskImageSeed
-	RelayModeMidjourneyTaskFetchByCondition
-	RelayModeMidjourneyAction
-	RelayModeMidjourneyModal
-	RelayModeMidjourneyShorten
-	RelayModeSwapFace
-	RelayModeMidjourneyUpload
-	RelayModeMidjourneyVideo
-	RelayModeMidjourneyEdits
-
 	RelayModeAudioSpeech        // tts
 	RelayModeAudioTranscription // whisper
 	RelayModeAudioTranslation   // whisper
@@ -76,7 +59,7 @@ func Path2RelayMode(path string) int {
 		relayMode = RelayModeEdits
 	} else if strings.HasPrefix(path, "/v1/responses/compact") {
 		relayMode = RelayModeResponsesCompact
-	} else if strings.HasPrefix(path, "/v1/responses") {
+	} else if strings.HasPrefix(path, "/v1/responses") || strings.HasPrefix(path, "/pg/responses") {
 		relayMode = RelayModeResponses
 	} else if strings.HasPrefix(path, "/v1/alpha/search") {
 		relayMode = RelayModeAlphaSearch
@@ -90,53 +73,8 @@ func Path2RelayMode(path string) int {
 		relayMode = RelayModeRerank
 	} else if strings.HasPrefix(path, "/v1/realtime") {
 		relayMode = RelayModeRealtime
-	} else if strings.HasPrefix(path, "/v1beta/models") || strings.HasPrefix(path, "/v1/models") {
+	} else if strings.HasPrefix(path, "/v1beta/models") || strings.HasPrefix(path, "/v1/models") || strings.HasPrefix(path, "/pg/models") {
 		relayMode = RelayModeGemini
-	} else if strings.HasPrefix(path, "/mj") {
-		relayMode = Path2RelayModeMidjourney(path)
-	}
-	return relayMode
-}
-
-func Path2RelayModeMidjourney(path string) int {
-	relayMode := RelayModeUnknown
-	if strings.HasSuffix(path, "/mj/submit/action") {
-		// midjourney plus
-		relayMode = RelayModeMidjourneyAction
-	} else if strings.HasSuffix(path, "/mj/submit/modal") {
-		// midjourney plus
-		relayMode = RelayModeMidjourneyModal
-	} else if strings.HasSuffix(path, "/mj/submit/shorten") {
-		// midjourney plus
-		relayMode = RelayModeMidjourneyShorten
-	} else if strings.HasSuffix(path, "/mj/insight-face/swap") {
-		// midjourney plus
-		relayMode = RelayModeSwapFace
-	} else if strings.HasSuffix(path, "/submit/upload-discord-images") {
-		// midjourney plus
-		relayMode = RelayModeMidjourneyUpload
-	} else if strings.HasSuffix(path, "/mj/submit/imagine") {
-		relayMode = RelayModeMidjourneyImagine
-	} else if strings.HasSuffix(path, "/mj/submit/video") {
-		relayMode = RelayModeMidjourneyVideo
-	} else if strings.HasSuffix(path, "/mj/submit/edits") {
-		relayMode = RelayModeMidjourneyEdits
-	} else if strings.HasSuffix(path, "/mj/submit/blend") {
-		relayMode = RelayModeMidjourneyBlend
-	} else if strings.HasSuffix(path, "/mj/submit/describe") {
-		relayMode = RelayModeMidjourneyDescribe
-	} else if strings.HasSuffix(path, "/mj/notify") {
-		relayMode = RelayModeMidjourneyNotify
-	} else if strings.HasSuffix(path, "/mj/submit/change") {
-		relayMode = RelayModeMidjourneyChange
-	} else if strings.HasSuffix(path, "/mj/submit/simple-change") {
-		relayMode = RelayModeMidjourneyChange
-	} else if strings.HasSuffix(path, "/fetch") {
-		relayMode = RelayModeMidjourneyTaskFetch
-	} else if strings.HasSuffix(path, "/image-seed") {
-		relayMode = RelayModeMidjourneyTaskImageSeed
-	} else if strings.HasSuffix(path, "/list-by-condition") {
-		relayMode = RelayModeMidjourneyTaskFetchByCondition
 	}
 	return relayMode
 }

@@ -36,7 +36,7 @@ describe('legacy frontend route migration', () => {
       '/console/user': '/users',
       '/console/personal': '/profile',
       '/console/log': '/usage-logs',
-      '/console/midjourney': '/usage-logs/drawing',
+      '/console/midjourney': '/usage-logs/task',
       '/console/task': '/usage-logs/task',
       '/console/chat/42': '/chat/42',
     }
@@ -60,7 +60,6 @@ describe('legacy frontend route migration', () => {
       operation: '/system-settings/operations/behavior',
       dashboard: '/system-settings/content/dashboard',
       chats: '/system-settings/content/chat',
-      drawing: '/system-settings/content/drawing',
       payment: '/system-settings/billing/payment',
       ratio: '/system-settings/billing/model-pricing',
       ratelimit: '/system-settings/security/rate-limit',

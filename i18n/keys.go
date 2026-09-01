@@ -303,8 +303,11 @@ const (
 	MsgDistributorGetChannelFailed        = "distributor.get_channel_failed"
 	MsgDistributorNoAvailableChannel      = "distributor.no_available_channel"
 	MsgDistributorModelNotInCatalog       = "distributor.model_not_in_catalog"
-	MsgDistributorInvalidMidjourney       = "distributor.invalid_midjourney_request"
 	MsgDistributorInvalidParseModel       = "distributor.invalid_request_parse_model"
+)
+
+const (
+	MsgRelayModelEndpointUnsupported = "relay.model_endpoint_unsupported"
 )
 
 // Custom OAuth provider related messages

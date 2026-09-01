@@ -17,11 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Plus, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
-import { Combobox } from '@/components/ui/combobox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -33,105 +32,39 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { getChannel } from '@/features/channels/api'
+import { parseModelsList } from '@/features/channels/lib/channel-utils'
 import type { Channel } from '@/features/channels/types'
+import { useQuery } from '@/lib/query'
 
+import { resolveBindingUpstreamModel } from '../lib/binding-upstream'
 import type { ModelChannelBinding } from '../types'
 
 type ModelChannelBindingsEditorProps = {
   bindings: ModelChannelBinding[]
   channels: Channel[]
+  catalogModelName?: string
   disabled?: boolean
   onChange: (bindings: ModelChannelBinding[]) => void
-}
-
-function parseModelsString(raw?: string | null): string[] {
-  if (!raw) return []
-  return [
-    ...new Set(
-      raw
-        .split(',')
-        .map((item) => item.trim())
-        .filter((item) => item !== '')
-    ),
-  ].sort((a, b) => a.localeCompare(b))
 }
 
 export function ModelChannelBindingsEditor({
   bindings,
   channels,
+  catalogModelName = '',
   disabled = false,
   onChange,
 }: ModelChannelBindingsEditorProps) {
   const { t } = useTranslation()
-  const [upstreamOptionsByChannel, setUpstreamOptionsByChannel] = useState<
-    Record<number, string[]>
-  >({})
-  const [channelNamesById, setChannelNamesById] = useState<
-    Record<number, string>
-  >({})
-  const [loadingChannelIds, setLoadingChannelIds] = useState<
-    Record<number, boolean>
-  >({})
-  const loadedChannelIdsRef = useRef<Set<number>>(new Set())
-
-  const channelIds = useMemo(
-    () =>
-      [
-        ...new Set(
-          bindings.map((binding) => binding.channel_id).filter((id) => id > 0)
-        ),
-      ].sort((a, b) => a - b),
-    [bindings]
-  )
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadUpstreamModels = async (channelId: number) => {
-      loadedChannelIdsRef.current.add(channelId)
-      setLoadingChannelIds((current) => ({ ...current, [channelId]: true }))
-      try {
-        const channelResponse = await getChannel(channelId)
-        const models = parseModelsString(channelResponse.data?.models)
-        const channelName = channelResponse.data?.name?.trim()
-        if (cancelled) return
-        if (channelName) {
-          setChannelNamesById((current) => ({
-            ...current,
-            [channelId]: channelName,
-          }))
-        }
-        setUpstreamOptionsByChannel((current) => ({
-          ...current,
-          [channelId]: [...new Set(models)].sort((a, b) => a.localeCompare(b)),
-        }))
-      } catch {
-        if (cancelled) return
-        setUpstreamOptionsByChannel((current) => ({
-          ...current,
-          [channelId]: current[channelId] ?? [],
-        }))
-      } finally {
-        if (!cancelled) {
-          setLoadingChannelIds((current) => ({
-            ...current,
-            [channelId]: false,
-          }))
-        }
+  const [channelNamesById] = useState<Record<number, string>>(() => {
+    const names: Record<number, string> = {}
+    for (const binding of bindings) {
+      const name = binding.channel_name?.trim()
+      if (binding.channel_id > 0 && name) {
+        names[binding.channel_id] = name
       }
     }
-
-    for (const channelId of channelIds) {
-      if (loadedChannelIdsRef.current.has(channelId)) {
-        continue
-      }
-      void loadUpstreamModels(channelId)
-    }
-
-    return () => {
-      cancelled = true
-    }
-  }, [channelIds])
+    return names
+  })
 
   const updateBinding = (
     index: number,
@@ -171,19 +104,6 @@ export function ModelChannelBindingsEditor({
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [bindings, channelNamesById, channels])
 
-  const bindingKey = (channelId: number, upstreamModel: string) =>
-    `${channelId}\n${upstreamModel.trim()}`
-
-  const getUpstreamPlaceholder = (channelId: number, loading: boolean) => {
-    if (channelId <= 0) {
-      return t('Select channel first')
-    }
-    if (loading) {
-      return t('Loading models...')
-    }
-    return t('Select upstream model')
-  }
-
   return (
     <div className='space-y-3'>
       {bindings.length === 0 ? (
@@ -201,31 +121,19 @@ export function ModelChannelBindingsEditor({
       ) : null}
 
       {bindings.map((binding, index) => {
-        const selectedPairs = new Set(
+        const selectedChannelIds = new Set(
           bindings
             .filter((_, bindingIndex) => bindingIndex !== index)
-            .map((item) => bindingKey(item.channel_id, item.upstream_model))
+            .map((item) => item.channel_id)
+            .filter((channelId) => channelId > 0)
         )
-        const upstreamOptions = [
-          ...new Set(
-            [
-              ...(upstreamOptionsByChannel[binding.channel_id] ?? []),
-              binding.upstream_model,
-            ]
-              .map((item) => item.trim())
-              .filter((item) => item !== '')
-          ),
-        ].sort((a, b) => a.localeCompare(b))
 
         return (
           <div
-            key={
-              binding.id ??
-              `${binding.channel_id}-${binding.upstream_model}-${index}`
-            }
+            key={binding.id ?? `${binding.channel_id}-${index}`}
             className='space-y-3 rounded-md border p-3'
           >
-            <div className='grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_6rem_6rem_auto_auto]'>
+            <div className='grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_6rem_6rem_auto_auto]'>
               <div className='space-y-1'>
                 <Label className='text-muted-foreground text-xs font-normal'>
                   {t('Channel')}
@@ -252,45 +160,16 @@ export function ModelChannelBindingsEditor({
                   </SelectTrigger>
                   <SelectContent>
                     {channelSelectItems.map((channel) => (
-                      <SelectItem key={channel.value} value={channel.value}>
+                      <SelectItem
+                        key={channel.value}
+                        value={channel.value}
+                        disabled={selectedChannelIds.has(Number(channel.value))}
+                      >
                         {channel.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div className='space-y-1'>
-                <Label className='text-muted-foreground text-xs font-normal'>
-                  {t('Upstream model')}
-                </Label>
-                <Combobox
-                  options={upstreamOptions
-                    .filter(
-                      (option) =>
-                        !selectedPairs.has(
-                          bindingKey(binding.channel_id, option)
-                        )
-                    )
-                    .map((option) => ({
-                      value: option,
-                      label: option,
-                    }))}
-                  value={binding.upstream_model}
-                  onValueChange={(value) =>
-                    updateBinding(index, {
-                      upstream_model: value ?? '',
-                    })
-                  }
-                  placeholder={getUpstreamPlaceholder(
-                    binding.channel_id,
-                    Boolean(loadingChannelIds[binding.channel_id])
-                  )}
-                  searchPlaceholder={t('Search upstream model...')}
-                  emptyText={t('No upstream models found.')}
-                  allowCustomValue={false}
-                  openOnFocus
-                />
               </div>
 
               <div className='space-y-1'>
@@ -370,6 +249,16 @@ export function ModelChannelBindingsEditor({
                 <Trash2 className='size-4' />
               </Button>
             </div>
+
+            <ChannelBindingModelSelect
+              channelId={binding.channel_id}
+              catalogModelName={catalogModelName}
+              value={binding.upstream_model}
+              disabled={disabled}
+              onChange={(upstreamModel) =>
+                updateBinding(index, { upstream_model: upstreamModel })
+              }
+            />
           </div>
         )
       })}
@@ -384,7 +273,6 @@ export function ModelChannelBindingsEditor({
             ...bindings,
             {
               channel_id: 0,
-              upstream_model: '',
               enabled: true,
               priority: 0,
               weight: 0,
@@ -395,6 +283,80 @@ export function ModelChannelBindingsEditor({
         <Plus className='mr-2 size-4' />
         {t('Add channel binding')}
       </Button>
+    </div>
+  )
+}
+
+function ChannelBindingModelSelect({
+  channelId,
+  catalogModelName,
+  value,
+  disabled,
+  onChange,
+}: {
+  channelId: number
+  catalogModelName: string
+  value?: string
+  disabled?: boolean
+  onChange: (upstreamModel: string) => void
+}) {
+  const { t } = useTranslation()
+  const { data } = useQuery({
+    queryKey: ['channels', channelId, 'restricted-models'],
+    queryFn: () => getChannel(channelId),
+    enabled: channelId > 0,
+  })
+  const models = parseModelsList(data?.data?.models ?? '')
+  const modelsKey = models.join(',')
+  const items = models.map((modelName) => ({
+    value: modelName,
+    label: modelName,
+  }))
+
+  useEffect(() => {
+    if (channelId <= 0 || modelsKey === '') {
+      return
+    }
+    const channelModels = modelsKey.split(',')
+    if (value && channelModels.includes(value)) {
+      return
+    }
+    const next = resolveBindingUpstreamModel(
+      channelModels,
+      catalogModelName,
+      value
+    )
+    if (next && next !== value) {
+      onChange(next)
+    }
+  }, [catalogModelName, channelId, modelsKey, onChange, value])
+
+  return (
+    <div className='space-y-1'>
+      <Label className='text-muted-foreground text-xs font-normal'>
+        {t('Channel model')}
+      </Label>
+      <Select
+        items={items}
+        value={value || null}
+        onValueChange={(nextValue) => {
+          if (nextValue) {
+            onChange(nextValue)
+          }
+        }}
+        disabled={disabled || channelId <= 0}
+      >
+        <SelectTrigger className='w-full' aria-label={t('Channel model')}>
+          <SelectValue placeholder={t('Select channel model')} />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }

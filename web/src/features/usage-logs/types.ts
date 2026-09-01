@@ -29,7 +29,7 @@ import type { UsageLog } from './data/schema'
 /**
  * Log category for different log types
  */
-export type LogCategory = 'common' | 'drawing' | 'task'
+export type LogCategory = 'common' | 'task'
 
 // ============================================================================
 // Filter Types
@@ -57,13 +57,6 @@ export interface CommonLogFilters extends CommonFilters {
 }
 
 /**
- * Drawing logs specific filters
- */
-export interface DrawingLogFilters extends CommonFilters {
-  mjId?: string
-}
-
-/**
  * Task logs specific filters
  */
 export interface TaskLogFilters extends CommonFilters {
@@ -73,7 +66,7 @@ export interface TaskLogFilters extends CommonFilters {
 /**
  * Union type for all log filters
  */
-export type LogFilters = CommonLogFilters | DrawingLogFilters | TaskLogFilters
+export type LogFilters = CommonLogFilters | TaskLogFilters
 
 // ============================================================================
 // Common Logs Additional Types
@@ -183,8 +176,6 @@ export interface LogOtherData {
   cache_creation_ratio?: number
   cache_creation_ratio_5m?: number
   cache_creation_ratio_1h?: number
-  is_model_mapped?: boolean
-  upstream_model_name?: string
   audio_ratio?: number
   audio_completion_ratio?: number
   frt?: number
@@ -214,7 +205,6 @@ export interface LogOtherData {
   image_generation_call_price?: number
   image_generation_call_count?: number
   is_system_prompt_overwritten?: boolean
-  po?: string[]
   billing_source?: string
   group?: string
   stream_status?: {
@@ -253,34 +243,6 @@ export interface LogStatistics {
   quota: number
   rpm: number
   tpm: number
-}
-
-// ============================================================================
-// Drawing Logs (MjProxy) Types
-// ============================================================================
-
-export interface MidjourneyLog {
-  id: number
-  user_id: number
-  channel_id: number
-  code: number
-  mj_id: string
-  action: string // IMAGINE, UPSCALE, VARIATION, etc. (backend field name)
-  submit_time: number // milliseconds
-  finish_time?: number // milliseconds
-  start_time?: number // milliseconds
-  fail_reason?: string
-  progress: string
-  prompt: string
-  prompt_en?: string
-  description?: string
-  buttons?: string
-  properties?: string
-  image_url?: string
-  status: string // NOT_START, SUBMITTED, IN_PROGRESS, SUCCESS, FAILURE, MODAL
-  other?: string
-  created_at?: number
-  updated_at?: number
 }
 
 // ============================================================================
@@ -330,7 +292,7 @@ export interface GetLogsResponse {
   success: boolean
   message?: string
   data?: {
-    items: UsageLog[] | MidjourneyLog[] | TaskLog[]
+    items: UsageLog[] | TaskLog[]
     total: number
     page: number
     page_size: number
@@ -354,19 +316,6 @@ export interface GetLogStatsResponse {
   success: boolean
   message?: string
   data?: LogStatistics
-}
-
-// ============================================================================
-// Drawing Log Types
-// ============================================================================
-
-export interface GetMidjourneyLogsParams {
-  p?: number
-  page_size?: number
-  channel_id?: string
-  mj_id?: string
-  start_timestamp?: number
-  end_timestamp?: number
 }
 
 // ============================================================================

@@ -38,11 +38,15 @@ import {
   getSyncStatusOptions,
 } from '../constants'
 import { isModelEnabled, modelsQueryKeys, vendorsQueryKeys } from '../lib'
+import { countModelsWithCapability } from '../lib/model-capabilities'
 import { DataTableBulkActions } from './data-table-bulk-actions'
+import { ModelCard } from './model-card'
 import { useModelsColumns } from './models-columns'
 import { useModels } from './models-provider'
+import { ModelsStats } from './models-stats'
 
 const route = getRouteApi('/_authenticated/models/$section')
+const MODELS_VIEW_MODE_STORAGE_KEY = 'models:view-mode'
 
 export function ModelsTable() {
   const { t } = useTranslation()
@@ -199,60 +203,81 @@ export function ModelsTable() {
     })),
   ]
 
+  const visionCount = countModelsWithCapability(models, 'vision')
+  const toolsCount = countModelsWithCapability(models, 'tools')
+  const pageScoped = models.length > 0 && models.length < totalCount
+
   return (
-    <DataTablePage
-      table={table}
-      columns={columns}
-      isLoading={isLoading}
-      isFetching={isFetching}
-      emptyTitle={t('No Models Found')}
-      emptyDescription={t(
-        'No models available. Create your first model to get started.'
-      )}
-      emptyAction={
-        <Button
-          size='sm'
-          onClick={() => {
-            setCurrentRow(null)
-            setOpen('create-model')
+    <div className='flex h-full min-h-0 flex-col gap-4'>
+      <ModelsStats
+        modelCount={totalCount}
+        vendorCount={vendors.length}
+        visionCount={visionCount}
+        toolsCount={toolsCount}
+        pageScoped={pageScoped}
+      />
+      <div className='min-h-0 flex-1'>
+        <DataTablePage
+          table={table}
+          columns={columns}
+          isLoading={isLoading}
+          isFetching={isFetching}
+          emptyTitle={t('No Models Found')}
+          emptyDescription={t(
+            'No models available. Create your first model to get started.'
+          )}
+          emptyAction={
+            <Button
+              size='sm'
+              onClick={() => {
+                setCurrentRow(null)
+                setOpen('create-model')
+              }}
+            >
+              {t('Add Model')}
+            </Button>
+          }
+          skeletonKeyPrefix='model-skeleton'
+          enableCardView
+          viewModeStorageKey={MODELS_VIEW_MODE_STORAGE_KEY}
+          renderCard={(row, { isSelected }) => (
+            <ModelCard row={row} isSelected={isSelected} />
+          )}
+          cardGridClassName='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6'
+          applyHeaderSize
+          getRowClassName={(row, { isMobile }) => {
+            if (isModelEnabled(row.original)) {
+              return undefined
+            }
+            return isMobile ? DISABLED_ROW_MOBILE : DISABLED_ROW_DESKTOP
           }}
-        >
-          {t('Add Model')}
-        </Button>
-      }
-      skeletonKeyPrefix='model-skeleton'
-      applyHeaderSize
-      getRowClassName={(row, { isMobile }) => {
-        if (isModelEnabled(row.original)) {
-          return undefined
-        }
-        return isMobile ? DISABLED_ROW_MOBILE : DISABLED_ROW_DESKTOP
-      }}
-      toolbarProps={{
-        searchPlaceholder: t('Search models'),
-        searchDebounceMs: 500,
-        filters: [
-          {
-            columnId: 'status',
-            title: t('Status'),
-            options: [...getModelStatusOptions(t)],
-            singleSelect: true,
-          },
-          {
-            columnId: 'vendor_id',
-            title: t('Vendor'),
-            options: vendorFilterOptions,
-            singleSelect: true,
-          },
-          {
-            columnId: 'sync_official',
-            title: t('Official Sync'),
-            options: [...getSyncStatusOptions(t)],
-            singleSelect: true,
-          },
-        ],
-      }}
-      bulkActions={<DataTableBulkActions table={table} />}
-    />
+          toolbarProps={{
+            searchPlaceholder: t('Search models'),
+            searchDebounceMs: 500,
+            filters: [
+              {
+                columnId: 'status',
+                title: t('Status'),
+                options: [...getModelStatusOptions(t)],
+                singleSelect: true,
+              },
+              {
+                columnId: 'vendor_id',
+                title: t('Vendor'),
+                options: vendorFilterOptions,
+                singleSelect: true,
+              },
+              {
+                columnId: 'sync_official',
+                title: t('Official Sync'),
+                options: [...getSyncStatusOptions(t)],
+                singleSelect: true,
+              },
+            ],
+          }}
+          bulkActions={<DataTableBulkActions table={table} />}
+        />
+      </div>
+    </div>
   )
 }

@@ -32,6 +32,7 @@ import type {
   GroupOption,
   ParameterEnabled,
   PlaygroundConfig,
+  PlaygroundEndpointType,
 } from '../../types'
 import { PlaygroundInputControls } from './playground-input-controls'
 import { PlaygroundInputTools } from './playground-input-tools'
@@ -45,6 +46,7 @@ interface PlaygroundInputProps {
   models: ModelOption[]
   modelValue: string
   onModelChange: (value: string) => void
+  onEndpointChange: (value: PlaygroundEndpointType) => void
   isModelLoading?: boolean
   groups: GroupOption[]
   groupValue: string
@@ -71,6 +73,7 @@ export function PlaygroundInput({
   models,
   modelValue,
   onModelChange,
+  onEndpointChange,
   isModelLoading = false,
   groups,
   groupValue,
@@ -120,8 +123,10 @@ export function PlaygroundInput({
             isModelLoading={isModelLoading}
             models={models}
             modelValue={modelValue}
+            endpointValue={config.endpointType}
             onGroupChange={onGroupChange}
             onModelChange={onModelChange}
+            onEndpointChange={onEndpointChange}
             onStop={onStop}
             text={text}
             tools={

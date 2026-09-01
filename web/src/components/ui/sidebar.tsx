@@ -18,15 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 'use client'
 
-import { mergeProps } from '@base-ui/react/merge-props'
-import { useRender } from '@base-ui/react/use-render'
 import { SidebarLeftIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { hasAsChild, mergeRenderChild } from '@/components/ui/compose-as-child'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -48,9 +48,9 @@ import { cn } from '@/lib/utils'
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state'
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = '13rem'
-const SIDEBAR_WIDTH_MOBILE = '17rem'
-const SIDEBAR_WIDTH_ICON = '2.75rem'
+const SIDEBAR_WIDTH = '16rem'
+const SIDEBAR_WIDTH_MOBILE = '18rem'
+const SIDEBAR_WIDTH_ICON = '3rem'
 const SIDEBAR_KEYBOARD_SHORTCUT = 'b'
 
 type SidebarContextProps = {
@@ -251,7 +251,7 @@ function Sidebar({
         data-slot='sidebar-container'
         data-side={side}
         className={cn(
-          'fixed top-[var(--app-header-height,0px)] bottom-0 z-10 hidden h-[calc(100svh-var(--app-header-height,0px))] w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex',
+          'fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex',
           // Adjust the padding for floating and inset variants.
           variant === 'floating' || variant === 'inset'
             ? 'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]'
@@ -286,8 +286,8 @@ function SidebarTrigger({
       data-slot='sidebar-trigger'
       aria-label={t('Toggle sidebar')}
       variant='ghost'
-      size='icon-sm'
-      className={cn(className)}
+      size='icon'
+      className={cn('size-7', className)}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
@@ -416,50 +416,56 @@ function SidebarGroup({ className, ...props }: React.ComponentProps<'div'>) {
 
 function SidebarGroupLabel({
   className,
+  asChild = false,
   render,
+  children,
   ...props
-}: useRender.ComponentProps<'div'> & React.ComponentProps<'div'>) {
-  return useRender({
-    defaultTagName: 'div',
-    props: mergeProps<'div'>(
-      {
-        className: cn(
-          'flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0',
-          className
-        ),
-      },
-      props
-    ),
-    render,
-    state: {
-      slot: 'sidebar-group-label',
-      sidebar: 'group-label',
-    },
-  })
+}: React.ComponentProps<'div'> & {
+  asChild?: boolean
+  render?: React.ReactNode
+}) {
+  const Comp = hasAsChild(asChild, render) ? Slot : 'div'
+
+  return (
+    <Comp
+      data-slot='sidebar-group-label'
+      data-sidebar='group-label'
+      className={cn(
+        'flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0',
+        className
+      )}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </Comp>
+  )
 }
 
 function SidebarGroupAction({
   className,
+  asChild = false,
   render,
+  children,
   ...props
-}: useRender.ComponentProps<'button'> & React.ComponentProps<'button'>) {
-  return useRender({
-    defaultTagName: 'button',
-    props: mergeProps<'button'>(
-      {
-        className: cn(
-          'absolute top-3.5 right-3 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden after:absolute after:-inset-2 hover:bg-muted hover:text-sidebar-foreground focus-visible:ring-2 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0',
-          className
-        ),
-      },
-      props
-    ),
-    render,
-    state: {
-      slot: 'sidebar-group-action',
-      sidebar: 'group-action',
-    },
-  })
+}: React.ComponentProps<'button'> & {
+  asChild?: boolean
+  render?: React.ReactNode
+}) {
+  const Comp = hasAsChild(asChild, render) ? Slot : 'button'
+
+  return (
+    <Comp
+      data-slot='sidebar-group-action'
+      data-sidebar='group-action'
+      className={cn(
+        'absolute top-3.5 right-3 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden after:absolute after:-inset-2 hover:bg-muted hover:text-sidebar-foreground focus-visible:ring-2 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0',
+        className
+      )}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </Comp>
+  )
 }
 
 function SidebarGroupContent({
@@ -521,52 +527,49 @@ const sidebarMenuButtonVariants = cva(
 )
 
 function SidebarMenuButton({
+  asChild = false,
   render,
   isActive = false,
   variant = 'default',
   size = 'default',
   tooltip,
   className,
+  children,
   ...props
-}: useRender.ComponentProps<'button'> &
-  React.ComponentProps<'button'> & {
-    isActive?: boolean
-    tooltip?: string | React.ComponentProps<typeof TooltipContent>
-  } & VariantProps<typeof sidebarMenuButtonVariants>) {
+}: React.ComponentProps<'button'> & {
+  asChild?: boolean
+  render?: React.ReactNode
+  isActive?: boolean
+  tooltip?: string | React.ComponentProps<typeof TooltipContent>
+} & VariantProps<typeof sidebarMenuButtonVariants>) {
   const { isMobile, state } = useSidebar()
   const tooltipEnabled = Boolean(tooltip) && !isMobile && state === 'collapsed'
-  const comp = useRender({
-    defaultTagName: 'button',
-    props: mergeProps<'button'>(
-      {
-        className: cn(sidebarMenuButtonVariants({ variant, size }), className),
-      },
-      props
-    ),
-    render: tooltipEnabled ? <TooltipTrigger render={render} /> : render,
-    state: {
-      slot: 'sidebar-menu-button',
-      sidebar: 'menu-button',
-      size,
-      active: isActive,
-    },
-  })
+  const Comp = hasAsChild(asChild, render) ? Slot : 'button'
+  const button = (
+    <Comp
+      data-slot='sidebar-menu-button'
+      data-sidebar='menu-button'
+      data-size={size}
+      data-active={isActive}
+      className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </Comp>
+  )
 
   if (!tooltipEnabled || !tooltip) {
-    return comp
+    return button
   }
 
-  if (typeof tooltip === 'string') {
-    tooltip = {
-      children: tooltip,
-    }
-  }
+  const tooltipProps =
+    typeof tooltip === 'string' ? { children: tooltip } : tooltip
 
   return (
     <TooltipProvider delay={0}>
       <Tooltip>
-        {comp}
-        <TooltipContent side='right' align='center' {...tooltip} />
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent side='right' align='center' {...tooltipProps} />
       </Tooltip>
     </TooltipProvider>
   )
@@ -574,32 +577,33 @@ function SidebarMenuButton({
 
 function SidebarMenuAction({
   className,
+  asChild = false,
   render,
   showOnHover = false,
+  children,
   ...props
-}: useRender.ComponentProps<'button'> &
-  React.ComponentProps<'button'> & {
-    showOnHover?: boolean
-  }) {
-  return useRender({
-    defaultTagName: 'button',
-    props: mergeProps<'button'>(
-      {
-        className: cn(
-          'absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-sidebar-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 after:absolute after:-inset-2 hover:bg-muted hover:text-sidebar-foreground focus-visible:ring-2 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0',
-          showOnHover &&
-            'group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 peer-data-active/menu-button:text-sidebar-accent-foreground aria-expanded:opacity-100 md:opacity-0',
-          className
-        ),
-      },
-      props
-    ),
-    render,
-    state: {
-      slot: 'sidebar-menu-action',
-      sidebar: 'menu-action',
-    },
-  })
+}: React.ComponentProps<'button'> & {
+  asChild?: boolean
+  render?: React.ReactNode
+  showOnHover?: boolean
+}) {
+  const Comp = hasAsChild(asChild, render) ? Slot : 'button'
+
+  return (
+    <Comp
+      data-slot='sidebar-menu-action'
+      data-sidebar='menu-action'
+      className={cn(
+        'absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-sidebar-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 after:absolute after:-inset-2 hover:bg-muted hover:text-sidebar-foreground focus-visible:ring-2 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0',
+        showOnHover &&
+          'group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 peer-data-active/menu-button:text-sidebar-accent-foreground aria-expanded:opacity-100 md:opacity-0',
+        className
+      )}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </Comp>
+  )
 }
 
 function SidebarMenuBadge({
@@ -686,35 +690,36 @@ function SidebarMenuSubItem({
 }
 
 function SidebarMenuSubButton({
+  asChild = false,
   render,
   size = 'md',
   isActive = false,
   className,
+  children,
   ...props
-}: useRender.ComponentProps<'a'> &
-  React.ComponentProps<'a'> & {
-    size?: 'sm' | 'md'
-    isActive?: boolean
-  }) {
-  return useRender({
-    defaultTagName: 'a',
-    props: mergeProps<'a'>(
-      {
-        className: cn(
-          'flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:hidden hover:bg-muted hover:text-sidebar-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-sm data-[size=sm]:text-xs data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground data-active:hover:bg-sidebar-accent data-active:hover:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground',
-          className
-        ),
-      },
-      props
-    ),
-    render,
-    state: {
-      slot: 'sidebar-menu-sub-button',
-      sidebar: 'menu-sub-button',
-      size,
-      active: isActive,
-    },
-  })
+}: React.ComponentProps<'a'> & {
+  asChild?: boolean
+  render?: React.ReactNode
+  size?: 'sm' | 'md'
+  isActive?: boolean
+}) {
+  const Comp = hasAsChild(asChild, render) ? Slot : 'a'
+
+  return (
+    <Comp
+      data-slot='sidebar-menu-sub-button'
+      data-sidebar='menu-sub-button'
+      data-size={size}
+      data-active={isActive}
+      className={cn(
+        'flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:hidden hover:bg-muted hover:text-sidebar-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-sm data-[size=sm]:text-xs data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground data-active:hover:bg-sidebar-accent data-active:hover:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground',
+        className
+      )}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </Comp>
+  )
 }
 
 export {

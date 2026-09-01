@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Key, Plus } from 'lucide-react'
 import { useState, useCallback, useMemo, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -31,7 +31,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { ROLE } from '@/lib/roles'
-import { getRouteApi, useNavigate } from '@/lib/router'
+import { getRouteApi, Link, useNavigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -325,10 +325,31 @@ export function Dashboard() {
       </>
     ) : null
   const sectionActions = modelActions ?? flowActions
+  const overviewActions =
+    activeSection === 'overview' ? (
+      <>
+        <Button variant='outline' render={<Link to='/keys' />}>
+          <Key />
+          {t('Create API Key')}
+        </Button>
+        <Button render={<Link to='/wallet' />}>
+          <Plus />
+          {t('Add credits')}
+        </Button>
+      </>
+    ) : null
 
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
+      {activeSection === 'overview' ? (
+        <SectionPageLayout.Description>
+          {t('Monitor balance, usage, and request volume')}
+        </SectionPageLayout.Description>
+      ) : null}
+      {overviewActions ? (
+        <SectionPageLayout.Actions>{overviewActions}</SectionPageLayout.Actions>
+      ) : null}
       <SectionPageLayout.Content>
         <div className='space-y-3 sm:space-y-4'>
           {activeSection !== 'overview' && (

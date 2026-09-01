@@ -71,7 +71,7 @@ export function PerformanceHealthPanel() {
   })
 
   const models = useMemo(
-    () => metricsQuery.data?.data.models ?? [],
+    () => metricsQuery.data?.data?.models ?? [],
     [metricsQuery.data]
   )
 

@@ -375,9 +375,7 @@ export function ModelMutateDrawer({
   const modelSettings = useMemo(() => {
     if (!systemOptionsData?.data) return null
     const defaultModelSettings: ModelSettings = {
-      'global.pass_through_request_enabled': false,
       'global.thinking_model_blacklist': '[]',
-      'global.chat_completions_to_responses_policy': '{}',
       'general_setting.ping_interval_enabled': false,
       'general_setting.ping_interval_seconds': 60,
       'gemini.safety_settings': '',
@@ -586,22 +584,17 @@ export function ModelMutateDrawer({
         toast.error(t('Select a channel for every binding'))
         return
       }
-      if (
-        channelBindings.some((binding) => binding.upstream_model.trim() === '')
-      ) {
-        toast.error(t('Select an upstream model for every binding'))
-        return
-      }
-      const bindingKeys = new Set<string>()
+      const bindingKeys = new Set<number>()
       for (const binding of channelBindings) {
-        const key = `${binding.channel_id}\n${binding.upstream_model.trim()}`
-        if (bindingKeys.has(key)) {
-          toast.error(
-            t('Duplicate channel and upstream model bindings are not allowed')
-          )
+        if (bindingKeys.has(binding.channel_id)) {
+          toast.error(t('Duplicate channel bindings are not allowed'))
           return
         }
-        bindingKeys.add(key)
+        bindingKeys.add(binding.channel_id)
+        if (!binding.upstream_model?.trim()) {
+          toast.error(t('Select a channel model for every binding'))
+          return
+        }
       }
       setIsSubmitting(true)
       try {
@@ -1073,6 +1066,7 @@ export function ModelMutateDrawer({
                 <ModelChannelBindingsEditor
                   bindings={channelBindings}
                   channels={channels}
+                  catalogModelName={form.watch('model_name')}
                   disabled={isSubmitting}
                   onChange={setChannelBindings}
                 />

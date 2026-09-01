@@ -16,110 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ChevronRight } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
 import { useQuery } from '@/lib/query'
-import { cn } from '@/lib/utils'
 
 import { getChannelModelBindings } from '../api'
-import {
-  groupChannelBindingsByUpstream,
-  type ChannelBindingGroup,
-} from '../lib/channel-model-bindings'
+import { sortChannelBindings } from '../lib/channel-model-bindings'
 
 type ChannelModelBindingsPanelProps = {
   channelId?: number
-}
-
-function ChannelBindingGroupRow({
-  group,
-  defaultOpen,
-}: {
-  group: ChannelBindingGroup
-  defaultOpen: boolean
-}) {
-  const { t } = useTranslation()
-  const [open, setOpen] = useState(defaultOpen)
-  const enabledCount = group.bindings.filter(
-    (binding) => binding.enabled
-  ).length
-
-  return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      className='rounded-md border'
-    >
-      <CollapsibleTrigger
-        className={cn(
-          'hover:bg-muted/40 flex w-full items-center gap-3 px-3 py-3 text-left transition-colors',
-          open && 'bg-muted/20'
-        )}
-      >
-        <ChevronRight
-          className={cn(
-            'text-muted-foreground size-4 shrink-0 transition-transform',
-            open && 'rotate-90'
-          )}
-          aria-hidden='true'
-        />
-        <div className='min-w-0 flex-1'>
-          <div className='font-mono text-sm'>{group.upstreamModel}</div>
-          <div className='text-muted-foreground text-xs'>
-            {t('Upstream model')}
-          </div>
-        </div>
-        <Badge variant='outline' className='shrink-0'>
-          {t('{{count}} public models', { count: group.bindings.length })}
-        </Badge>
-        {enabledCount < group.bindings.length ? (
-          <Badge variant='secondary' className='shrink-0'>
-            {t('{{count}} enabled', { count: enabledCount })}
-          </Badge>
-        ) : null}
-      </CollapsibleTrigger>
-      <CollapsibleContent className='border-t px-3 py-2'>
-        <ul className='space-y-2'>
-          {group.bindings.map((binding) => (
-            <li
-              key={
-                binding.id ?? `${binding.model_name}-${binding.upstream_model}`
-              }
-              className='flex items-center justify-between gap-3 rounded-md px-2 py-1.5'
-            >
-              <div className='min-w-0'>
-                <div className='truncate text-sm font-medium'>
-                  {binding.model_name || t('Unknown model')}
-                </div>
-                <div className='text-muted-foreground text-xs'>
-                  {t('Public model')}
-                </div>
-              </div>
-              <div className='flex items-center gap-2'>
-                <Badge variant='outline'>
-                  {t('Priority')} {binding.priority ?? 0}
-                </Badge>
-                <Badge variant='outline'>
-                  {t('Weight')} {binding.weight ?? 0}
-                </Badge>
-                {!binding.enabled ? (
-                  <Badge variant='outline'>{t('Disabled')}</Badge>
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </CollapsibleContent>
-    </Collapsible>
-  )
 }
 
 export function ChannelModelBindingsPanel({
@@ -131,10 +38,9 @@ export function ChannelModelBindingsPanel({
     queryFn: () => getChannelModelBindings(channelId || 0),
     enabled: Boolean(channelId),
   })
-  const bindings = data?.data
-  const groups = useMemo(
-    () => groupChannelBindingsByUpstream(bindings ?? []),
-    [bindings]
+  const bindings = useMemo(
+    () => sortChannelBindings(data?.data ?? []),
+    [data?.data]
   )
 
   if (!channelId) {
@@ -151,7 +57,7 @@ export function ChannelModelBindingsPanel({
       </p>
     )
   }
-  if (groups.length === 0) {
+  if (bindings.length === 0) {
     return (
       <p className='text-muted-foreground text-sm'>
         {t('No catalog bindings on this channel.')}
@@ -160,14 +66,36 @@ export function ChannelModelBindingsPanel({
   }
 
   return (
-    <div className='space-y-2'>
-      {groups.map((group) => (
-        <ChannelBindingGroupRow
-          key={group.upstreamModel}
-          group={group}
-          defaultOpen={group.bindings.length === 1}
-        />
+    <ul className='space-y-2'>
+      {bindings.map((binding) => (
+        <li
+          key={binding.id ?? `${binding.model_name}-${binding.channel_id}`}
+          className='flex items-center justify-between gap-3 rounded-md border px-3 py-2'
+        >
+          <div className='min-w-0'>
+            <div className='truncate text-sm font-medium'>
+              {binding.model_name || t('Unknown model')}
+            </div>
+            {binding.upstream_model &&
+            binding.upstream_model !== binding.model_name ? (
+              <div className='text-muted-foreground truncate text-xs'>
+                {t('Channel model')}: {binding.upstream_model}
+              </div>
+            ) : null}
+          </div>
+          <div className='flex items-center gap-2'>
+            <Badge variant='outline'>
+              {t('Priority')} {binding.priority ?? 0}
+            </Badge>
+            <Badge variant='outline'>
+              {t('Weight')} {binding.weight ?? 0}
+            </Badge>
+            {!binding.enabled ? (
+              <Badge variant='outline'>{t('Disabled')}</Badge>
+            ) : null}
+          </div>
+        </li>
       ))}
-    </div>
+    </ul>
   )
 }

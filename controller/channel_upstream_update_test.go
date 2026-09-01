@@ -334,42 +334,11 @@ func TestCollectPendingApplyUpstreamModelChanges(t *testing.T) {
 	require.Equal(t, []string{"old-model"}, pendingRemoveModels)
 }
 
-func TestNormalizeChannelModelMapping(t *testing.T) {
-	modelMapping := `{
-		" alias-model ": " upstream-model ",
-		"": "invalid",
-		"invalid-target": ""
-	}`
-	channel := &model.Channel{
-		ModelMapping: &modelMapping,
-	}
-
-	result := normalizeChannelModelMapping(channel)
-	require.Equal(t, map[string]string{
-		"alias-model": "upstream-model",
-	}, result)
-}
-
-func TestCollectPendingUpstreamModelChangesFromModels_WithModelMapping(t *testing.T) {
-	pendingAddModels, pendingRemoveModels := collectPendingUpstreamModelChangesFromModels(
-		[]string{"alias-model", "gpt-4o", "stale-model"},
-		[]string{"gpt-4o", "gpt-4.1", "mapped-target"},
-		[]string{"gpt-4.1"},
-		map[string]string{
-			"alias-model": "mapped-target",
-		},
-	)
-
-	require.Equal(t, []string{}, pendingAddModels)
-	require.Equal(t, []string{"stale-model"}, pendingRemoveModels)
-}
-
 func TestCollectPendingUpstreamModelChangesFromModels_WithIgnoredRegexPatterns(t *testing.T) {
 	pendingAddModels, pendingRemoveModels := collectPendingUpstreamModelChangesFromModels(
 		[]string{"gpt-4o"},
 		[]string{"gpt-4o", "claude-3-5-sonnet", "sora-video", "gpt-4.1"},
 		[]string{"regex:^sora-.*$", "gpt-4.1"},
-		nil,
 	)
 
 	require.Equal(t, []string{"claude-3-5-sonnet"}, pendingAddModels)

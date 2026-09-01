@@ -609,7 +609,6 @@ export function validateAdvancedCustomConfig(
     const route = routes[index]
     const incomingPath = route.incoming_path?.trim() || ''
     const upstreamPath = getAdvancedCustomRouteUpstreamPath(route)
-    const converter = route.converter || 'none'
     const routeModels = normalizeAdvancedCustomRouteModels(route.models)
 
     if (!incomingPath) {
@@ -644,12 +643,6 @@ export function validateAdvancedCustomConfig(
           message: `${routeLabel} route does not support client model rules`,
         }
       }
-      if (converter !== 'none') {
-        return {
-          routeIndex: index,
-          message: `${routeLabel} route must use native forwarding`,
-        }
-      }
       if (upstreamPath.includes('{model}')) {
         return {
           routeIndex: index,
@@ -676,16 +669,6 @@ export function validateAdvancedCustomConfig(
         message: 'Upstream path must be a full URL or a path starting with /',
       }
     }
-    if (!isAdvancedCustomConverter(converter)) {
-      return { routeIndex: index, message: 'Converter is not registered' }
-    }
-    if (!isConverterPathAllowed(incomingPath, converter)) {
-      return {
-        routeIndex: index,
-        message: 'Converter does not match incoming path',
-      }
-    }
-
     const authError = validateRouteAuth(route.auth)
     if (authError) {
       return { routeIndex: index, message: authError }
@@ -775,7 +758,7 @@ function normalizeAdvancedCustomRoute(
   const nextRoute: AdvancedCustomRoute = {
     incoming_path: route.incoming_path || '',
     upstream_path: getAdvancedCustomRouteUpstreamPath(route),
-    converter: route.converter || 'none',
+    converter: 'none',
   }
   const models = normalizeAdvancedCustomRouteModels(route.models)
   if (models.length > 0) {

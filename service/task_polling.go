@@ -181,8 +181,6 @@ func DispatchPlatformUpdate(ctx context.Context, platform constant.TaskPlatform,
 		ctx = context.Background()
 	}
 	switch platform {
-	case constant.TaskPlatformMidjourney:
-		// MJ 轮询由其自身处理，这里预留入口
 	case constant.TaskPlatformSuno:
 		_ = UpdateSunoTasks(ctx, taskChannelM, taskM)
 	default:

@@ -22,18 +22,33 @@ import { useTranslation } from 'react-i18next'
 
 import { PromptInputButton } from '@/components/ai-elements/prompt-input'
 import { ModelGroupSelector } from '@/components/model-group-selector'
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select'
 
-import { getInputControlState } from '../../lib'
-import type { GroupOption, ModelOption } from '../../types'
+import {
+  getInputControlState,
+  getPlaygroundEndpointLabel,
+  getModelEndpointTypes,
+  isPlaygroundEndpointType,
+} from '../../lib'
+import type {
+  GroupOption,
+  ModelOption,
+  PlaygroundEndpointType,
+} from '../../types'
 
 type PlaygroundInputControlsProps = {
   disabled?: boolean
+  endpointValue: PlaygroundEndpointType
   groups: GroupOption[]
   groupValue: string
   isGenerating?: boolean
   isModelLoading?: boolean
   models: ModelOption[]
   modelValue: string
+  onEndpointChange: (value: PlaygroundEndpointType) => void
   onGroupChange: (value: string) => void
   onModelChange: (value: string) => void
   onStop?: () => void
@@ -43,12 +58,14 @@ type PlaygroundInputControlsProps = {
 
 export function PlaygroundInputControls({
   disabled,
+  endpointValue,
   groups,
   groupValue,
   isGenerating,
   isModelLoading = false,
   models,
   modelValue,
+  onEndpointChange,
   onGroupChange,
   onModelChange,
   onStop,
@@ -66,17 +83,41 @@ export function PlaygroundInputControls({
       models,
       text,
     })
+  const endpointTypes = getModelEndpointTypes(models, modelValue)
 
   const renderSelector = () => (
-    <ModelGroupSelector
-      selectedModel={modelValue}
-      models={models}
-      onModelChange={onModelChange}
-      selectedGroup={groupValue}
-      groups={groups}
-      onGroupChange={onGroupChange}
-      disabled={isSelectorDisabled}
-    />
+    <div className='flex min-w-0 items-center gap-2'>
+      <ModelGroupSelector
+        selectedModel={modelValue}
+        models={models}
+        onModelChange={onModelChange}
+        selectedGroup={groupValue}
+        groups={groups}
+        onGroupChange={onGroupChange}
+        disabled={isSelectorDisabled}
+      />
+      {endpointTypes.length > 0 && (
+        <NativeSelect
+          aria-label={t('Endpoint')}
+          className='bg-background max-w-36 shrink-0 shadow-none'
+          disabled={isSelectorDisabled || endpointTypes.length === 1}
+          onChange={(event) => {
+            const value = event.target.value
+            if (isPlaygroundEndpointType(value)) {
+              onEndpointChange(value)
+            }
+          }}
+          size='sm'
+          value={endpointValue}
+        >
+          {endpointTypes.map((endpointType) => (
+            <NativeSelectOption key={endpointType} value={endpointType}>
+              {getPlaygroundEndpointLabel(t, endpointType)}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      )}
+    </div>
   )
 
   const renderSubmitButton = () =>

@@ -50,19 +50,14 @@ export function BoundChannelsCell({ channels }: BoundChannelsCellProps) {
         className='max-h-48 max-w-[280px] overflow-y-auto'
       >
         <ul className='space-y-1'>
-          {items.map((channel) => {
-            const label = channel.upstream_model
-              ? `${channel.name} → ${channel.upstream_model}`
-              : channel.name
-            return (
-              <li
-                key={channel.id}
-                className={channel.enabled === false ? 'opacity-60' : undefined}
-              >
-                {label}
-              </li>
-            )
-          })}
+          {items.map((channel) => (
+            <li
+              key={channel.id}
+              className={channel.enabled === false ? 'opacity-60' : undefined}
+            >
+              {channel.name}
+            </li>
+          ))}
         </ul>
       </TooltipContent>
     </Tooltip>

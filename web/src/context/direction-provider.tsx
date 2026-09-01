@@ -7,7 +7,7 @@ published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
+    10|but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU Affero General Public License for more details.
 
@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { DirectionProvider as BaseDirectionProvider } from '@base-ui/react/direction-provider'
+import { DirectionProvider as RadixDirectionProvider } from '@radix-ui/react-direction'
 import { createContext, useContext, useEffect, useState } from 'react'
 
 import { getCookie, setCookie, removeCookie } from '@/lib/cookies'
@@ -65,7 +65,7 @@ export function DirectionProvider({ children }: { children: React.ReactNode }) {
         resetDir,
       }}
     >
-      <BaseDirectionProvider direction={dir}>{children}</BaseDirectionProvider>
+      <RadixDirectionProvider dir={dir}>{children}</RadixDirectionProvider>
     </DirectionContext>
   )
 }

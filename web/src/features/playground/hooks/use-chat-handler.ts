@@ -24,7 +24,7 @@ import { sendChatCompletion } from '../api'
 import { ERROR_MESSAGES } from '../constants'
 import {
   applyStreamingChunk,
-  buildChatCompletionPayload,
+  buildPlaygroundRequest,
   updateAssistantMessageWithError,
   updateLastAssistantMessage,
   parseRequestErrorDetails,
@@ -249,13 +249,13 @@ export function useChatHandler({
       abortControllerRef.current = null
       discardPendingStreamUpdates(generation)
       setIsRequesting(true)
-      const payload = buildChatCompletionPayload(
+      const request = buildPlaygroundRequest(
         messages,
         config,
         parameterEnabled
       )
       void sendStreamRequest(
-        payload,
+        request,
         (type, chunk) => handleStreamUpdate(generation, type, chunk),
         () => handleStreamComplete(generation),
         (error, errorCode) => handleStreamError(generation, error, errorCode)
@@ -275,7 +275,7 @@ export function useChatHandler({
   // Send non-streaming chat request
   const sendNonStreamingChat = useCallback(
     async (messages: Message[]) => {
-      const payload = buildChatCompletionPayload(
+      const request = buildPlaygroundRequest(
         messages,
         config,
         parameterEnabled
@@ -292,7 +292,8 @@ export function useChatHandler({
       try {
         setIsRequesting(true)
         const response = await sendChatCompletion(
-          payload,
+          request.url,
+          request.payload,
           abortController.signal
         )
         if (

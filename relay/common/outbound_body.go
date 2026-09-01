@@ -2,9 +2,32 @@ package common
 
 import (
 	"io"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
+
+	"github.com/gin-gonic/gin"
 )
+
+// NewOutboundRawBody returns the client request body as stored on the gin
+// context, without protocol conversion, field stripping, or model rewrite.
+// The returned reader is replayable so transport-level retries can resend the
+// same bytes.
+func NewOutboundRawBody(c *gin.Context) (common.ReplayableBody, error) {
+	storage, err := common.GetBodyStorage(c)
+	if err != nil {
+		return nil, err
+	}
+	if common.DebugEnabled {
+		if debugBytes, bErr := storage.Bytes(); bErr == nil {
+			logger.LogDebug(c, "requestBody: %s", debugBytes)
+		}
+	}
+	return common.NewReplayableBodyReader(storage), nil
+}
 
 // NewOutboundJSONBody wraps the already-marshaled upstream request body into a
 // BodyStorage. When disk cache is enabled and the payload exceeds the configured
@@ -28,4 +51,19 @@ func NewOutboundJSONBody(data []byte) (body common.ReplayableBody, closer io.Clo
 		return nil, nil, err
 	}
 	return common.NewReplayableBodyReader(storage), storage, nil
+}
+
+func RewriteOutboundJSONModel(raw []byte, upstream string) ([]byte, error) {
+	upstream = strings.TrimSpace(upstream)
+	if len(raw) == 0 || upstream == "" {
+		return raw, nil
+	}
+	modelValue := gjson.GetBytes(raw, "model")
+	if !modelValue.Exists() {
+		return raw, nil
+	}
+	if modelValue.String() == upstream {
+		return raw, nil
+	}
+	return sjson.SetBytes(raw, "model", upstream)
 }

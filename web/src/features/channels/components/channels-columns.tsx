@@ -18,12 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { ColumnDef } from '@tanstack/react-table'
 import {
-  AlertTriangle,
   ChevronDown,
   ChevronRight,
   ListOrdered,
   Shuffle,
-  SlidersHorizontal,
 } from 'lucide-react'
 import { useState, useMemo, useContext, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -67,7 +65,6 @@ import {
   isMultiKeyChannel,
   parseModelsList,
   parseGroupsList,
-  parseChannelSettings,
   channelsQueryKeys,
   handleUpdateChannelField,
   handleUpdateTagField,
@@ -616,11 +613,6 @@ export function useChannelsColumns(
             )
           }
 
-          // Regular channel row
-          const settings = parseChannelSettings(channel.setting)
-          const isPassThrough = settings.pass_through_body_enabled === true
-          const hasParamOverride = Boolean(channel.param_override?.trim())
-
           return (
             <div className='flex max-w-full min-w-0 items-center gap-2'>
               <div className='flex max-w-full min-w-0 flex-col gap-1'>
@@ -630,36 +622,6 @@ export function useChannelsColumns(
                     className='font-medium'
                     maxWidth='max-w-full'
                   />
-                  {isPassThrough && (
-                    <TooltipProvider delay={100}>
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <AlertTriangle className='h-3.5 w-3.5 flex-shrink-0 text-amber-500' />
-                          }
-                        />
-                        <TooltipContent side='top'>
-                          {t(
-                            'Request body pass-through is enabled. The request body will be sent directly to the upstream without any conversion.'
-                          )}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  )}
-                  {hasParamOverride && (
-                    <TooltipProvider delay={100}>
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <SlidersHorizontal className='text-info h-3.5 w-3.5 flex-shrink-0' />
-                          }
-                        />
-                        <TooltipContent side='top'>
-                          {t('Override request parameters')}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  )}
                   <UpstreamUpdateTags channel={channel} />
                 </div>
                 {channel.remark && (

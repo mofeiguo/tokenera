@@ -86,11 +86,10 @@ func createChannelSelectAutoGroupsChannel(t *testing.T, db *gorm.DB, id int, gro
 		NameRule:  model.NameRuleExact,
 	}).Error)
 	require.NoError(t, db.Create(&model.ModelBinding{
-		ModelId:       catalogModel.Id,
-		ChannelId:     id,
-		UpstreamModel: modelName,
-		Enabled:       true,
-		GroupsRaw:     group,
+		ModelId:   catalogModel.Id,
+		ChannelId: id,
+		Enabled:   true,
+		GroupsRaw: group,
 	}).Error)
 }
 

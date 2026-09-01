@@ -2,14 +2,13 @@ package model
 
 import (
 	"fmt"
+	"sort"
 	"strings"
-
 	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/types"
 )
@@ -112,74 +111,45 @@ func GetModelSupportEndpointTypes(model string) []constant.EndpointType {
 	return make([]constant.EndpointType, 0)
 }
 
-func getPricingEndpointTypesForBinding(binding BindingWithChannel, advancedCustomConfigs map[int]*dto.AdvancedCustomConfig) []constant.EndpointType {
-	if binding.ChannelType != constant.ChannelTypeAdvancedCustom {
-		return common.GetEndpointTypesByChannelType(binding.ChannelType, binding.Model)
+// ModelSupportsIncomingEndpoint reports whether the catalog/pricing cache
+// allows this model on the incoming public API. An empty allowlist means the
+// model has no advertised endpoints yet, so the request is not blocked.
+func ModelSupportsIncomingEndpoint(modelName string, endpointType constant.EndpointType) bool {
+	if modelName == "" || endpointType == "" {
+		return true
 	}
-	if config := advancedCustomConfigs[binding.ChannelId]; config != nil {
-		return config.SupportedEndpointTypesForModel(binding.Model)
+	allowed := GetModelSupportEndpointTypes(modelName)
+	if len(allowed) == 0 {
+		return true
 	}
-	return common.GetEndpointTypesByChannelType(binding.ChannelType, binding.Model)
+	for _, item := range allowed {
+		if item == endpointType {
+			return true
+		}
+	}
+	return false
 }
 
-// loadPricingAdvancedCustomConfigs runs inside updatePricing while
-// updatePricingLock is held, and nests channelSyncLock.RLock. This defines the
-// global lock order updatePricingLock -> channelSyncLock: any code path holding
-// channelSyncLock must release it before touching the pricing cache (see
-// InitChannelCache / CacheUpdateChannel), otherwise it deadlocks.
-// The returned configs are pointers shared with the channel cache; they are
-// replaced wholesale on update and never mutated in place, so reading them after
-// RUnlock is safe.
-func loadPricingAdvancedCustomConfigs(enabledBindings []BindingWithChannel) map[int]*dto.AdvancedCustomConfig {
-	channelIDs := make([]int, 0)
-	seen := make(map[int]struct{})
-	for _, binding := range enabledBindings {
-		if binding.ChannelType != constant.ChannelTypeAdvancedCustom {
-			continue
-		}
-		if _, exists := seen[binding.ChannelId]; exists {
-			continue
-		}
-		seen[binding.ChannelId] = struct{}{}
-		channelIDs = append(channelIDs, binding.ChannelId)
-	}
-	if len(channelIDs) == 0 {
+func catalogEndpointTypeKeys(endpointsJSON string) []string {
+	if strings.TrimSpace(endpointsJSON) == "" {
 		return nil
 	}
-
-	configs := make(map[int]*dto.AdvancedCustomConfig, len(channelIDs))
-	if common.MemoryCacheEnabled {
-		channelSyncLock.RLock()
-		defer channelSyncLock.RUnlock()
-		for _, channelID := range channelIDs {
-			if config := channel2advancedCustomConfig[channelID]; config != nil {
-				configs[channelID] = config
-			}
-		}
-		return configs
+	var raw map[string]interface{}
+	if err := common.Unmarshal([]byte(endpointsJSON), &raw); err != nil {
+		return nil
 	}
-
-	for _, channelID := range channelIDs {
-		channel, err := CacheGetChannel(channelID)
-		if err != nil {
-			common.SysLog(fmt.Sprintf("load advanced custom channel settings error: channel_id=%d, error=%v", channelID, err))
+	keys := make([]string, 0, len(raw))
+	for key, value := range raw {
+		if key == "" {
 			continue
 		}
-		if channel.Type != constant.ChannelTypeAdvancedCustom {
-			continue
-		}
-		if config := channel.GetOtherSettings().AdvancedCustom; config != nil {
-			configs[channelID] = config
+		switch value.(type) {
+		case string, map[string]interface{}:
+			keys = append(keys, key)
 		}
 	}
-	return configs
-}
-
-func appendPricingEndpoint(endpoints []string, endpoint string) []string {
-	if endpoint == "" || common.StringsContains(endpoints, endpoint) {
-		return endpoints
-	}
-	return append(endpoints, endpoint)
+	sort.Strings(keys)
+	return keys
 }
 
 func updatePricing() {
@@ -281,50 +251,19 @@ func updatePricing() {
 		groups.Add(binding.Group)
 	}
 
-	//这里使用切片而不是Set，因为一个模型可能支持多个端点类型，并且第一个端点是优先使用端点
-	modelSupportEndpointsStr := make(map[string][]string)
-	advancedCustomConfigs := loadPricingAdvancedCustomConfigs(enabledBindings)
-
-	// 先根据已有绑定填充原生端点
-	for _, binding := range enabledBindings {
-		endpoints := modelSupportEndpointsStr[binding.Model]
-		channelTypes := getPricingEndpointTypesForBinding(binding, advancedCustomConfigs)
-		for _, channelType := range channelTypes {
-			if !common.StringsContains(endpoints, string(channelType)) {
-				endpoints = append(endpoints, string(channelType))
-			}
-		}
-		modelSupportEndpointsStr[binding.Model] = endpoints
-	}
-
-	// 再补充模型自定义端点：若配置有效则追加到已有推断，不再裁剪渠道真实能力
+	// Advertised public endpoints come only from models.endpoints.
+	// Channel type and Advanced Custom incoming_path do not infer them.
+	modelSupportEndpointTypes = make(map[string][]constant.EndpointType)
 	for modelName, meta := range metaMap {
-		if strings.TrimSpace(meta.Endpoints) == "" {
+		keys := catalogEndpointTypeKeys(meta.Endpoints)
+		if len(keys) == 0 {
 			continue
 		}
-		var raw map[string]interface{}
-		if err := common.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
-			endpoints := modelSupportEndpointsStr[modelName]
-			for k, v := range raw {
-				switch v.(type) {
-				case string, map[string]interface{}:
-					endpoints = appendPricingEndpoint(endpoints, k)
-				}
-			}
-			if len(endpoints) > 0 {
-				modelSupportEndpointsStr[modelName] = endpoints
-			}
+		supportedEndpoints := make([]constant.EndpointType, 0, len(keys))
+		for _, key := range keys {
+			supportedEndpoints = append(supportedEndpoints, constant.EndpointType(key))
 		}
-	}
-
-	modelSupportEndpointTypes = make(map[string][]constant.EndpointType)
-	for model, endpoints := range modelSupportEndpointsStr {
-		supportedEndpoints := make([]constant.EndpointType, 0)
-		for _, endpointStr := range endpoints {
-			endpointType := constant.EndpointType(endpointStr)
-			supportedEndpoints = append(supportedEndpoints, endpointType)
-		}
-		modelSupportEndpointTypes[model] = supportedEndpoints
+		modelSupportEndpointTypes[modelName] = supportedEndpoints
 	}
 
 	// 构建全局 supportedEndpointMap（默认 + 自定义覆盖）

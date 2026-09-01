@@ -1,10 +1,14 @@
 package common
 
 import (
+	"bytes"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -159,4 +163,73 @@ func TestNewOutboundJSONBody_GetBodyReadersAreIndependent_DiskStorage(t *testing
 	require.NoError(t, closer.Close())
 	_, err = body.NewReader()
 	require.ErrorIs(t, err, common.ErrStorageClosed)
+}
+
+func TestNewOutboundRawBodyMatchesClientJSONBytes(t *testing.T) {
+	payload := []byte(`{"model":"gpt-4.1","messages":[{"role":"user","content":"hi"}],"future_field":{"nested":true},"stream_options":{"include_usage":true}}`)
+	c := newGinContextWithBody(t, "/v1/chat/completions", "application/json", payload)
+
+	body, err := NewOutboundRawBody(c)
+	require.NoError(t, err)
+
+	got, err := io.ReadAll(body)
+	require.NoError(t, err)
+	assert.Equal(t, payload, got)
+
+	rc, err := body.NewReader()
+	require.NoError(t, err)
+	replay, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	require.NoError(t, rc.Close())
+	assert.Equal(t, payload, replay)
+}
+
+func TestNewOutboundRawBodyMatchesClientMultipartBytes(t *testing.T) {
+	payload := []byte("--boundary123\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nwhisper-1\r\n--boundary123\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.wav\"\r\nContent-Type: audio/wav\r\n\r\nRIFFDATA\r\n--boundary123--\r\n")
+	c := newGinContextWithBody(t, "/v1/audio/transcriptions", "multipart/form-data; boundary=boundary123", payload)
+
+	body, err := NewOutboundRawBody(c)
+	require.NoError(t, err)
+	got, err := io.ReadAll(body)
+	require.NoError(t, err)
+	assert.Equal(t, payload, got)
+}
+
+func TestNewOutboundRawBodyPreservesAlphaSearchUnknownFields(t *testing.T) {
+	payload := []byte(`{"id":"req_1","model":"gpt-5.1","commands":{"search_query":[{"q":"weather"}]},"future_field":{"nested":true}}`)
+	c := newGinContextWithBody(t, "/v1/alpha/search", "application/json", payload)
+
+	body, err := NewOutboundRawBody(c)
+	require.NoError(t, err)
+	got, err := io.ReadAll(body)
+	require.NoError(t, err)
+	assert.Equal(t, payload, got)
+}
+
+func TestRewriteOutboundJSONModelReplacesExistingModel(t *testing.T) {
+	got, err := RewriteOutboundJSONModel(
+		[]byte(`{"model":"my-alias","stream":true}`),
+		"deepseek-v4-pro",
+	)
+	require.NoError(t, err)
+	assert.Contains(t, string(got), `"model":"deepseek-v4-pro"`)
+	assert.NotContains(t, string(got), "my-alias")
+}
+
+func TestRewriteOutboundJSONModelSkipsBodiesWithoutModel(t *testing.T) {
+	raw := []byte(`{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`)
+	got, err := RewriteOutboundJSONModel(raw, "gemini-2.5-flash")
+	require.NoError(t, err)
+	assert.Equal(t, raw, got)
+}
+
+func newGinContextWithBody(t *testing.T, path, contentType string, payload []byte) *gin.Context {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, path, bytes.NewReader(payload))
+	c.Request.Header.Set("Content-Type", contentType)
+	c.Request.ContentLength = int64(len(payload))
+	t.Cleanup(func() { common.CleanupBodyStorage(c) })
+	return c
 }

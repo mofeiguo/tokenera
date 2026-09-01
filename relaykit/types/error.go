@@ -26,13 +26,12 @@ type ClaudeError struct {
 type ErrorType string
 
 const (
-	ErrorTypeNewAPIError     ErrorType = "new_api_error"
-	ErrorTypeOpenAIError     ErrorType = "openai_error"
-	ErrorTypeClaudeError     ErrorType = "claude_error"
-	ErrorTypeMidjourneyError ErrorType = "midjourney_error"
-	ErrorTypeGeminiError     ErrorType = "gemini_error"
-	ErrorTypeRerankError     ErrorType = "rerank_error"
-	ErrorTypeUpstreamError   ErrorType = "upstream_error"
+	ErrorTypeNewAPIError   ErrorType = "new_api_error"
+	ErrorTypeOpenAIError   ErrorType = "openai_error"
+	ErrorTypeClaudeError   ErrorType = "claude_error"
+	ErrorTypeGeminiError   ErrorType = "gemini_error"
+	ErrorTypeRerankError   ErrorType = "rerank_error"
+	ErrorTypeUpstreamError ErrorType = "upstream_error"
 )
 
 type ErrorCode string
@@ -53,9 +52,7 @@ const (
 
 	// channel error
 	ErrorCodeChannelNoAvailableKey        ErrorCode = "channel:no_available_key"
-	ErrorCodeChannelParamOverrideInvalid  ErrorCode = "channel:param_override_invalid"
 	ErrorCodeChannelHeaderOverrideInvalid ErrorCode = "channel:header_override_invalid"
-	ErrorCodeChannelModelMappedError      ErrorCode = "channel:model_mapped_error"
 	ErrorCodeChannelAwsClientError        ErrorCode = "channel:aws_client_error"
 	ErrorCodeChannelInvalidKey            ErrorCode = "channel:invalid_key"
 	ErrorCodeChannelResponseTimeExceeded  ErrorCode = "channel:response_time_exceeded"

@@ -19,13 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 import { z } from 'zod'
 
 import {
-  CLAUDE_FIELD_PASSTHROUGH_TYPES,
   CHANNEL_TYPE_BIFROST,
   CHANNEL_STATUS,
   ERROR_MESSAGES,
-  FIELD_PASSTHROUGH_TYPES,
   MODEL_FETCHABLE_TYPES,
-  OPENAI_FIELD_PASSTHROUGH_TYPES,
 } from '../constants'
 import type { Channel } from '../types'
 import {
@@ -122,17 +119,6 @@ function isOptionalJsonObject(value: string | undefined): boolean {
   }
 }
 
-function isOptionalModelMapping(value: string | undefined): boolean {
-  try {
-    const parsed = parseOptionalJson(value)
-    if (parsed === undefined) return true
-    if (!isJsonObjectValue(parsed)) return false
-    return Object.values(parsed).every((item) => typeof item === 'string')
-  } catch {
-    return false
-  }
-}
-
 function isOptionalStatusCodeMapping(value: string | undefined): boolean {
   try {
     const parsed = parseOptionalJson(value)
@@ -171,19 +157,6 @@ function isCodexCredential(value: string | undefined): boolean {
   }
 }
 
-function isVertexJsonKey(value: string | undefined): boolean {
-  try {
-    const parsed = parseOptionalJson(value)
-    if (parsed === undefined) return true
-    if (Array.isArray(parsed)) {
-      return parsed.every((item) => isJsonObjectValue(item))
-    }
-    return isJsonObjectValue(parsed)
-  } catch {
-    return false
-  }
-}
-
 function addRequiredIssue(
   ctx: z.RefinementCtx,
   path: string,
@@ -205,13 +178,6 @@ export const channelFormSchema = z
     openai_organization: z.string().optional(),
     models: z.string(),
     group: z.array(z.string()).min(1, ERROR_MESSAGES.REQUIRED_GROUP),
-    model_mapping: z
-      .string()
-      .optional()
-      .refine(
-        isOptionalModelMapping,
-        'Model mapping must be a JSON object with string values'
-      ),
     priority: z.number().optional(),
     weight: z.number().optional(),
     test_model: z.string().optional(),
@@ -230,10 +196,6 @@ export const channelFormSchema = z
       .max(255, 'Remark must be less than 255 characters')
       .optional(),
     setting: z
-      .string()
-      .optional()
-      .refine(isOptionalJsonObject, ERROR_MESSAGES.INVALID_JSON),
-    param_override: z
       .string()
       .optional()
       .refine(isOptionalJsonObject, ERROR_MESSAGES.INVALID_JSON),
@@ -261,22 +223,9 @@ export const channelFormSchema = z
       .refine(isOptionalProxyURL, ERROR_MESSAGES.INVALID_PROXY),
     http_protocol: z.enum(['auto', 'http1']).optional(),
     http2_connection_shards: z.number().int().optional(),
-    pass_through_body_enabled: z.boolean().optional(),
-    system_prompt: z.string().optional(),
-    system_prompt_override: z.boolean().optional(),
     // Type-specific settings (stored in settings JSON)
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
-    vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
     aws_key_type: z.enum(['ak_sk', 'api_key']).optional(), // AWS specific
-    azure_responses_version: z.string().optional(), // Azure specific
-    // Field passthrough controls (stored in settings JSON)
-    allow_service_tier: z.boolean().optional(), // OpenAI/Anthropic
-    disable_store: z.boolean().optional(), // OpenAI only
-    allow_safety_identifier: z.boolean().optional(), // OpenAI only
-    allow_include_obfuscation: z.boolean().optional(), // OpenAI: include usage obfuscation
-    allow_inference_geo: z.boolean().optional(), // OpenAI/Anthropic: inference geography
-    allow_speed: z.boolean().optional(), // Anthropic: speed mode control
-    claude_beta_query: z.boolean().optional(), // Anthropic: beta query passthrough
     disable_task_polling_sleep: z.boolean().optional(),
     // Upstream model update settings (stored in settings JSON)
     upstream_model_update_check_enabled: z.boolean().optional(),
@@ -326,7 +275,7 @@ export const channelFormSchema = z
       }
     }
 
-    if ([3, 18, 21, 39, 41, 49].includes(data.type) && !data.other?.trim()) {
+    if ([18, 21, 39, 49].includes(data.type) && !data.other?.trim()) {
       addRequiredIssue(
         ctx,
         'other',
@@ -349,32 +298,6 @@ export const channelFormSchema = z
           'Codex credential must be a JSON object with access_token and account_id'
         )
       }
-    }
-
-    if (
-      data.type === 41 &&
-      data.vertex_key_type === 'json' &&
-      data.key?.trim() &&
-      !isVertexJsonKey(data.key)
-    ) {
-      addRequiredIssue(
-        ctx,
-        'key',
-        'Vertex AI service account key must be valid JSON'
-      )
-    }
-
-    if (
-      data.type === 41 &&
-      data.vertex_key_type === 'api_key' &&
-      data.multi_key_mode &&
-      data.multi_key_mode !== 'single'
-    ) {
-      addRequiredIssue(
-        ctx,
-        'multi_key_mode',
-        'Vertex AI API Key mode does not support batch creation'
-      )
     }
 
     const protocol = normalizeHttpProtocol(data.http_protocol)
@@ -409,7 +332,6 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   openai_organization: '',
   models: '',
   group: ['default'],
-  model_mapping: '',
   priority: 0,
   weight: 0,
   test_model: '',
@@ -419,7 +341,6 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   tag: '',
   remark: '',
   setting: '',
-  param_override: '',
   header_override: '',
   settings: '{}',
   other: '',
@@ -433,22 +354,9 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   proxy: '',
   http_protocol: HTTP_PROTOCOL_AUTO,
   http2_connection_shards: 1,
-  pass_through_body_enabled: false,
-  system_prompt: '',
-  system_prompt_override: false,
   // Type-specific settings
   is_enterprise_account: false,
-  vertex_key_type: 'json',
   aws_key_type: 'ak_sk',
-  azure_responses_version: '',
-  // Field passthrough controls
-  allow_service_tier: false,
-  disable_store: false,
-  allow_safety_identifier: false,
-  allow_include_obfuscation: false,
-  allow_inference_geo: false,
-  allow_speed: false,
-  claude_beta_query: false,
   disable_task_polling_sleep: false,
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
@@ -473,9 +381,6 @@ export function transformChannelToFormDefaults(
     proxy: '',
     http_protocol: HTTP_PROTOCOL_AUTO as 'auto' | 'http1',
     http2_connection_shards: 1,
-    pass_through_body_enabled: false,
-    system_prompt: '',
-    system_prompt_override: false,
   }
 
   if (channel.setting) {
@@ -491,9 +396,6 @@ export function transformChannelToFormDefaults(
         proxy: parsed.proxy || '',
         http_protocol: protocol,
         http2_connection_shards: protocol === HTTP_PROTOCOL_HTTP1 ? 1 : shards,
-        pass_through_body_enabled: parsed.pass_through_body_enabled || false,
-        system_prompt: parsed.system_prompt || '',
-        system_prompt_override: parsed.system_prompt_override || false,
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -502,17 +404,8 @@ export function transformChannelToFormDefaults(
   }
 
   // Parse type-specific settings from settings field
-  let vertexKeyType: 'json' | 'api_key' = 'json'
-  let azureResponsesVersion = ''
   let isEnterpriseAccount = false
   let awsKeyType: 'ak_sk' | 'api_key' = 'ak_sk'
-  let allowServiceTier = false
-  let disableStore = false
-  let allowSafetyIdentifier = false
-  let allowIncludeObfuscation = false
-  let allowInferenceGeo = false
-  let allowSpeed = false
-  let claudeBetaQuery = false
   let disableTaskPollingSleep = false
   let upstreamModelUpdateCheckEnabled = false
   let upstreamModelUpdateAutoSyncEnabled = false
@@ -522,17 +415,8 @@ export function transformChannelToFormDefaults(
   if (channel.settings) {
     try {
       const parsed = JSON.parse(channel.settings)
-      vertexKeyType = parsed.vertex_key_type || 'json'
-      azureResponsesVersion = parsed.azure_responses_version || ''
       isEnterpriseAccount = parsed.openrouter_enterprise === true
       awsKeyType = parsed.aws_key_type || 'ak_sk'
-      allowServiceTier = parsed.allow_service_tier === true
-      disableStore = parsed.disable_store === true
-      allowSafetyIdentifier = parsed.allow_safety_identifier === true
-      allowIncludeObfuscation = parsed.allow_include_obfuscation === true
-      allowInferenceGeo = parsed.allow_inference_geo === true
-      allowSpeed = parsed.allow_speed === true
-      claudeBetaQuery = parsed.claude_beta_query === true
       disableTaskPollingSleep = parsed.disable_task_polling_sleep === true
       upstreamModelUpdateCheckEnabled =
         parsed.upstream_model_update_check_enabled === true
@@ -560,7 +444,6 @@ export function transformChannelToFormDefaults(
     openai_organization: channel.openai_organization || '',
     models: channel.models || '',
     group: parseGroups(channel.group || 'default'),
-    model_mapping: channel.model_mapping || '',
     priority: channel.priority || 0,
     weight: channel.weight || 0,
     test_model: channel.test_model || '',
@@ -570,7 +453,6 @@ export function transformChannelToFormDefaults(
     tag: channel.tag || '',
     remark: channel.remark || '',
     setting: channel.setting || '',
-    param_override: channel.param_override || '',
     header_override: channel.header_override || '',
     settings: channel.settings || '{}',
     other: channel.other || '',
@@ -582,17 +464,8 @@ export function transformChannelToFormDefaults(
     ...extraSettings,
     // Type-specific settings
     is_enterprise_account: isEnterpriseAccount,
-    vertex_key_type: vertexKeyType,
-    azure_responses_version: azureResponsesVersion,
     aws_key_type: awsKeyType,
-    allow_service_tier: allowServiceTier,
-    disable_store: disableStore,
-    allow_include_obfuscation: allowIncludeObfuscation,
-    allow_inference_geo: allowInferenceGeo,
-    allow_speed: allowSpeed,
-    claude_beta_query: claudeBetaQuery,
     disable_task_polling_sleep: disableTaskPollingSleep,
-    allow_safety_identifier: allowSafetyIdentifier,
     upstream_model_update_check_enabled: upstreamModelUpdateCheckEnabled,
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
@@ -608,9 +481,6 @@ export function buildSettingJSON(formData: ChannelFormValues): string {
     force_format: formData.force_format || false,
     thinking_to_content: formData.thinking_to_content || false,
     proxy: formData.proxy?.trim() || '',
-    pass_through_body_enabled: formData.pass_through_body_enabled || false,
-    system_prompt: formData.system_prompt || '',
-    system_prompt_override: formData.system_prompt_override || false,
   }
 
   const protocol = normalizeHttpProtocol(formData.http_protocol)
@@ -630,7 +500,7 @@ export function buildSettingJSON(formData: ChannelFormValues): string {
 }
 
 /**
- * Build the settings JSON string (for type-specific config like vertex_key_type)
+ * Build the settings JSON string (for type-specific config like OpenRouter / AWS)
  */
 function buildSettingsJSON(formData: ChannelFormValues): string {
   let settingsObj: Record<string, unknown> = {}
@@ -645,20 +515,6 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     }
   }
 
-  // Add vertex_key_type for Vertex AI channels (type 41)
-  if (formData.type === 41) {
-    settingsObj.vertex_key_type = formData.vertex_key_type || 'json'
-  } else if ('vertex_key_type' in settingsObj) {
-    delete settingsObj.vertex_key_type
-  }
-
-  // Add azure_responses_version for Azure channels (type 3)
-  if (formData.type === 3 && formData.azure_responses_version) {
-    settingsObj.azure_responses_version = formData.azure_responses_version
-  } else if ('azure_responses_version' in settingsObj) {
-    delete settingsObj.azure_responses_version
-  }
-
   // Add enterprise account setting for OpenRouter (type 20)
   if (formData.type === 20) {
     settingsObj.openrouter_enterprise = formData.is_enterprise_account === true
@@ -671,56 +527,6 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.aws_key_type = formData.aws_key_type || 'ak_sk'
   } else if ('aws_key_type' in settingsObj) {
     delete settingsObj.aws_key_type
-  }
-
-  // Field passthrough controls:
-  // - OpenAI, Anthropic, Codex, and New API: allow_service_tier
-  // - OpenAI request fields: OpenAI, Codex, and New API
-  // - Claude request fields: Anthropic and New API
-  if (FIELD_PASSTHROUGH_TYPES.has(formData.type)) {
-    settingsObj.allow_service_tier = formData.allow_service_tier === true
-  } else if ('allow_service_tier' in settingsObj) {
-    delete settingsObj.allow_service_tier
-  }
-
-  if (OPENAI_FIELD_PASSTHROUGH_TYPES.has(formData.type)) {
-    settingsObj.disable_store = formData.disable_store === true
-    settingsObj.allow_safety_identifier =
-      formData.allow_safety_identifier === true
-    settingsObj.allow_include_obfuscation =
-      formData.allow_include_obfuscation === true
-  } else {
-    if ('disable_store' in settingsObj) {
-      delete settingsObj.disable_store
-    }
-    if ('allow_safety_identifier' in settingsObj) {
-      delete settingsObj.allow_safety_identifier
-    }
-    if ('allow_include_obfuscation' in settingsObj) {
-      delete settingsObj.allow_include_obfuscation
-    }
-  }
-
-  if (
-    OPENAI_FIELD_PASSTHROUGH_TYPES.has(formData.type) ||
-    CLAUDE_FIELD_PASSTHROUGH_TYPES.has(formData.type)
-  ) {
-    settingsObj.allow_inference_geo = formData.allow_inference_geo === true
-  } else if ('allow_inference_geo' in settingsObj) {
-    delete settingsObj.allow_inference_geo
-  }
-
-  if (CLAUDE_FIELD_PASSTHROUGH_TYPES.has(formData.type)) {
-    settingsObj.allow_speed = formData.allow_speed === true
-  } else if ('allow_speed' in settingsObj) {
-    delete settingsObj.allow_speed
-  }
-
-  // Only the Anthropic adaptor supports forcing the Claude beta query.
-  if (formData.type === 14) {
-    settingsObj.claude_beta_query = formData.claude_beta_query === true
-  } else if ('claude_beta_query' in settingsObj) {
-    delete settingsObj.claude_beta_query
   }
 
   settingsObj.disable_task_polling_sleep =
@@ -791,7 +597,6 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
     openai_organization: formData.openai_organization || null,
     models: formData.models,
     group: formatGroups(formData.group),
-    model_mapping: formData.model_mapping || null,
     priority: formData.priority || null,
     weight: formData.weight || null,
     test_model: formData.test_model || null,
@@ -801,7 +606,6 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
     tag: formData.tag || null,
     remark: formData.remark || '',
     setting: buildSettingJSON(formData),
-    param_override: formData.param_override || null,
     header_override: formData.header_override || null,
     settings: buildSettingsJSON(formData),
     other: formData.other || '',
@@ -839,7 +643,6 @@ export function transformFormDataToUpdatePayload(
     openai_organization: formData.openai_organization || null,
     models: formData.models,
     group: formatGroups(formData.group),
-    model_mapping: formData.model_mapping || null,
     priority: formData.priority ?? 0,
     weight: formData.weight ?? 0,
     test_model: formData.test_model || null,
@@ -848,7 +651,6 @@ export function transformFormDataToUpdatePayload(
     tag: formData.tag || null,
     remark: formData.remark || '',
     setting: buildSettingJSON(formData),
-    param_override: formData.param_override || null,
     header_override: formData.header_override || null,
     settings: buildSettingsJSON(formData),
     other: formData.other || '',
@@ -872,9 +674,7 @@ export function transformFormDataToUpdatePayload(
   payload.test_model = formData.test_model || ''
   payload.tag = formData.tag || ''
   payload.remark = formData.remark || ''
-  payload.model_mapping = formData.model_mapping || ''
   payload.status_code_mapping = formData.status_code_mapping || ''
-  payload.param_override = formData.param_override || ''
   payload.header_override = formData.header_override || ''
 
   return payload
@@ -895,14 +695,6 @@ export function validateJSON(value: string): boolean {
   } catch {
     return false
   }
-}
-
-/**
- * Validate model mapping format
- */
-export function validateModelMapping(value: string): boolean {
-  if (!value || value.trim() === '') return true
-  return validateJSON(value)
 }
 
 /**
@@ -939,4 +731,16 @@ export function formatModels(models: string[]): string {
  */
 export function formatGroups(groups: string[]): string {
   return groups.join(',')
+}
+
+export function parseModelsString(modelsStr: string): string[] {
+  return parseModels(modelsStr)
+}
+
+export function formatModelsArray(models: string[]): string {
+  return Array.from(new Set(models)).join(',')
+}
+
+export function normalizeModelName(model: string): string {
+  return typeof model === 'string' ? model.trim() : ''
 }

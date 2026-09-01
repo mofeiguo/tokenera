@@ -21,12 +21,12 @@ func TestRequestConverterRegistryListsSupportedTextConverters(t *testing.T) {
 		stepConverters []string
 		advancedCustom bool
 	}{
-		{converter: ConverterClaudeMessagesToOpenAIChat, from: types.RelayFormatClaude, to: types.RelayFormatOpenAI, quality: RequestConverterQualityFair, advancedCustom: true},
-		{converter: ConverterGeminiContentToOpenAIChat, from: types.RelayFormatGemini, to: types.RelayFormatOpenAI, quality: RequestConverterQualityFair, advancedCustom: true},
-		{converter: ConverterOpenAIChatToClaudeMessages, from: types.RelayFormatOpenAI, to: types.RelayFormatClaude, quality: RequestConverterQualityFair, advancedCustom: true},
-		{converter: ConverterOpenAIChatToGeminiContent, from: types.RelayFormatOpenAI, to: types.RelayFormatGemini, quality: RequestConverterQualityFair, advancedCustom: true},
-		{converter: ConverterOpenAIChatToOpenAIResponses, from: types.RelayFormatOpenAI, to: types.RelayFormatOpenAIResponses, quality: RequestConverterQualityGood, advancedCustom: true},
-		{converter: ConverterOpenAIResponsesToOpenAIChat, from: types.RelayFormatOpenAIResponses, to: types.RelayFormatOpenAI, quality: RequestConverterQualityGood, advancedCustom: true},
+		{converter: ConverterClaudeMessagesToOpenAIChat, from: types.RelayFormatClaude, to: types.RelayFormatOpenAI, quality: RequestConverterQualityFair},
+		{converter: ConverterGeminiContentToOpenAIChat, from: types.RelayFormatGemini, to: types.RelayFormatOpenAI, quality: RequestConverterQualityFair},
+		{converter: ConverterOpenAIChatToClaudeMessages, from: types.RelayFormatOpenAI, to: types.RelayFormatClaude, quality: RequestConverterQualityFair},
+		{converter: ConverterOpenAIChatToGeminiContent, from: types.RelayFormatOpenAI, to: types.RelayFormatGemini, quality: RequestConverterQualityFair},
+		{converter: ConverterOpenAIChatToOpenAIResponses, from: types.RelayFormatOpenAI, to: types.RelayFormatOpenAIResponses, quality: RequestConverterQualityGood},
+		{converter: ConverterOpenAIResponsesToOpenAIChat, from: types.RelayFormatOpenAIResponses, to: types.RelayFormatOpenAI, quality: RequestConverterQualityGood},
 		{
 			converter: requestConverterClaudeToGemini,
 			from:      types.RelayFormatClaude,
@@ -74,11 +74,10 @@ func TestRequestConverterRegistryListsSupportedTextConverters(t *testing.T) {
 			quality:   RequestConverterQualityFair,
 		},
 		{
-			converter:      ConverterOpenAIResponsesToGemini,
-			from:           types.RelayFormatOpenAIResponses,
-			to:             types.RelayFormatGemini,
-			quality:        RequestConverterQualityFair,
-			advancedCustom: true,
+			converter: ConverterOpenAIResponsesToGemini,
+			from:      types.RelayFormatOpenAIResponses,
+			to:        types.RelayFormatGemini,
+			quality:   RequestConverterQualityFair,
 		},
 	}
 

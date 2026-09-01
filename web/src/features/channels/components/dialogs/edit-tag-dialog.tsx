@@ -23,7 +23,6 @@ import { toast } from 'sonner'
 
 import { Dialog } from '@/components/dialog'
 import { GroupBadge } from '@/components/group-badge'
-import { JsonCodeEditor } from '@/components/json-code-editor'
 import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -64,7 +63,6 @@ export function EditTagDialog({ open, onOpenChange }: EditTagDialogProps) {
   const [newTag, setNewTag] = useState('')
   const [selectedModels, setSelectedModels] = useState<string[]>([])
   const [customModel, setCustomModel] = useState('')
-  const [modelMapping, setModelMapping] = useState('')
   const [selectedGroups, setSelectedGroups] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -97,7 +95,6 @@ export function EditTagDialog({ open, onOpenChange }: EditTagDialogProps) {
   useEffect(() => {
     if (open && currentTag) {
       setNewTag(currentTag)
-      setModelMapping('')
       setSelectedGroups([])
       setCustomModel('')
 
@@ -141,27 +138,12 @@ export function EditTagDialog({ open, onOpenChange }: EditTagDialogProps) {
     )
   }
 
-  const validateForm = () => {
-    // Validate model mapping if provided
-    if (modelMapping.trim()) {
-      try {
-        JSON.parse(modelMapping)
-      } catch {
-        toast.error(t('Model mapping must be valid JSON'))
-        return false
-      }
-    }
-    return true
-  }
-
   const handleSubmit = async () => {
     if (!currentTag) return
-    if (!validateForm()) return
 
     // Check if anything changed
     const hasChanges =
       newTag !== currentTag ||
-      modelMapping.trim() ||
       selectedModels.length > 0 ||
       selectedGroups.length > 0
 
@@ -176,10 +158,6 @@ export function EditTagDialog({ open, onOpenChange }: EditTagDialogProps) {
 
       if (newTag && newTag !== currentTag) {
         params.new_tag = newTag || null
-      }
-
-      if (modelMapping.trim()) {
-        params.model_mapping = modelMapping
       }
 
       if (selectedModels.length > 0) {
@@ -358,59 +336,6 @@ export function EditTagDialog({ open, onOpenChange }: EditTagDialogProps) {
                 </div>
               </>
             )}
-          </div>
-
-          <Separator />
-
-          {/* Model Mapping */}
-          <div className='space-y-2'>
-            <Label htmlFor='model-mapping'>
-              {t('Model Mapping (JSON)')}
-              <span className='text-muted-foreground ml-2 text-xs'>
-                {t('(Optional: redirect model names)')}
-              </span>
-            </Label>
-            <JsonCodeEditor
-              id='model-mapping'
-              value={modelMapping}
-              onChange={setModelMapping}
-              placeholder={'{\n  "gpt-3.5-turbo": "gpt-3.5-turbo-0125"\n}'}
-              heightClassName='h-40 min-h-40 max-h-40'
-            />
-            <div className='flex gap-2'>
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                onClick={() =>
-                  setModelMapping(
-                    JSON.stringify(
-                      { 'gpt-3.5-turbo': 'gpt-3.5-turbo-0125' },
-                      null,
-                      2
-                    )
-                  )
-                }
-              >
-                {t('Example')}
-              </Button>
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                onClick={() => setModelMapping(JSON.stringify({}, null, 2))}
-              >
-                {t('Clear Mapping')}
-              </Button>
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                onClick={() => setModelMapping('')}
-              >
-                {t('No Change')}
-              </Button>
-            </div>
           </div>
 
           <Separator />

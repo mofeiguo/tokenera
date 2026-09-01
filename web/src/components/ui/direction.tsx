@@ -16,7 +16,4 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export {
-  DirectionProvider,
-  useDirection,
-} from '@base-ui/react/direction-provider'
+export { DirectionProvider, useDirection } from '@radix-ui/react-direction'

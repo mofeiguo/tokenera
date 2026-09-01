@@ -1,7 +1,6 @@
 package kling
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"math"
@@ -22,57 +21,15 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/channel"
-	taskcommon "github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
+	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 )
 
 // ============================
-// Request / Response structures
+// Response structures
 // ============================
-
-type TrajectoryPoint struct {
-	X int `json:"x"`
-	Y int `json:"y"`
-}
-
-type DynamicMask struct {
-	Mask         string            `json:"mask,omitempty"`
-	Trajectories []TrajectoryPoint `json:"trajectories,omitempty"`
-}
-
-type CameraConfig struct {
-	Horizontal float64 `json:"horizontal,omitempty"`
-	Vertical   float64 `json:"vertical,omitempty"`
-	Pan        float64 `json:"pan,omitempty"`
-	Tilt       float64 `json:"tilt,omitempty"`
-	Roll       float64 `json:"roll,omitempty"`
-	Zoom       float64 `json:"zoom,omitempty"`
-}
-
-type CameraControl struct {
-	Type   string        `json:"type,omitempty"`
-	Config *CameraConfig `json:"config,omitempty"`
-}
-
-type requestPayload struct {
-	Prompt         string         `json:"prompt,omitempty"`
-	Image          string         `json:"image,omitempty"`
-	ImageTail      string         `json:"image_tail,omitempty"`
-	NegativePrompt string         `json:"negative_prompt,omitempty"`
-	Mode           string         `json:"mode,omitempty"`
-	Duration       string         `json:"duration,omitempty"`
-	AspectRatio    string         `json:"aspect_ratio,omitempty"`
-	ModelName      string         `json:"model_name,omitempty"`
-	Model          string         `json:"model,omitempty"` // Compatible with upstreams that only recognize "model"
-	CfgScale       float64        `json:"cfg_scale,omitempty"`
-	StaticMask     string         `json:"static_mask,omitempty"`
-	DynamicMasks   []DynamicMask  `json:"dynamic_masks,omitempty"`
-	CameraControl  *CameraControl `json:"camera_control,omitempty"`
-	CallbackUrl    string         `json:"callback_url,omitempty"`
-	ExternalTaskId string         `json:"external_task_id,omitempty"`
-}
 
 type responsePayload struct {
 	Code      int    `json:"code"`
@@ -133,51 +90,15 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
 }
 
-// BuildRequestURL constructs the upstream URL.
-func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	path := lo.Ternary(info.Action == constant.TaskActionGenerate, "/v1/videos/image2video", "/v1/videos/text2video")
-
-	if isNewAPIRelay(info.ApiKey) {
-		return fmt.Sprintf("%s/kling%s", a.baseURL, path), nil
-	}
-
-	return fmt.Sprintf("%s%s", a.baseURL, path), nil
-}
-
-// BuildRequestHeader sets required headers.
 func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) error {
 	token, err := a.createJWTToken()
 	if err != nil {
 		return fmt.Errorf("failed to create JWT token: %w", err)
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("User-Agent", "kling-sdk/1.0")
 	return nil
-}
-
-// BuildRequestBody converts request into Kling specific format.
-func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
-	v, exists := c.Get("task_request")
-	if !exists {
-		return nil, fmt.Errorf("request not found in context")
-	}
-	req := v.(relaycommon.TaskSubmitReq)
-
-	body, err := a.convertToRequestPayload(&req, info)
-	if err != nil {
-		return nil, err
-	}
-	if body.Image == "" && body.ImageTail == "" {
-		c.Set("action", constant.TaskActionTextGenerate)
-	}
-	data, err := common.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	return bytes.NewReader(data), nil
 }
 
 // DoRequest delegates to common helper.
@@ -258,49 +179,6 @@ func (a *TaskAdaptor) GetModelList() []string {
 
 func (a *TaskAdaptor) GetChannelName() string {
 	return "kling"
-}
-
-// ============================
-// helpers
-// ============================
-
-func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*requestPayload, error) {
-	r := requestPayload{
-		Prompt:         req.Prompt,
-		Image:          req.Image,
-		Mode:           taskcommon.DefaultString(req.Mode, "std"),
-		Duration:       fmt.Sprintf("%d", taskcommon.DefaultInt(req.Duration, 5)),
-		AspectRatio:    a.getAspectRatio(req.Size),
-		ModelName:      info.UpstreamModelName,
-		Model:          info.UpstreamModelName,
-		CfgScale:       0.5,
-		StaticMask:     "",
-		DynamicMasks:   []DynamicMask{},
-		CameraControl:  nil,
-		CallbackUrl:    "",
-		ExternalTaskId: "",
-	}
-	if r.ModelName == "" {
-		r.ModelName = "kling-v1"
-		r.Model = "kling-v1"
-	}
-	if err := taskcommon.UnmarshalMetadata(req.Metadata, &r); err != nil {
-		return nil, errors.Wrap(err, "unmarshal metadata failed")
-	}
-	return &r, nil
-}
-
-func (a *TaskAdaptor) getAspectRatio(size string) string {
-	switch size {
-	case "1024x1024", "512x512":
-		return "1:1"
-	case "1280x720", "1920x1080":
-		return "16:9"
-	case "720x1280", "1080x1920":
-		return "9:16"
-	default:
-		return "1:1"
-	}
 }
 
 // ============================

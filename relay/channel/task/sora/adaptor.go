@@ -1,12 +1,9 @@
 package sora
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
-	"net/textproto"
 	"strconv"
 	"strings"
 
@@ -25,18 +22,8 @@ import (
 )
 
 // ============================
-// Request / Response structures
+// Response structures
 // ============================
-
-type ContentItem struct {
-	Type     string    `json:"type"`                // "text" or "image_url"
-	Text     string    `json:"text,omitempty"`      // for text type
-	ImageURL *ImageURL `json:"image_url,omitempty"` // for image_url type
-}
-
-type ImageURL struct {
-	URL string `json:"url"`
-}
 
 type responseTask struct {
 	ID                 string `json:"id"`
@@ -129,94 +116,10 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	return ratios
 }
 
-func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	if info.Action == constant.TaskActionRemix {
-		return fmt.Sprintf("%s/v1/videos/%s/remix", a.baseURL, info.OriginTaskID), nil
-	}
-	return fmt.Sprintf("%s/v1/videos", a.baseURL), nil
-}
-
-// BuildRequestHeader sets required headers.
 func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) error {
 	req.Header.Set("Authorization", "Bearer "+a.apiKey)
 	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 	return nil
-}
-
-func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
-	storage, err := common.GetBodyStorage(c)
-	if err != nil {
-		return nil, errors.Wrap(err, "get_request_body_failed")
-	}
-	cachedBody, err := storage.Bytes()
-	if err != nil {
-		return nil, errors.Wrap(err, "read_body_bytes_failed")
-	}
-	contentType := c.GetHeader("Content-Type")
-
-	if strings.HasPrefix(contentType, "application/json") {
-		var bodyMap map[string]interface{}
-		if err := common.Unmarshal(cachedBody, &bodyMap); err == nil {
-			bodyMap["model"] = info.UpstreamModelName
-			if newBody, err := common.Marshal(bodyMap); err == nil {
-				return bytes.NewReader(newBody), nil
-			}
-		}
-		return bytes.NewReader(cachedBody), nil
-	}
-
-	if strings.Contains(contentType, "multipart/form-data") {
-		formData, err := common.ParseMultipartFormReusable(c)
-		if err != nil {
-			return bytes.NewReader(cachedBody), nil
-		}
-		var buf bytes.Buffer
-		writer := multipart.NewWriter(&buf)
-		writer.WriteField("model", info.UpstreamModelName)
-		for key, values := range formData.Value {
-			if key == "model" {
-				continue
-			}
-			for _, v := range values {
-				writer.WriteField(key, v)
-			}
-		}
-		for fieldName, fileHeaders := range formData.File {
-			for _, fh := range fileHeaders {
-				f, err := fh.Open()
-				if err != nil {
-					continue
-				}
-				ct := fh.Header.Get("Content-Type")
-				if ct == "" || ct == "application/octet-stream" {
-					buf512 := make([]byte, 512)
-					n, _ := io.ReadFull(f, buf512)
-					ct = http.DetectContentType(buf512[:n])
-					// Re-open after sniffing so the full content is copied below
-					f.Close()
-					f, err = fh.Open()
-					if err != nil {
-						continue
-					}
-				}
-				h := make(textproto.MIMEHeader)
-				h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fieldName, fh.Filename))
-				h.Set("Content-Type", ct)
-				part, err := writer.CreatePart(h)
-				if err != nil {
-					f.Close()
-					continue
-				}
-				io.Copy(part, f)
-				f.Close()
-			}
-		}
-		writer.Close()
-		c.Request.Header.Set("Content-Type", writer.FormDataContentType())
-		return &buf, nil
-	}
-
-	return common.NewReplayableBodyReader(storage), nil
 }
 
 // DoRequest delegates to common helper.

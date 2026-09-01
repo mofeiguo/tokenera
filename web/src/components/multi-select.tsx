@@ -7,7 +7,7 @@ published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
+    10|but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU Affero General Public License for more details.
 
@@ -16,25 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Add01Icon } from '@hugeicons/core-free-icons'
+import { Add01Icon, Cancel01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { Button } from '@/components/ui/button'
 import {
-  Combobox,
-  ComboboxChip,
-  ComboboxChips,
-  ComboboxChipsInput,
-  ComboboxCollection,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxValue,
-  useComboboxAnchor,
-} from '@/components/ui/combobox'
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { cn } from '@/lib/utils'
 
@@ -80,6 +76,10 @@ interface MultiSelectProps {
 }
 
 const COMMA_REGEX = /[,，\n]/
+const CHIPS_CLASS_NAME =
+  'border-input focus-within:border-ring focus-within:ring-ring/50 has-aria-invalid:border-destructive has-aria-invalid:ring-destructive/20 dark:bg-input/30 dark:has-aria-invalid:border-destructive/50 dark:has-aria-invalid:ring-destructive/40 flex min-h-8 flex-wrap items-center gap-1 rounded-lg border bg-transparent bg-clip-padding px-2.5 py-1 text-sm transition-colors focus-within:ring-3 has-aria-invalid:ring-3 has-data-[slot=combobox-chip]:px-1'
+const CHIP_CLASS_NAME =
+  'bg-muted text-foreground flex h-[calc(--spacing(5.25))] w-fit items-center justify-center gap-1 rounded-sm px-1.5 text-xs font-medium whitespace-nowrap has-disabled:pointer-events-none has-disabled:cursor-not-allowed has-disabled:opacity-50 has-data-[slot=combobox-chip-remove]:pr-0'
 
 function splitDraft(value: string): { completed: string[]; draft: string } {
   if (!COMMA_REGEX.test(value)) {
@@ -96,29 +96,24 @@ function splitDraft(value: string): { completed: string[]; draft: string } {
 }
 
 /**
- * MultiSelect — tags/chips style multi-select built on Base UI Combobox.
+ * MultiSelect — tags/chips style multi-select on Radix Popover + Command.
  *
  * Behaviour:
- * - Search filters built-in options (Base UI handles fuzzy filtering).
+ * - Search filters built-in options.
  * - When `allowCreate` is true, custom values can be added inline:
  *   - Type and press Enter / "," to add a single value.
  *   - Paste a comma- (or newline-) separated list to add many at once.
  *   - A "Add \"<value>\"" item appears at the top of the dropdown when the
  *     typed text doesn't match any option.
- * - Backspace on an empty input removes the last selected chip (Base UI default).
+ * - Backspace on an empty input removes the last selected chip.
  * - `maxVisibleChips` can cap large selections and show a compact "+N more"
  *   summary so forms do not grow vertically without bound.
- *
- * Focus/border styling is inherited from `ComboboxChips`, which uses the same
- * tokens as `Input` so it stays visually consistent with other form fields.
  */
 export function MultiSelect(props: MultiSelectProps) {
   const { t } = useTranslation()
   const placeholder = props.placeholder ?? t('Select items...')
-
-  // Anchor the popup to the chips container so its width tracks the entire
-  // input row, not just the leftover space at the end of wrapped chips.
-  const chipsAnchorRef = useComboboxAnchor()
+  const chipsRef = React.useRef<HTMLDivElement>(null)
+  const inputRef = React.useRef<HTMLInputElement>(null)
 
   const [inputValue, setInputValue] = React.useState('')
   const [open, setOpen] = React.useState(false)
@@ -129,8 +124,6 @@ export function MultiSelect(props: MultiSelectProps) {
     [props.selected]
   )
 
-  // Lookup of value -> display label so chips and items can show friendly names
-  // even when the underlying option list changes (e.g. custom-added values).
   const labelMap = React.useMemo(() => {
     const map = new Map<string, string>()
     for (const option of props.options) {
@@ -153,9 +146,6 @@ export function MultiSelect(props: MultiSelectProps) {
     trimmedInput.length > 0 &&
     !inputMatchesExisting
 
-  // We expose all known option values + every currently selected value to Base
-  // UI's items list. This way Base UI filters them by the search query and the
-  // user can still see the chip labels mapped correctly.
   const items = React.useMemo(() => {
     const set = new Set<string>(props.options.map((option) => option.value))
     for (const value of props.selected) {
@@ -164,8 +154,18 @@ export function MultiSelect(props: MultiSelectProps) {
     if (canCreate) {
       set.add(trimmedInput)
     }
-    return Array.from(set)
+    return [...set]
   }, [props.options, props.selected, canCreate, trimmedInput])
+
+  const query = inputValue.toLowerCase().trim()
+  const visibleItems = React.useMemo(() => {
+    if (!query) return items
+    return items.filter((item) => {
+      if (canCreate && item === trimmedInput) return true
+      const label = (labelMap.get(item) ?? item).toLowerCase()
+      return label.includes(query) || item.toLowerCase().includes(query)
+    })
+  }, [items, query, canCreate, trimmedInput, labelMap])
 
   const addValues = React.useCallback(
     (values: string[]) => {
@@ -198,14 +198,18 @@ export function MultiSelect(props: MultiSelectProps) {
     setInputValue(value)
   }
 
-  const handleValueChange = (next: string[]) => {
-    props.onChange(next)
-    // When an item is picked (multiple mode), Base UI keeps the input but most
-    // UX patterns clear it. Clearing once a value is added makes batch picking
-    // feel snappier and matches popular chip-style multiselects.
-    if (next.length > props.selected.length) {
+  const handleToggle = (item: string) => {
+    if (canCreate && item === trimmedInput) {
+      addValues([item])
       setInputValue('')
+      return
     }
+    if (selectedSet.has(item)) {
+      props.onChange(props.selected.filter((value) => value !== item))
+      return
+    }
+    addValues([item])
+    setInputValue('')
   }
 
   const handleCopyChip = React.useCallback(
@@ -214,7 +218,6 @@ export function MultiSelect(props: MultiSelectProps) {
       value: string,
       label: string
     ) => {
-      // Prevent the click from toggling the combobox popup or focusing input.
       event.preventDefault()
       event.stopPropagation()
       const ok = await copyToClipboard(value)
@@ -228,166 +231,237 @@ export function MultiSelect(props: MultiSelectProps) {
   )
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    // Enter without a highlighted option commits the typed value.
-    if (event.key === 'Enter' && props.allowCreate && canCreate) {
-      // Only fire when Base UI has no highlighted item to select. We rely on
-      // the highlighted item's data attribute on the popup. If the popup is
-      // closed or empty, manually commit the typed value.
-      const popup = document.querySelector<HTMLElement>(
-        '[data-slot="combobox-content"][data-open]'
-      )
-      const hasHighlight = popup?.querySelector('[data-highlighted]') != null
-      if (!hasHighlight) {
-        event.preventDefault()
-        addValues([trimmedInput])
-        setInputValue('')
+    if (
+      event.key === 'Backspace' &&
+      inputValue === '' &&
+      props.selected.length > 0
+    ) {
+      event.preventDefault()
+      props.onChange(props.selected.slice(0, -1))
+      return
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      if (canCreate) {
+        const hasHighlight =
+          document.querySelector(
+            '[data-slot="combobox-content"] [data-selected="true"]'
+          ) != null
+        if (!hasHighlight) {
+          addValues([trimmedInput])
+          setInputValue('')
+        }
       }
     }
   }
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (props.disabled) return
+    setOpen(nextOpen)
+  }
+
+  const shouldLimit = typeof props.maxVisibleChips === 'number' && !expanded
+  const visibleValues = shouldLimit
+    ? props.selected.slice(0, props.maxVisibleChips)
+    : props.selected
+  const hiddenCount = props.selected.length - visibleValues.length
+
+  let selectedChips: React.ReactNode = null
+  if (props.renderSelectedSummary) {
+    if (props.selected.length > 0) {
+      selectedChips = (
+        <span className='bg-muted text-muted-foreground flex h-[calc(--spacing(5.25))] w-fit items-center justify-center rounded-sm px-1.5 font-mono text-xs font-medium whitespace-nowrap'>
+          {props.renderSelectedSummary(props.selected)}
+        </span>
+      )
+    }
+  } else {
+    selectedChips = (
+      <>
+        {visibleValues.map((value) => {
+          const label = labelMap.get(value) ?? value
+          return (
+            <span
+              key={value}
+              data-slot='combobox-chip'
+              className={CHIP_CLASS_NAME}
+            >
+              {props.copyChipOnClick ? (
+                <button
+                  type='button'
+                  onClick={(event) => handleCopyChip(event, value, label)}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  title={t('Click to copy')}
+                  className='max-w-[16rem] cursor-pointer truncate rounded-sm hover:underline'
+                >
+                  {label}
+                </button>
+              ) : (
+                <span className='max-w-[16rem] truncate'>{label}</span>
+              )}
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon-xs'
+                data-slot='combobox-chip-remove'
+                className='-ml-1 opacity-50 hover:opacity-100'
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  props.onChange(
+                    props.selected.filter((item) => item !== value)
+                  )
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <HugeiconsIcon
+                  icon={Cancel01Icon}
+                  strokeWidth={2}
+                  className='pointer-events-none'
+                />
+              </Button>
+            </span>
+          )
+        })}
+        {hiddenCount > 0 && (
+          <button
+            type='button'
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              setExpanded(true)
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            title={t('Show All')}
+            className='bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground flex h-[calc(--spacing(5.25))] w-fit cursor-pointer items-center justify-center rounded-sm px-1.5 text-xs font-medium whitespace-nowrap transition-colors'
+          >
+            {t('+{{count}} more', { count: hiddenCount })}
+          </button>
+        )}
+        {expanded &&
+          typeof props.maxVisibleChips === 'number' &&
+          props.selected.length > props.maxVisibleChips && (
+            <button
+              type='button'
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                setExpanded(false)
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              title={t('Collapse')}
+              className='bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground flex h-[calc(--spacing(5.25))] w-fit cursor-pointer items-center justify-center rounded-sm px-1.5 text-xs font-medium whitespace-nowrap transition-colors'
+            >
+              {t('Collapse')}
+            </button>
+          )}
+      </>
+    )
+  }
+
   return (
-    <Combobox
-      multiple
-      items={items}
-      value={props.selected}
-      onValueChange={handleValueChange}
-      inputValue={inputValue}
-      onInputValueChange={handleInputValueChange}
-      open={open}
-      onOpenChange={setOpen}
-      disabled={props.disabled}
-    >
-      <ComboboxChips
-        ref={chipsAnchorRef}
-        className={cn('w-full', props.className)}
+    <Popover open={open} onOpenChange={handleOpenChange} modal={false}>
+      <Command
+        shouldFilter={false}
+        className='h-auto w-full overflow-visible rounded-none bg-transparent p-0'
       >
-        <ComboboxValue>
-          {(values: string[]) => {
-            if (props.renderSelectedSummary) {
-              return (
-                <span className='bg-muted text-muted-foreground flex h-[calc(--spacing(5.25))] w-fit items-center justify-center rounded-sm px-1.5 font-mono text-xs font-medium whitespace-nowrap'>
-                  {props.renderSelectedSummary(values)}
-                </span>
-              )
+        <PopoverAnchor asChild>
+          <div
+            ref={chipsRef}
+            data-slot='combobox-chips'
+            className={cn(
+              CHIPS_CLASS_NAME,
+              props.disabled &&
+                'pointer-events-none cursor-not-allowed opacity-50',
+              props.className
+            )}
+            onClick={() => inputRef.current?.focus()}
+          >
+            {selectedChips}
+            <input
+              ref={inputRef}
+              id={props.id}
+              value={inputValue}
+              disabled={props.disabled}
+              placeholder={
+                props.selected.length === 0 && !props.renderSelectedSummary
+                  ? placeholder
+                  : undefined
+              }
+              aria-label={placeholder}
+              aria-expanded={open}
+              aria-autocomplete='list'
+              role='combobox'
+              autoComplete='off'
+              className='min-w-16 flex-1 bg-transparent outline-none'
+              onChange={(event) => {
+                handleInputValueChange(event.target.value)
+                if (!open) setOpen(true)
+              }}
+              onFocus={() => {
+                if (!props.disabled) setOpen(true)
+              }}
+              onKeyDown={handleKeyDown}
+            />
+          </div>
+        </PopoverAnchor>
+
+        <PopoverContent
+          align='start'
+          sideOffset={6}
+          data-slot='combobox-content'
+          className='w-[var(--radix-popover-anchor-width)] p-0'
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => {
+            if (chipsRef.current?.contains(event.target as Node)) {
+              event.preventDefault()
             }
-
-            const shouldLimit =
-              typeof props.maxVisibleChips === 'number' && !expanded
-            const visibleValues = shouldLimit
-              ? values.slice(0, props.maxVisibleChips)
-              : values
-            const hiddenCount = values.length - visibleValues.length
-
-            return (
-              <>
-                {visibleValues.map((value) => {
-                  const label = labelMap.get(value) ?? value
+          }}
+        >
+          <CommandList>
+            {visibleItems.length === 0 ? (
+              <CommandEmpty>
+                {props.emptyText ?? t('No matching items')}
+              </CommandEmpty>
+            ) : (
+              <CommandGroup>
+                {visibleItems.map((item) => {
+                  const isCreate = canCreate && item === trimmedInput
+                  const label = labelMap.get(item) ?? item
                   return (
-                    <ComboboxChip key={value}>
-                      {props.copyChipOnClick ? (
-                        <button
-                          type='button'
-                          onClick={(event) =>
-                            handleCopyChip(event, value, label)
-                          }
-                          onPointerDown={(event) => event.stopPropagation()}
-                          title={t('Click to copy')}
-                          className='max-w-[16rem] cursor-pointer truncate rounded-sm hover:underline'
-                        >
-                          {label}
-                        </button>
+                    <CommandItem
+                      key={item}
+                      value={item}
+                      data-checked={selectedSet.has(item) && !isCreate}
+                      className={isCreate ? 'text-foreground' : undefined}
+                      onSelect={() => handleToggle(item)}
+                    >
+                      {isCreate ? (
+                        <>
+                          <HugeiconsIcon
+                            icon={Add01Icon}
+                            strokeWidth={2}
+                            className='text-muted-foreground'
+                            aria-hidden='true'
+                          />
+                          <span className='truncate'>
+                            {props.createLabel
+                              ? t(props.createLabel, { value: item })
+                              : t('Add "{{value}}"', { value: item })}
+                          </span>
+                        </>
                       ) : (
-                        <span className='max-w-[16rem] truncate'>{label}</span>
+                        <span className='truncate'>{label}</span>
                       )}
-                    </ComboboxChip>
+                    </CommandItem>
                   )
                 })}
-                {hiddenCount > 0 && (
-                  <button
-                    type='button'
-                    onClick={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      setExpanded(true)
-                    }}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    title={t('Show All')}
-                    className='bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground flex h-[calc(--spacing(5.25))] w-fit cursor-pointer items-center justify-center rounded-sm px-1.5 text-xs font-medium whitespace-nowrap transition-colors'
-                  >
-                    {t('+{{count}} more', { count: hiddenCount })}
-                  </button>
-                )}
-                {expanded &&
-                  typeof props.maxVisibleChips === 'number' &&
-                  values.length > props.maxVisibleChips && (
-                    <button
-                      type='button'
-                      onClick={(event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        setExpanded(false)
-                      }}
-                      onPointerDown={(event) => event.stopPropagation()}
-                      title={t('Collapse')}
-                      className='bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground flex h-[calc(--spacing(5.25))] w-fit cursor-pointer items-center justify-center rounded-sm px-1.5 text-xs font-medium whitespace-nowrap transition-colors'
-                    >
-                      {t('Collapse')}
-                    </button>
-                  )}
-              </>
-            )
-          }}
-        </ComboboxValue>
-        <ComboboxChipsInput
-          id={props.id}
-          placeholder={
-            props.selected.length === 0 && !props.renderSelectedSummary
-              ? placeholder
-              : undefined
-          }
-          onKeyDown={handleKeyDown}
-          aria-label={placeholder}
-        />
-      </ComboboxChips>
-
-      <ComboboxContent anchor={chipsAnchorRef}>
-        <ComboboxList>
-          <ComboboxCollection>
-            {(item: string) => {
-              const isCreate = canCreate && item === trimmedInput
-              const label = labelMap.get(item) ?? item
-              return (
-                <ComboboxItem
-                  key={item}
-                  value={item}
-                  className={isCreate ? 'text-foreground' : undefined}
-                >
-                  {isCreate ? (
-                    <>
-                      <HugeiconsIcon
-                        icon={Add01Icon}
-                        strokeWidth={2}
-                        className='text-muted-foreground'
-                        aria-hidden='true'
-                      />
-                      <span className='truncate'>
-                        {props.createLabel
-                          ? t(props.createLabel, { value: item })
-                          : t('Add "{{value}}"', { value: item })}
-                      </span>
-                    </>
-                  ) : (
-                    <span className='truncate'>{label}</span>
-                  )}
-                </ComboboxItem>
-              )
-            }}
-          </ComboboxCollection>
-        </ComboboxList>
-        <ComboboxEmpty>
-          {props.emptyText ?? t('No matching items')}
-        </ComboboxEmpty>
-      </ComboboxContent>
-    </Combobox>
+              </CommandGroup>
+            )}
+          </CommandList>
+        </PopoverContent>
+      </Command>
+    </Popover>
   )
 }

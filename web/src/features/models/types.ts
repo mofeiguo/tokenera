@@ -29,7 +29,6 @@ export interface BoundChannel {
   id: number
   name: string
   type: number
-  upstream_model: string
   enabled: boolean
 }
 
@@ -41,10 +40,10 @@ export interface ModelChannelBinding {
   channel_name?: string
   channel_type?: number
   channel_status?: number
-  upstream_model: string
   enabled: boolean
   priority?: number
   weight?: number
+  upstream_model?: string
 }
 
 /**

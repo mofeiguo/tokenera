@@ -16,6 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/geist-mono';
+@import '@fontsource/plus-jakarta-sans/500.css';
+@import '@fontsource/plus-jakarta-sans/600.css';
+@import '@fontsource/plus-jakarta-sans/700.css';
+@import '@fontsource/plus-jakarta-sans/800.css';
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
@@ -76,12 +82,12 @@ For commercial licensing, please contact support@quantumnous.com
     scrollbar-color: var(--border) transparent;
   }
   html {
-    @apply overflow-x-hidden font-sans;
+    @apply overflow-x-clip font-sans;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   body {
-    @apply bg-background text-foreground has-[div[data-variant='inset']]:bg-sidebar min-h-svh w-full;
+    @apply bg-background text-foreground has-[div[data-variant='inset']]:bg-sidebar min-h-svh w-full overflow-x-clip;
     font-family: var(--font-body);
     line-height: 1.5;
     letter-spacing: 0;
@@ -112,17 +118,6 @@ For commercial licensing, please contact support@quantumnous.com
   button:not(:disabled),
   [role='button']:not(:disabled) {
     cursor: pointer;
-  }
-  [data-slot='button']:not(:disabled):active {
-    transform: scale(0.985);
-    transition: transform var(--motion-fast) var(--ease-standard);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    [data-slot='button']:not(:disabled):active {
-      transform: none;
-      transition: none;
-    }
   }
 
   @media (prefers-reduced-transparency: reduce) {
@@ -330,26 +325,20 @@ For commercial licensing, please contact support@quantumnous.com
     background:
       radial-gradient(
         ellipse 80% 55% at 50% -10%,
-        oklch(0.72 0.12 215 / 20%),
+        oklch(0.92 0.004 286.32 / 55%),
         transparent 60%
-      ),
-      radial-gradient(
-        ellipse 45% 40% at 85% 20%,
-        oklch(0.75 0.08 250 / 12%),
-        transparent 55%
-      ),
-      radial-gradient(
-        ellipse 40% 35% at 10% 40%,
-        oklch(0.76 0.09 185 / 12%),
-        transparent 50%
       ),
       var(--background);
   }
 
   .zen-grid-fade {
     background-image:
-      linear-gradient(oklch(0.25 0.03 250 / 6%) 1px, transparent 1px),
-      linear-gradient(90deg, oklch(0.25 0.03 250 / 6%) 1px, transparent 1px);
+      linear-gradient(oklch(0.141 0.005 285.823 / 6%) 1px, transparent 1px),
+      linear-gradient(
+        90deg,
+        oklch(0.141 0.005 285.823 / 6%) 1px,
+        transparent 1px
+      );
     background-size: 56px 56px;
     mask-image: radial-gradient(
       ellipse 70% 60% at 50% 30%,
@@ -361,9 +350,8 @@ For commercial licensing, please contact support@quantumnous.com
   .zen-text-glow {
     background: linear-gradient(
       120deg,
-      oklch(0.48 0.15 205) 0%,
-      oklch(0.5 0.17 225) 45%,
-      oklch(0.48 0.14 265) 100%
+      oklch(0.21 0.006 285.885) 0%,
+      oklch(0.35 0.01 286) 100%
     );
     -webkit-background-clip: text;
     background-clip: text;
@@ -374,18 +362,8 @@ For commercial licensing, please contact support@quantumnous.com
     background:
       radial-gradient(
         ellipse 80% 55% at 50% -10%,
-        oklch(0.55 0.14 210 / 22%),
+        oklch(0.274 0.006 286.033 / 55%),
         transparent 60%
-      ),
-      radial-gradient(
-        ellipse 45% 40% at 85% 20%,
-        oklch(0.5 0.1 250 / 12%),
-        transparent 55%
-      ),
-      radial-gradient(
-        ellipse 40% 35% at 10% 40%,
-        oklch(0.48 0.1 185 / 10%),
-        transparent 50%
       ),
       var(--background);
   }
@@ -399,9 +377,8 @@ For commercial licensing, please contact support@quantumnous.com
   .dark .zen-text-glow {
     background: linear-gradient(
       120deg,
-      oklch(0.92 0.04 200) 0%,
-      oklch(0.78 0.14 210) 45%,
-      oklch(0.7 0.12 250) 100%
+      oklch(0.985 0 0) 0%,
+      oklch(0.705 0.015 286.067) 100%
     );
     -webkit-background-clip: text;
     background-clip: text;
@@ -769,5 +746,64 @@ For commercial licensing, please contact support@quantumnous.com
 @media (prefers-reduced-motion: reduce) {
   .auto-group-flow-border {
     display: none;
+  }
+}
+
+.landing-shimmer-cta {
+  background: var(--bg);
+}
+
+.landing-shimmer-cta-spark {
+  container-type: size;
+}
+
+.landing-shimmer-cta-slide {
+  animation: landing-shimmer-slide var(--speed, 3s) ease-in-out infinite
+    alternate;
+}
+
+.landing-shimmer-cta-spin {
+  background: conic-gradient(
+    from calc(270deg - (var(--spread) * 0.5)),
+    transparent 0,
+    var(--shimmer-color) var(--spread),
+    transparent var(--spread)
+  );
+  animation: landing-shimmer-spin calc(var(--speed, 3s) * 2) infinite linear;
+}
+
+.landing-shimmer-cta-backdrop {
+  inset: var(--cut);
+  border-radius: inherit;
+  background: var(--bg);
+}
+
+@keyframes landing-shimmer-slide {
+  to {
+    transform: translate(calc(100cqw - 100%), 0);
+  }
+}
+
+@keyframes landing-shimmer-spin {
+  0% {
+    transform: translateZ(0) rotate(0);
+  }
+  15%,
+  35% {
+    transform: translateZ(0) rotate(90deg);
+  }
+  65%,
+  85% {
+    transform: translateZ(0) rotate(270deg);
+  }
+  100% {
+    transform: translateZ(0) rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-shimmer-cta-slide,
+  .landing-shimmer-cta-spin {
+    animation: none !important;
   }
 }

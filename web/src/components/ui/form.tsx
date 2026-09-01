@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useRender } from '@base-ui/react/use-render'
+import { Slot } from '@radix-ui/react-slot'
 import * as React from 'react'
 import {
   Controller,
@@ -221,19 +221,22 @@ function FormControl({
   const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
   const formContext = React.useContext(FormRootContext)
 
-  return useRender({
-    render: children,
-    props: {
-      'data-slot': 'form-control',
-      'data-form-root': formContext?.id,
-      id: formItemId,
-      'aria-describedby': !error
-        ? `${formDescriptionId}`
-        : `${formDescriptionId} ${formMessageId}`,
-      'aria-invalid': !!error,
-      ...props,
-    },
-  })
+  return (
+    <Slot
+      data-slot='form-control'
+      data-form-root={formContext?.id}
+      id={formItemId}
+      aria-describedby={
+        !error
+          ? `${formDescriptionId}`
+          : `${formDescriptionId} ${formMessageId}`
+      }
+      aria-invalid={!!error}
+      {...props}
+    >
+      {children}
+    </Slot>
+  )
 }
 
 function FormDescription({ className, ...props }: React.ComponentProps<'p'>) {

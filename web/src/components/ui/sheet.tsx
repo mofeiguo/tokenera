@@ -18,36 +18,70 @@ For commercial licensing, please contact support@quantumnous.com
 */
 'use client'
 
-import { Dialog as SheetPrimitive } from '@base-ui/react/dialog'
-import { Cancel01Icon } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
-import * as React from 'react'
+import * as SheetPrimitive from '@radix-ui/react-dialog'
+import { XIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 
-import { Button } from '@/components/ui/button'
+import { hasAsChild, mergeRenderChild } from '@/components/ui/compose-as-child'
 import { cn } from '@/lib/utils'
 
-function Sheet({ ...props }: SheetPrimitive.Root.Props) {
+function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot='sheet' {...props} />
 }
 
-function SheetTrigger({ ...props }: SheetPrimitive.Trigger.Props) {
-  return <SheetPrimitive.Trigger data-slot='sheet-trigger' {...props} />
+function SheetTrigger({
+  asChild,
+  render,
+  children,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Trigger> & {
+  render?: ReactNode
+}) {
+  return (
+    <SheetPrimitive.Trigger
+      data-slot='sheet-trigger'
+      asChild={hasAsChild(asChild, render)}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </SheetPrimitive.Trigger>
+  )
 }
 
-function SheetClose({ ...props }: SheetPrimitive.Close.Props) {
-  return <SheetPrimitive.Close data-slot='sheet-close' {...props} />
+function SheetClose({
+  asChild,
+  render,
+  children,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Close> & {
+  render?: ReactNode
+}) {
+  return (
+    <SheetPrimitive.Close
+      data-slot='sheet-close'
+      asChild={hasAsChild(asChild, render)}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </SheetPrimitive.Close>
+  )
 }
 
-function SheetPortal({ ...props }: SheetPrimitive.Portal.Props) {
+function SheetPortal({
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Portal>) {
   return <SheetPrimitive.Portal data-slot='sheet-portal' {...props} />
 }
 
-function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
+function SheetOverlay({
+  className,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
   return (
-    <SheetPrimitive.Backdrop
+    <SheetPrimitive.Overlay
       data-slot='sheet-overlay'
       className={cn(
-        'fixed inset-0 z-50 bg-black/10 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-xs',
+        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50',
         className
       )}
       {...props}
@@ -61,52 +95,41 @@ function SheetContent({
   side = 'right',
   showCloseButton = true,
   ...props
-}: SheetPrimitive.Popup.Props & {
+}: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: 'top' | 'right' | 'bottom' | 'left'
   showCloseButton?: boolean
 }) {
-  // Side-specific classes are emitted via JS conditionals (rather than
-  // `data-[side=*]:` variants) so consumer-provided width overrides such as
-  // `sm:max-w-2xl` can be correctly merged by `tailwind-merge` and the CSS
-  // cascade — the data-attribute variants would otherwise win on specificity
-  // and trap the panel at the default `sm:max-w-sm` width.
   return (
     <SheetPortal>
       <SheetOverlay />
-      <SheetPrimitive.Popup
+      <SheetPrimitive.Content
         data-slot='sheet-content'
         data-side={side}
         className={cn(
-          'bg-background text-foreground fixed z-50 flex flex-col gap-4 overflow-hidden bg-clip-padding text-sm shadow-none transition duration-200 ease-in-out data-ending-style:opacity-0 data-starting-style:opacity-0',
+          'bg-background text-foreground data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 overflow-hidden shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500',
           side === 'right' &&
-            'inset-y-0 right-0 h-full w-3/4 border-l data-ending-style:translate-x-[2.5rem] data-starting-style:translate-x-[2.5rem] sm:max-w-sm',
+            'data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm',
           side === 'left' &&
-            'inset-y-0 left-0 h-full w-3/4 border-r data-ending-style:translate-x-[-2.5rem] data-starting-style:translate-x-[-2.5rem] sm:max-w-sm',
+            'data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm',
           side === 'top' &&
-            'inset-x-0 top-0 h-auto border-b data-ending-style:translate-y-[-2.5rem] data-starting-style:translate-y-[-2.5rem]',
+            'data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto border-b',
           side === 'bottom' &&
-            'inset-x-0 bottom-0 h-auto border-t data-ending-style:translate-y-[2.5rem] data-starting-style:translate-y-[2.5rem]',
+            'data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t',
           className
         )}
         {...props}
       >
         {children}
-        {showCloseButton && (
+        {showCloseButton ? (
           <SheetPrimitive.Close
             data-slot='sheet-close'
-            render={
-              <Button
-                variant='ghost'
-                className='absolute top-3 right-3'
-                size='icon-sm'
-              />
-            }
+            className='ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none'
           >
-            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+            <XIcon className='size-4' />
             <span className='sr-only'>Close</span>
           </SheetPrimitive.Close>
-        )}
-      </SheetPrimitive.Popup>
+        ) : null}
+      </SheetPrimitive.Content>
     </SheetPortal>
   )
 }
@@ -115,7 +138,7 @@ function SheetHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot='sheet-header'
-      className={cn('flex flex-col gap-0.5 p-4', className)}
+      className={cn('flex flex-col gap-1.5 p-4', className)}
       {...props}
     />
   )
@@ -131,11 +154,14 @@ function SheetFooter({ className, ...props }: React.ComponentProps<'div'>) {
   )
 }
 
-function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
+function SheetTitle({
+  className,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Title>) {
   return (
     <SheetPrimitive.Title
       data-slot='sheet-title'
-      className={cn('text-foreground text-base font-medium', className)}
+      className={cn('text-foreground font-semibold', className)}
       {...props}
     />
   )
@@ -144,7 +170,7 @@ function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
 function SheetDescription({
   className,
   ...props
-}: SheetPrimitive.Description.Props) {
+}: React.ComponentProps<typeof SheetPrimitive.Description>) {
   return (
     <SheetPrimitive.Description
       data-slot='sheet-description'

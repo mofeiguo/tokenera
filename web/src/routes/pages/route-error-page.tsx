@@ -18,7 +18,6 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Header } from '@/components/layout'
 import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { ForbiddenError } from '@/features/errors/forbidden'
 import { GeneralError } from '@/features/errors/general-error'
@@ -41,7 +40,6 @@ export function RouteErrorPage() {
   return (
     <>
       <Header>
-        <Search />
         <div className='ms-auto flex items-center md:space-x-4'>
           <ThemeSwitch />
           <ProfileDropdown />

@@ -16,27 +16,70 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Accordion as AccordionPrimitive } from '@base-ui/react/accordion'
-import { ArrowDown01Icon, ArrowUp01Icon } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
+import * as AccordionPrimitive from '@radix-ui/react-accordion'
+import { ChevronDownIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
-function Accordion({ className, ...props }: AccordionPrimitive.Root.Props) {
+type AccordionRootProps = Omit<
+  React.ComponentProps<typeof AccordionPrimitive.Root>,
+  'type' | 'collapsible' | 'value' | 'defaultValue' | 'onValueChange'
+> & {
+  type?: 'single' | 'multiple'
+  multiple?: boolean
+  collapsible?: boolean
+  className?: string
+  value?: string | string[]
+  defaultValue?: string | string[]
+  onValueChange?: (value: string | string[]) => void
+}
+
+function Accordion({
+  type,
+  collapsible,
+  multiple,
+  className,
+  value,
+  defaultValue,
+  onValueChange,
+  ...props
+}: AccordionRootProps) {
+  if (multiple || type === 'multiple') {
+    return (
+      <AccordionPrimitive.Root
+        data-slot='accordion'
+        type='multiple'
+        className={cn('flex w-full flex-col', className)}
+        {...(Array.isArray(value) ? { value } : {})}
+        {...(Array.isArray(defaultValue) ? { defaultValue } : {})}
+        onValueChange={(nextValue) => onValueChange?.(nextValue)}
+        {...props}
+      />
+    )
+  }
+
   return (
     <AccordionPrimitive.Root
       data-slot='accordion'
+      type='single'
+      collapsible={collapsible ?? true}
       className={cn('flex w-full flex-col', className)}
+      {...(typeof value === 'string' ? { value } : {})}
+      {...(typeof defaultValue === 'string' ? { defaultValue } : {})}
+      onValueChange={(nextValue) => onValueChange?.(nextValue)}
       {...props}
     />
   )
 }
 
-function AccordionItem({ className, ...props }: AccordionPrimitive.Item.Props) {
+function AccordionItem({
+  className,
+  ...props
+}: React.ComponentProps<typeof AccordionPrimitive.Item>) {
   return (
     <AccordionPrimitive.Item
       data-slot='accordion-item'
-      className={cn('not-last:border-b', className)}
+      className={cn('border-b last:border-b-0', className)}
       {...props}
     />
   )
@@ -46,29 +89,23 @@ function AccordionTrigger({
   className,
   children,
   ...props
-}: AccordionPrimitive.Trigger.Props) {
+}: React.ComponentProps<typeof AccordionPrimitive.Trigger>) {
   return (
     <AccordionPrimitive.Header className='flex'>
       <AccordionPrimitive.Trigger
         data-slot='accordion-trigger'
         className={cn(
-          'group/accordion-trigger focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:after:border-ring **:data-[slot=accordion-trigger-icon]:text-muted-foreground relative flex flex-1 items-start justify-between rounded-lg border border-transparent py-2.5 text-left text-sm font-medium transition-all outline-none hover:underline focus-visible:ring-3 aria-disabled:pointer-events-none aria-disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4',
+          'focus-visible:border-ring focus-visible:ring-ring/50 flex flex-1 items-start justify-between gap-4 rounded-md py-4 text-left text-sm font-semibold transition-all outline-none hover:underline focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50 [&[data-state=open]>svg]:rotate-180',
           className
         )}
         {...props}
       >
         {children}
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
-          strokeWidth={2}
+        <ChevronDownIcon
+          size={16}
           data-slot='accordion-trigger-icon'
-          className='pointer-events-none shrink-0 group-aria-expanded/accordion-trigger:hidden'
-        />
-        <HugeiconsIcon
-          icon={ArrowUp01Icon}
-          strokeWidth={2}
-          data-slot='accordion-trigger-icon'
-          className='pointer-events-none hidden shrink-0 group-aria-expanded/accordion-trigger:inline'
+          className='pointer-events-none shrink-0 opacity-60 transition-transform duration-200'
+          aria-hidden='true'
         />
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
@@ -79,22 +116,15 @@ function AccordionContent({
   className,
   children,
   ...props
-}: AccordionPrimitive.Panel.Props) {
+}: React.ComponentProps<typeof AccordionPrimitive.Content>) {
   return (
-    <AccordionPrimitive.Panel
+    <AccordionPrimitive.Content
       data-slot='accordion-content'
-      className='data-open:animate-accordion-down data-closed:animate-accordion-up overflow-hidden text-sm'
+      className='data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden text-sm'
       {...props}
     >
-      <div
-        className={cn(
-          '[&_a]:hover:text-foreground h-(--accordion-panel-height) pt-0 pb-2.5 data-ending-style:h-0 data-starting-style:h-0 [&_a]:underline [&_a]:underline-offset-3 [&_p:not(:last-child)]:mb-4',
-          className
-        )}
-      >
-        {children}
-      </div>
-    </AccordionPrimitive.Panel>
+      <div className={cn('pt-0 pb-4', className)}>{children}</div>
+    </AccordionPrimitive.Content>
   )
 }
 

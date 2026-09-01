@@ -48,13 +48,12 @@ func insertPreferredOwnerCandidate(
 		return
 	}
 	require.NoError(t, DB.Create(&ModelBinding{
-		ModelId:       catalogModel.Id,
-		ChannelId:     channelID,
-		UpstreamModel: modelName,
-		Priority:      priority,
-		Weight:        int(weight),
-		Enabled:       true,
-		GroupsRaw:     group,
+		ModelId:   catalogModel.Id,
+		ChannelId: channelID,
+		Priority:  priority,
+		Weight:    int(weight),
+		Enabled:   true,
+		GroupsRaw: group,
 	}).Error)
 }
 

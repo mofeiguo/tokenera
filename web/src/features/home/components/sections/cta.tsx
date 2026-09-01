@@ -19,12 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 import { ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { AnimateInView } from '@/components/animate-in-view'
 import { Button } from '@/components/ui/button'
 import { Link } from '@/lib/router'
 
 interface CTAProps {
-  className?: string
   isAuthenticated?: boolean
 }
 
@@ -36,42 +34,30 @@ export function CTA(props: CTAProps) {
   }
 
   return (
-    <section className='border-border/50 relative z-10 overflow-hidden border-y px-6 py-24 md:py-32'>
-      <div
-        aria-hidden
-        className='pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_50%_100%,oklch(0.55_0.14_210/18%),transparent_70%)]'
-      />
-      <AnimateInView
-        className='relative mx-auto max-w-2xl text-center'
-        animation='scale-in'
-      >
-        <h2 className='text-2xl leading-tight font-bold tracking-tight md:text-4xl'>
-          {t('Ready to simplify')}
-          <br />
-          <span className='zen-text-glow'>{t('your AI integration?')}</span>
-        </h2>
-        <p className='text-muted-foreground/80 mx-auto mt-5 max-w-md text-sm leading-relaxed md:text-base'>
-          {t(
-            'Deploy your own gateway and start routing requests through your configured upstream services.'
-          )}
-        </p>
-        <div className='mt-8 flex items-center justify-center gap-3'>
+    <section className='py-24 md:py-36'>
+      <div className='mx-auto max-w-7xl px-6'>
+        <div className='bg-foreground text-background grid gap-10 rounded-2xl px-7 py-10 sm:px-10 md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:px-14 md:py-14'>
+          <div>
+            <h2 className='font-display max-w-xl min-w-0 text-4xl font-bold tracking-[-0.04em] [overflow-wrap:anywhere] md:text-5xl'>
+              {t('Your first request needs one key.')}
+            </h2>
+            <p className='mt-5 max-w-xl text-base leading-7 opacity-70'>
+              {t(
+                'Create an account, issue an API key, and verify the route in Playground before changing your application.'
+              )}
+            </p>
+          </div>
           <Button
-            className='group rounded-lg shadow-[0_0_32px_oklch(0.75_0.12_210/25%)]'
+            size='lg'
+            variant='secondary'
+            className='h-12 rounded-full px-7'
             render={<Link to='/sign-up' />}
           >
-            {t('Get Started')}
-            <ArrowRight className='ml-1 size-3.5 transition-transform duration-200 group-hover:translate-x-0.5' />
-          </Button>
-          <Button
-            variant='outline'
-            className='border-border/50 rounded-lg hover:border-cyan-400/40 hover:bg-cyan-400/5'
-            render={<Link to='/pricing' />}
-          >
-            {t('View Pricing')}
+            {t('Create your API key')}
+            <ArrowRight />
           </Button>
         </div>
-      </AnimateInView>
+      </div>
     </section>
   )
 }

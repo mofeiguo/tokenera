@@ -40,7 +40,6 @@ import {
 import { channelsQueryKeys } from '../../lib'
 import type { TagOperationParams } from '../../types'
 import { useChannels } from '../channels-provider'
-import { ModelMappingEditor } from '../model-mapping-editor'
 
 type TagBatchEditDialogProps = {
   open: boolean
@@ -60,7 +59,6 @@ export function TagBatchEditDialog({
   // Form fields
   const [newTag, setNewTag] = useState('')
   const [models, setModels] = useState('')
-  const [modelMapping, setModelMapping] = useState('')
   const [groups, setGroups] = useState<string[]>([])
 
   // Fetch available groups
@@ -117,16 +115,6 @@ export function TagBatchEditDialog({
   const handleSave = async () => {
     if (!currentTag) return
 
-    // Validate model mapping JSON if provided
-    if (modelMapping.trim()) {
-      try {
-        JSON.parse(modelMapping)
-      } catch (_error) {
-        toast.error(t('Model mapping must be valid JSON'))
-        return
-      }
-    }
-
     setIsSaving(true)
     try {
       const params: Record<string, string | undefined> = {
@@ -139,10 +127,6 @@ export function TagBatchEditDialog({
 
       if (models.trim()) {
         params.models = models
-      }
-
-      if (modelMapping.trim()) {
-        params.model_mapping = modelMapping
       }
 
       if (groups.length > 0) {
@@ -177,7 +161,6 @@ export function TagBatchEditDialog({
   const handleClose = () => {
     setNewTag('')
     setModels('')
-    setModelMapping('')
     setGroups([])
     onOpenChange(false)
   }
@@ -265,16 +248,6 @@ export function TagBatchEditDialog({
                   'Current models for the longest channel in this tag. May not include all models from all channels.'
                 )}
               </p>
-            </div>
-
-            {/* Model Mapping */}
-            <div className='space-y-2'>
-              <Label htmlFor='model-mapping'>{t('Model Mapping')}</Label>
-              <ModelMappingEditor
-                value={modelMapping}
-                onChange={setModelMapping}
-                disabled={isSaving}
-              />
             </div>
 
             {/* Groups */}

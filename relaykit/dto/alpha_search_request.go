@@ -8,7 +8,8 @@ import (
 )
 
 // AlphaSearchRequest is the Codex standalone web search request.
-// RawBody preserves the original JSON so unknown fields are forwarded intact.
+// RawBody is kept for token counting and sensitive-word checks.
+// Outbound forwarding uses the stored client body, not this field.
 type AlphaSearchRequest struct {
 	Model   string          `json:"model"`
 	Id      string          `json:"id,omitempty"`

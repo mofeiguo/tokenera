@@ -41,6 +41,100 @@ export type StreamErrorDetails = {
   errorMessage: string
 }
 
+type StreamEventPayload = {
+  type?: string
+  delta?: unknown
+  choices?: ChatCompletionChunk['choices']
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string
+        thought?: boolean
+      }>
+    }
+  }>
+}
+
+function pushUpdate(
+  updates: StreamMessageUpdate[],
+  type: StreamUpdateType,
+  chunk: string | undefined
+) {
+  if (!chunk) {
+    return
+  }
+  updates.push({ type, chunk })
+}
+
+function parseOpenAIChatUpdates(
+  payload: StreamEventPayload
+): StreamMessageUpdate[] {
+  const delta = payload.choices?.[0]?.delta
+  if (!delta) {
+    return []
+  }
+
+  const updates: StreamMessageUpdate[] = []
+  pushUpdate(updates, 'reasoning', delta.reasoning_content)
+  pushUpdate(updates, 'content', delta.content)
+  return updates
+}
+
+function parseResponsesUpdates(
+  payload: StreamEventPayload
+): StreamMessageUpdate[] {
+  const updates: StreamMessageUpdate[] = []
+  if (
+    payload.type === 'response.output_text.delta' &&
+    typeof payload.delta === 'string'
+  ) {
+    pushUpdate(updates, 'content', payload.delta)
+  }
+  if (
+    (payload.type === 'response.reasoning_text.delta' ||
+      payload.type === 'response.reasoning_summary_text.delta') &&
+    typeof payload.delta === 'string'
+  ) {
+    pushUpdate(updates, 'reasoning', payload.delta)
+  }
+  return updates
+}
+
+function parseAnthropicUpdates(
+  payload: StreamEventPayload
+): StreamMessageUpdate[] {
+  if (payload.type !== 'content_block_delta' || !payload.delta) {
+    return []
+  }
+  const delta = payload.delta as { type?: string; text?: string; thinking?: string }
+  const updates: StreamMessageUpdate[] = []
+  if (delta.type === 'thinking_delta') {
+    pushUpdate(updates, 'reasoning', delta.thinking)
+  }
+  if (delta.type === 'text_delta') {
+    pushUpdate(updates, 'content', delta.text)
+  }
+  return updates
+}
+
+function parseGeminiUpdates(
+  payload: StreamEventPayload
+): StreamMessageUpdate[] {
+  const parts = payload.candidates?.[0]?.content?.parts
+  if (!parts) {
+    return []
+  }
+  const updates: StreamMessageUpdate[] = []
+  for (const part of parts) {
+    if (part.thought) {
+      pushUpdate(updates, 'reasoning', part.text)
+      continue
+    }
+    pushUpdate(updates, 'content', part.text)
+  }
+  return updates
+}
+
 export function parseStreamErrorDetails(data?: string): StreamErrorDetails {
   const fallbackMessage = data || ERROR_MESSAGES.API_REQUEST_ERROR
 
@@ -65,28 +159,69 @@ export function parseStreamErrorDetails(data?: string): StreamErrorDetails {
 }
 
 export function parseStreamMessageUpdates(data: string): StreamMessageUpdate[] {
-  const chunk = JSON.parse(data) as ChatCompletionChunk
-  const delta = chunk.choices?.[0]?.delta
+  const payload = JSON.parse(data) as StreamEventPayload
 
-  if (!delta) {
-    return []
+  if (payload.choices) {
+    return parseOpenAIChatUpdates(payload)
+  }
+  if (payload.type?.startsWith('response.')) {
+    return parseResponsesUpdates(payload)
+  }
+  if (payload.type === 'content_block_delta') {
+    return parseAnthropicUpdates(payload)
+  }
+  if (payload.candidates) {
+    return parseGeminiUpdates(payload)
   }
 
-  const updates: StreamMessageUpdate[] = []
+  return []
+}
 
-  if (delta.reasoning_content) {
-    updates.push({ type: 'reasoning', chunk: delta.reasoning_content })
+const SSE_CONTROL_EVENT_TYPES = new Set([
+  'error',
+  'readystatechange',
+  'abort',
+  'open',
+])
+
+export type SseDispatchSource = {
+  dispatchEvent: (event: Event) => boolean
+}
+
+export function forwardNamedSseEventsAsMessage<T extends SseDispatchSource>(
+  source: T
+): T {
+  const originalDispatch = source.dispatchEvent.bind(source)
+  source.dispatchEvent = (event: Event) => {
+    if (
+      event.type !== 'message' &&
+      !SSE_CONTROL_EVENT_TYPES.has(event.type)
+    ) {
+      const data = (event as Event & { data?: string }).data
+      if (typeof data === 'string') {
+        originalDispatch(
+          Object.assign(new Event('message'), { data }) as Event
+        )
+      }
+    }
+    return originalDispatch(event)
   }
-
-  if (delta.content) {
-    updates.push({ type: 'content', chunk: delta.content })
-  }
-
-  return updates
+  return source
 }
 
 export function isStreamDoneMessage(data: string): boolean {
-  return data === STREAM_DONE_MESSAGE
+  if (data === STREAM_DONE_MESSAGE) {
+    return true
+  }
+
+  try {
+    const parsed = JSON.parse(data) as { type?: string }
+    return (
+      parsed.type === 'message_stop' || parsed.type === 'response.completed'
+    )
+  } catch {
+    return false
+  }
 }
 
 export function isStreamClosedReadyState(readyState?: number): boolean {
@@ -109,4 +244,15 @@ export function getStreamReadyStateError(
   }
 
   return null
+}
+
+export function shouldCompleteOnStreamClose(
+  eventReadyState: number | undefined,
+  source: unknown
+): boolean {
+  if (!isStreamClosedReadyState(eventReadyState)) {
+    return false
+  }
+  const status = (source as { status?: number }).status
+  return status === undefined || status === 200
 }

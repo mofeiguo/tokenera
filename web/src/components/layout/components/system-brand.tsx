@@ -33,7 +33,7 @@ type SystemBrandProps = {
   defaultVersion?: string
   /**
    * Visual layout:
-   * - 'sidebar': stacked card style (used inside the sidebar header).
+   * - 'sidebar': stacked card in the sidebar header; clicking goes to /dashboard.
    * - 'inline': compact horizontal pill (used inside the top app bar).
    */
   variant?: 'sidebar' | 'inline'
@@ -43,7 +43,7 @@ type SystemBrandProps = {
  * System brand component
  * Displays current system logo + name.
  * - inline: compact pill in the top app bar; clicking navigates to home (/)
- * - sidebar: stacked card in the sidebar header (display only)
+ * - sidebar: stacked card in the sidebar header; clicking navigates to /dashboard
  */
 export function SystemBrand(props: SystemBrandProps) {
   const { t } = useTranslation()
@@ -82,8 +82,8 @@ export function SystemBrand(props: SystemBrandProps) {
       <SidebarMenuItem>
         <SidebarMenuButton
           size='lg'
-          className='hover:text-sidebar-foreground active:text-sidebar-foreground cursor-default hover:bg-transparent active:bg-transparent'
-          render={<div />}
+          className='hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+          render={<Link to='/dashboard' />}
         >
           <div className='flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg'>
             <img
@@ -93,8 +93,10 @@ export function SystemBrand(props: SystemBrandProps) {
             />
           </div>
           <div className='grid flex-1 text-start text-sm leading-tight group-data-[collapsible=icon]:hidden'>
-            <span className='truncate font-semibold'>{name}</span>
-            <span className='truncate text-xs'>{version}</span>
+            <span className='truncate text-base font-bold'>{name}</span>
+            <span className='text-muted-foreground truncate text-xs'>
+              {version}
+            </span>
           </div>
         </SidebarMenuButton>
       </SidebarMenuItem>

@@ -26,7 +26,7 @@ import { useTheme } from '@/context/theme-provider'
 import { isLikelyHtml } from '@/lib/content-format'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { CTA, Features, Hero, HowItWorks, Stats } from './components'
+import { CTA, Features, Hero, HowItWorks } from './components'
 import { useHomePageContent } from './hooks'
 
 export function Home() {
@@ -122,13 +122,10 @@ export function Home() {
 
   return (
     <PublicLayout showMainContainer={false}>
-      <div className='zen-atmosphere relative isolate overflow-hidden'>
-        <div
-          aria-hidden
-          className='zen-grid-fade pointer-events-none absolute inset-0'
-        />
+      {/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V5 */}
+      {/* Hallmark · genre: modern-minimal · macrostructure: Workbench · enrichment: product demo */}
+      <div className='bg-background relative isolate overflow-x-clip'>
         <Hero isAuthenticated={isAuthenticated} />
-        <Stats />
         <Features />
         <HowItWorks />
         <CTA isAuthenticated={isAuthenticated} />

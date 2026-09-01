@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, test } from 'vitest'
 
-import type { ChatCompletionRequest } from '../types'
+import type { PlaygroundRequest } from '../lib/streaming/payload-builder'
 import { createStreamRequestController } from './use-stream-request'
 
 function deferred<T>() {
@@ -56,19 +56,30 @@ class FakeStreamSource {
   }
 
   emit(type: string, data?: string) {
-    for (const listener of this.listeners.get(type) ?? []) {
-      listener({ data, readyState: this.readyState } as Event & {
-        data?: string
-        readyState?: number
-      })
+    this.dispatchEvent(
+      Object.assign(new Event(type), {
+        data,
+        readyState: this.readyState,
+      }) as Event & { data?: string; readyState?: number }
+    )
+  }
+
+  dispatchEvent(event: Event) {
+    const dataEvent = event as Event & { data?: string; readyState?: number }
+    for (const listener of this.listeners.get(event.type) ?? []) {
+      listener(dataEvent)
     }
+    return true
   }
 }
 
-const payload: ChatCompletionRequest = {
-  model: 'test-model',
-  messages: [{ role: 'user', content: 'hello' }],
-  stream: true,
+const payload: PlaygroundRequest = {
+  url: '/pg/chat/completions',
+  payload: {
+    model: 'test-model',
+    messages: [{ role: 'user', content: 'hello' }],
+    stream: true,
+  },
 }
 
 const noopCallbacks = {
@@ -195,5 +206,34 @@ describe('latest-wins stream request coordination', () => {
     )
 
     expect(updates).toEqual(['current'])
+  })
+
+  test('forwards named Responses SSE events to the message parser', async () => {
+    const sources: FakeStreamSource[] = []
+    const updates: string[] = []
+    const controller = createStreamRequestController({
+      getHeaders: () => Promise.resolve({ Authorization: 'Bearer current' }),
+      createSource: () => {
+        const source = new FakeStreamSource()
+        sources.push(source)
+        return source
+      },
+      setStreaming: () => undefined,
+    })
+
+    await controller.send(payload, {
+      onUpdate: (_type, chunk) => updates.push(chunk),
+      onComplete: () => undefined,
+      onError: () => undefined,
+    })
+    sources[0]?.emit(
+      'response.output_text.delta',
+      JSON.stringify({
+        type: 'response.output_text.delta',
+        delta: 'hello',
+      })
+    )
+
+    expect(updates).toEqual(['hello'])
   })
 })

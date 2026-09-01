@@ -3,9 +3,7 @@ package claude
 import (
 	"testing"
 
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -43,24 +41,6 @@ func TestPatchClaudeMessageDeltaUsageDataZeroValueChecks(t *testing.T) {
 	require.EqualValues(t, 9, gjson.Get(patchedData, "usage.input_tokens").Int())
 	require.EqualValues(t, 30, gjson.Get(patchedData, "usage.cache_read_input_tokens").Int())
 	assert.False(t, gjson.Get(patchedData, "usage.cache_creation_input_tokens").Exists())
-}
-
-func TestShouldSkipClaudeMessageDeltaUsagePatch(t *testing.T) {
-	originGlobalPassThrough := model_setting.GetGlobalSettings().PassThroughRequestEnabled
-	t.Cleanup(func() {
-		model_setting.GetGlobalSettings().PassThroughRequestEnabled = originGlobalPassThrough
-	})
-
-	model_setting.GetGlobalSettings().PassThroughRequestEnabled = true
-	assert.True(t, shouldSkipClaudeMessageDeltaUsagePatch(&relaycommon.RelayInfo{}))
-
-	model_setting.GetGlobalSettings().PassThroughRequestEnabled = false
-	assert.True(t, shouldSkipClaudeMessageDeltaUsagePatch(&relaycommon.RelayInfo{
-		ChannelMeta: &relaycommon.ChannelMeta{ChannelSetting: dto.ChannelSettings{PassThroughBodyEnabled: true}},
-	}))
-	assert.False(t, shouldSkipClaudeMessageDeltaUsagePatch(&relaycommon.RelayInfo{
-		ChannelMeta: &relaycommon.ChannelMeta{ChannelSetting: dto.ChannelSettings{PassThroughBodyEnabled: false}},
-	}))
 }
 
 func TestBuildMessageDeltaPatchUsage(t *testing.T) {

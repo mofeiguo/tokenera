@@ -23,7 +23,6 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Dialog } from '@/components/dialog'
-import { JsonCodeEditor } from '@/components/json-code-editor'
 import { Button } from '@/components/ui/button'
 import {
   Collapsible,
@@ -83,7 +82,6 @@ interface RuleFormValues {
   include_using_group: boolean
   include_model_name: boolean
   include_rule_name: boolean
-  param_override_template_json: string
 }
 
 function normalizeStringList(text: string): string[] {
@@ -132,12 +130,8 @@ export function RuleEditorDialog(props: Props) {
       include_using_group: true,
       include_model_name: false,
       include_rule_name: true,
-      param_override_template_json: '',
     },
   })
-  const paramOverrideTemplateField = form.register(
-    'param_override_template_json'
-  )
 
   const resetFromRule = (r: Partial<AffinityRule>) => {
     form.reset({
@@ -151,9 +145,6 @@ export function RuleEditorDialog(props: Props) {
       include_using_group: r.include_using_group ?? true,
       include_model_name: !!r.include_model_name,
       include_rule_name: r.include_rule_name ?? true,
-      param_override_template_json: r.param_override_template
-        ? JSON.stringify(r.param_override_template, null, 2)
-        : '',
     })
     const sources = (r.key_sources || []).map(normalizeKeySource)
     setKeySources(
@@ -161,7 +152,6 @@ export function RuleEditorDialog(props: Props) {
         ? sources.map(createKeySourceRow)
         : [createKeySourceRow()]
     )
-    if (r.param_override_template) setAdvancedOpen(true)
   }
 
   useEffect(() => {
@@ -183,7 +173,6 @@ export function RuleEditorDialog(props: Props) {
         include_using_group: true,
         include_model_name: false,
         include_rule_name: true,
-        param_override_template_json: '',
       })
       setKeySources([createKeySourceRow()])
     }
@@ -205,25 +194,6 @@ export function RuleEditorDialog(props: Props) {
       return
     }
 
-    let paramTemplate: Record<string, unknown> | null = null
-    if (values.param_override_template_json.trim()) {
-      try {
-        const parsed = JSON.parse(values.param_override_template_json)
-        if (
-          typeof parsed !== 'object' ||
-          Array.isArray(parsed) ||
-          parsed === null
-        ) {
-          toast.error(t('Parameter override template must be a JSON object'))
-          return
-        }
-        paramTemplate = parsed
-      } catch {
-        toast.error(t('Invalid JSON in parameter override template'))
-        return
-      }
-    }
-
     const rule: AffinityRule = {
       id: props.rule?.id,
       name: values.name.trim(),
@@ -237,7 +207,6 @@ export function RuleEditorDialog(props: Props) {
       include_using_group: values.include_using_group,
       include_model_name: values.include_model_name,
       include_rule_name: values.include_rule_name,
-      param_override_template: paramTemplate,
     }
 
     props.onSave(rule)
@@ -435,34 +404,6 @@ export function RuleEditorDialog(props: Props) {
                   {...form.register('ttl_seconds')}
                 />
               </div>
-            </div>
-
-            <div className='grid gap-1.5'>
-              <Label htmlFor='channel-affinity-param-override-template'>
-                {t('Parameter Override Template (JSON)')}
-              </Label>
-              <JsonCodeEditor
-                id='channel-affinity-param-override-template'
-                value={form.watch('param_override_template_json') || ''}
-                onChange={(value) =>
-                  form.setValue('param_override_template_json', value, {
-                    shouldDirty: true,
-                  })
-                }
-                name={paramOverrideTemplateField.name}
-                onBlur={() => {
-                  void paramOverrideTemplateField.onBlur({
-                    target: {
-                      name: paramOverrideTemplateField.name,
-                      value: form.getValues('param_override_template_json'),
-                    },
-                    type: 'blur',
-                  })
-                }}
-                textareaRef={paramOverrideTemplateField.ref}
-                placeholder='{"operations": [...]}'
-                heightClassName='h-40 min-h-40 max-h-40'
-              />
             </div>
 
             <div className='grid gap-3 sm:grid-cols-3'>

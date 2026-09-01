@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -22,6 +23,41 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestChannelTestOutboundSendsBuiltRequestBytes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	channel := &model.Channel{Type: constant.ChannelTypeOpenAI}
+	request := buildTestRequest("public-sku", string(constant.EndpointTypeOpenAI), channel, false)
+	require.NotNil(t, request)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	common.SetContextKey(c, constant.ContextKeyOriginalModel, "public-sku")
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "public-sku",
+		Request:         request,
+	}
+	info.InitChannelMeta(c)
+	assert.Equal(t, "public-sku", info.UpstreamModelName)
+
+	jsonData, err := common.Marshal(request)
+	require.NoError(t, err)
+	storage, err := common.CreateBodyStorage(jsonData)
+	require.NoError(t, err)
+	c.Set(common.KeyBodyStorage, storage)
+	t.Cleanup(func() { common.CleanupBodyStorage(c) })
+
+	body, err := relaycommon.NewOutboundRawBody(c)
+	require.NoError(t, err)
+	got, err := io.ReadAll(body)
+	require.NoError(t, err)
+	assert.Equal(t, jsonData, got)
+	assert.Contains(t, string(got), `"model":"public-sku"`)
+	assert.NotContains(t, string(got), "provider/model-v2")
+	assert.NotContains(t, string(got), "legacy/model")
+	assert.NotContains(t, string(got), "temperature")
+}
 
 func TestValidateChannelProxy(t *testing.T) {
 	tests := []struct {

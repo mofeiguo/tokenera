@@ -25,13 +25,9 @@ export const CHANNEL_TYPE_BIFROST = 61
 
 export const CHANNEL_TYPES = {
   0: 'Unknown',
-  2: 'MjProxy',
-  5: 'MjProxyPlus',
   17: 'Ali',
-  24: 'Gemini',
   35: 'MiniMax',
   36: 'SunoAPI',
-  41: 'Vertex AI',
   45: 'VolcEngine',
   50: 'Kling',
   51: 'Jimeng',
@@ -42,7 +38,7 @@ export const CHANNEL_TYPES = {
 } as const
 
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [
-  61, 50, 51, 52, 54, 55, 2, 5, 17, 24, 35, 36, 41, 45,
+  61, 50, 51, 52, 54, 55, 17, 35, 36, 45,
 ]
 
 export const CHANNEL_TYPE_OPTIONS: { value: number; label: string }[] = (() => {
@@ -198,7 +194,6 @@ export const ERROR_MESSAGES = {
   REQUIRED_MODELS: 'Models are required',
   REQUIRED_GROUP: 'Group is required',
   INVALID_JSON: 'Invalid JSON format',
-  INVALID_MODEL_MAPPING: 'Invalid model mapping format',
   INVALID_PROXY:
     'Proxy address must use HTTP, HTTPS, SOCKS5, or SOCKS5H and include a valid host',
   INVALID_HTTP_PROTOCOL: 'HTTP protocol must be Auto or HTTP/1.1',
@@ -305,11 +300,9 @@ export const FIELD_PLACEHOLDERS = {
   KEY: 'API Key (one per line for batch mode)',
   MODELS: 'Comma-separated model names, e.g., gpt-4,gpt-3.5-turbo',
   GROUP: 'Please Select user groups that can access this channel.',
-  MODEL_MAPPING: '{"request_model": "actual_model"}',
   TEST_MODEL: 'Model to use for testing',
   TAG: 'Optional tag for grouping channels',
   REMARK: 'Optional notes about this channel',
-  PARAM_OVERRIDE: '{"temperature": 0.7}',
   HEADER_OVERRIDE: '{"X-Custom-Header": "value"}',
   STATUS_CODE_MAPPING: '{"400": "500"}',
 } as const
@@ -323,19 +316,15 @@ export const FIELD_DESCRIPTIONS = {
     'Upstream models this channel may serve. They are not added to the models table.',
   GROUP:
     'User groups that can call this channel. Empty means the default group.',
-  MODEL_MAPPING:
-    'Map request model names to actual provider model names (JSON format)',
   PRIORITY:
     'Higher priority bindings are selected first for that public model.',
-  WEIGHT:
-    'Model routing uses binding weights, not this channel field.',
+  WEIGHT: 'Model routing uses binding weights, not this channel field.',
   TEST_MODEL: 'Model to use when testing channel connectivity',
   AUTO_BAN: 'Automatically disable channel on repeated failures',
   STATUS_CODE_MAPPING: 'Map response status codes (JSON format)',
   TAG: 'Group channels by tag for batch operations',
   REMARK: 'Internal notes (not shown to users)',
   SETTING: 'Channel-specific settings (JSON format)',
-  PARAM_OVERRIDE: 'Override request parameters (JSON format)',
   HEADER_OVERRIDE: 'Override request headers (JSON format)',
   MULTI_KEY_MODE: 'How to select keys: random or sequential polling',
   BATCH_ADD: 'Create multiple channels from multiple keys',
@@ -346,13 +335,7 @@ export const FIELD_DESCRIPTIONS = {
 // Channel Type Specific Configurations
 // ============================================================================
 
-export const MODEL_FETCHABLE_TYPES = new Set([17, 24, 41, 45, 61])
-
-export const FIELD_PASSTHROUGH_TYPES = new Set([CHANNEL_TYPE_BIFROST])
-
-export const OPENAI_FIELD_PASSTHROUGH_TYPES = new Set([CHANNEL_TYPE_BIFROST])
-
-export const CLAUDE_FIELD_PASSTHROUGH_TYPES = new Set([CHANNEL_TYPE_BIFROST])
+export const MODEL_FETCHABLE_TYPES = new Set([17, 45, 61])
 
 export const TYPE_TO_KEY_PROMPT: Record<number, string> = {
   50: 'Format: AccessKey|SecretKey (or just ApiKey if upstream is New API)',

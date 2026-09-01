@@ -8,19 +8,19 @@
 
 ### 技术栈
 
-| 类别       | 技术                                                                                       |
-| ---------- | ------------------------------------------------------------------------------------------ |
-| 包管理     | Bun                                                                                        |
-| 框架       | React 19、TypeScript                                                                       |
-| 数据与请求 | swr、axios、Zustand                                                                        |
-| 路由       | react-router                                                                               |
-| 表格与列表 | @tanstack/react-table、@tanstack/react-virtual                                             |
-| 国际化     | i18next、react-i18next、i18next-browser-languagedetector                                   |
-| 日期       | Day.js                                                                                     |
-| UI 与样式  | shadcn/ui（base-nova / Base UI）、Hugeicons、Tailwind CSS、clsx / class-variance-authority |
-| 表单       | React Hook Form、Zod                                                                       |
-| 图表       | @visactor/vchart、@visactor/react-vchart                                                   |
-| 工具       | qrcode.react、oxfmt、oxlint、vitest（可选）                                                |
+| 类别       | 技术                                                                                    |
+| ---------- | --------------------------------------------------------------------------------------- |
+| 包管理     | Bun                                                                                     |
+| 框架       | React 19、TypeScript                                                                    |
+| 数据与请求 | swr、axios、Zustand                                                                     |
+| 路由       | react-router                                                                            |
+| 表格与列表 | @tanstack/react-table、@tanstack/react-virtual                                          |
+| 国际化     | i18next、react-i18next、i18next-browser-languagedetector                                |
+| 日期       | Day.js                                                                                  |
+| UI 与样式  | shadcn/ui（new-york / Radix）、Hugeicons、Tailwind CSS、clsx / class-variance-authority |
+| 表单       | React Hook Form、Zod                                                                    |
+| 图表       | @visactor/vchart、@visactor/react-vchart                                                |
+| 工具       | qrcode.react、oxfmt、oxlint、vitest（可选）                                             |
 
 优先选用成熟、维护良好的开源库；仅在现有库无法满足或需特殊适配时自行实现，并评估可维护性与通用性。
 
@@ -82,7 +82,7 @@
 ### 3.3 组件
 
 - 使用函数式组件与 Hooks，单一职责；组件 props 须有明确类型（接口或类型别名）。
-- **UI**：可复用控件优先用 `src/components/ui` 的 shadcn/ui 组件（`components.json` 为 base-nova，底层为 Base UI）。页面从 `@/components/ui` 引入，不要在业务里直接包 `@base-ui/react`。新增或更新组件用 `cd web && bunx shadcn@latest`。
+- **UI**：可复用控件优先用 `src/components/ui` 的 shadcn/ui 组件（`components.json` 为 new-york，底层为 Radix）。页面从 `@/components/ui` 引入，不要在业务里直接包 `@radix-ui/react-*`。新增或更新组件用 `cd web && bunx shadcn@latest`。
 - **Props 使用**：组件 props 非必要不要解构，直接使用 `props.xxx` 访问属性，保持代码清晰（详见 [3.2 代码风格与类型](#32-代码风格与类型)）。
 - 单文件超过约 200 行时考虑拆分子组件或将逻辑抽到自定义 Hooks；类型定义可与组件同文件或放在同模块的 `types` 中。
 
@@ -193,4 +193,4 @@
 - **2026-01-28**：补充状态管理、API、表单、路由、错误处理、样式、文件组织、可访问性、安全、测试、依赖与构建部署规范。
 - **2026-01-29**：重组文档结构，合并重复内容，明确主次与交叉引用。
 - **2026-01-31**：在 3.2 中补充「类型检查」要求：改动 TS/TSX 后须执行 typecheck 并修复至无错。
-- **2026-06-21**：在 3.2 中补充「Lint 检查」要求：完成代码改动前须修复所涉及文件的所有 lint error。
+- **2026-08-27**：UI 底层改为 Radix（shadcn new-york）；不再使用 Base UI。

@@ -3,14 +3,29 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
 
 	"github.com/gin-gonic/gin"
 )
+
+func playgroundRelayFormat(path string) types.RelayFormat {
+	switch {
+	case strings.HasPrefix(path, "/pg/messages"):
+		return types.RelayFormatClaude
+	case strings.HasPrefix(path, "/pg/responses"):
+		return types.RelayFormatOpenAIResponses
+	case strings.HasPrefix(path, "/pg/models/"):
+		return types.RelayFormatGemini
+	default:
+		return types.RelayFormatOpenAI
+	}
+}
 
 func Playground(c *gin.Context) {
 	var newAPIError *types.NewAPIError
@@ -29,12 +44,6 @@ func Playground(c *gin.Context) {
 		return
 	}
 
-	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatOpenAI, nil, nil)
-	if err != nil {
-		newAPIError = types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
-		return
-	}
-
 	userId := c.GetInt("id")
 
 	// Write user context to ensure acceptUnsetRatio is available
@@ -45,12 +54,15 @@ func Playground(c *gin.Context) {
 	}
 	userCache.WriteContext(c)
 
+	usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 	tempToken := &model.Token{
 		UserId: userId,
-		Name:   fmt.Sprintf("playground-%s", relayInfo.UsingGroup),
-		Group:  relayInfo.UsingGroup,
+		Name:   fmt.Sprintf("playground-%s", usingGroup),
+		Group:  usingGroup,
 	}
 	_ = middleware.SetupContextForToken(c, tempToken)
 
-	Relay(c, types.RelayFormatOpenAI)
+	// Relay parses the body first. GenRelayInfo must not run here with a nil
+	// request: Responses format type-asserts to *OpenAIResponsesRequest.
+	Relay(c, playgroundRelayFormat(c.Request.URL.Path))
 }

@@ -1,7 +1,6 @@
 package ali
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	taskdto "github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
@@ -135,35 +133,10 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	return relaycommon.ValidateMultipartDirect(c, info)
 }
 
-func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	return fmt.Sprintf("%s/api/v1/services/aigc/video-generation/video-synthesis", a.baseURL), nil
-}
-
-// BuildRequestHeader sets required headers for Ali API
 func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) error {
 	req.Header.Set("Authorization", "Bearer "+a.apiKey)
-	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-DashScope-Async", "enable") // 阿里异步任务必须设置
 	return nil
-}
-
-func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
-	taskReq, err := relaycommon.GetTaskRequest(c)
-	if err != nil {
-		return nil, errors.Wrap(err, "get_task_request_failed")
-	}
-
-	aliReq, err := a.convertToAliRequest(info, taskReq)
-	if err != nil {
-		return nil, errors.Wrap(err, "convert_to_ali_request_failed")
-	}
-	logger.LogJson(c, "ali video request body", aliReq)
-
-	bodyBytes, err := common.Marshal(aliReq)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshal_ali_request_failed")
-	}
-	return bytes.NewReader(bodyBytes), nil
 }
 
 var (
@@ -350,9 +323,6 @@ func normalizeWan27I2VInput(aliReq *AliVideoRequest, req relaycommon.TaskSubmitR
 
 func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relaycommon.TaskSubmitReq) (*AliVideoRequest, error) {
 	upstreamModel := req.Model
-	if info.IsModelMapped {
-		upstreamModel = info.UpstreamModelName
-	}
 	aliReq := &AliVideoRequest{
 		Model: upstreamModel,
 		Input: AliVideoInput{

@@ -16,7 +16,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 
@@ -42,7 +41,6 @@ var channelUpstreamModelUpdateSelectFields = []string{
 	"status",
 	"base_url",
 	"models",
-	"model_mapping",
 	"settings",
 	"setting",
 	"other",
@@ -144,38 +142,10 @@ func applySelectedModelChanges(originModels []string, addModels []string, remove
 	return subtractModelNames(mergeModelNames(originModels, normalizedAdd), normalizedRemove)
 }
 
-func normalizeChannelModelMapping(channel *model.Channel) map[string]string {
-	if channel == nil || channel.ModelMapping == nil {
-		return nil
-	}
-	rawMapping := strings.TrimSpace(*channel.ModelMapping)
-	if rawMapping == "" || rawMapping == "{}" {
-		return nil
-	}
-	parsed := make(map[string]string)
-	if err := common.UnmarshalJsonStr(rawMapping, &parsed); err != nil {
-		return nil
-	}
-	normalized := make(map[string]string, len(parsed))
-	for source, target := range parsed {
-		normalizedSource := strings.TrimSpace(source)
-		normalizedTarget := strings.TrimSpace(target)
-		if normalizedSource == "" || normalizedTarget == "" {
-			continue
-		}
-		normalized[normalizedSource] = normalizedTarget
-	}
-	if len(normalized) == 0 {
-		return nil
-	}
-	return normalized
-}
-
 func collectPendingUpstreamModelChangesFromModels(
 	localModels []string,
 	upstreamModels []string,
 	ignoredModels []string,
-	modelMapping map[string]string,
 ) (pendingAddModels []string, pendingRemoveModels []string) {
 	localSet := make(map[string]struct{})
 	localModels = normalizeModelNames(localModels)
@@ -190,23 +160,8 @@ func collectPendingUpstreamModelChangesFromModels(
 
 	normalizedIgnoredModels := normalizeModelNames(ignoredModels)
 
-	redirectSourceSet := make(map[string]struct{}, len(modelMapping))
-	redirectTargetSet := make(map[string]struct{}, len(modelMapping))
-	for source, target := range modelMapping {
-		redirectSourceSet[source] = struct{}{}
-		redirectTargetSet[target] = struct{}{}
-	}
-
-	coveredUpstreamSet := make(map[string]struct{}, len(localSet)+len(redirectTargetSet))
-	for modelName := range localSet {
-		coveredUpstreamSet[modelName] = struct{}{}
-	}
-	for modelName := range redirectTargetSet {
-		coveredUpstreamSet[modelName] = struct{}{}
-	}
-
 	pendingAdd := lo.Filter(upstreamModels, func(modelName string, _ int) bool {
-		if _, ok := coveredUpstreamSet[modelName]; ok {
+		if _, ok := localSet[modelName]; ok {
 			return false
 		}
 		if lo.ContainsBy(normalizedIgnoredModels, func(ignoredModel string) bool {
@@ -221,11 +176,6 @@ func collectPendingUpstreamModelChangesFromModels(
 		return true
 	})
 	pendingRemove := lo.Filter(localModels, func(modelName string, _ int) bool {
-		// Redirect source models are virtual aliases and should not be removed
-		// only because they are absent from upstream model list.
-		if _, ok := redirectSourceSet[modelName]; ok {
-			return false
-		}
 		_, ok := upstreamSet[modelName]
 		return !ok
 	})
@@ -241,7 +191,6 @@ func collectPendingUpstreamModelChanges(channel *model.Channel, settings dto.Cha
 		channel.GetModels(),
 		upstreamModels,
 		settings.UpstreamModelUpdateIgnoredModels,
-		normalizeChannelModelMapping(channel),
 	)
 	return pendingAddModels, pendingRemoveModels, nil
 }
@@ -359,19 +308,6 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 	baseURL := constant.ChannelBaseURLs[channel.Type]
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
-	}
-
-	if channel.Type == constant.ChannelTypeGemini {
-		key, _, apiErr := channel.GetNextEnabledKey()
-		if apiErr != nil {
-			return nil, fmt.Errorf("获取渠道密钥失败: %w", apiErr)
-		}
-		key = strings.TrimSpace(key)
-		models, err := gemini.FetchGeminiModels(baseURL, key, channel.GetSetting().Proxy)
-		if err != nil {
-			return nil, err
-		}
-		return normalizeModelNames(models), nil
 	}
 
 	var url string

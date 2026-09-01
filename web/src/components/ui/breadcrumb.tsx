@@ -16,15 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { mergeProps } from '@base-ui/react/merge-props'
-import { useRender } from '@base-ui/react/use-render'
 import {
   ArrowRight01Icon,
   MoreHorizontalCircle01Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { Slot } from '@radix-ui/react-slot'
+import type { ReactNode } from 'react'
 import * as React from 'react'
 
+import { hasAsChild, mergeRenderChild } from '@/components/ui/compose-as-child'
 import { cn } from '@/lib/utils'
 
 function Breadcrumb({ className, ...props }: React.ComponentProps<'nav'>) {
@@ -63,22 +64,25 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<'li'>) {
 
 function BreadcrumbLink({
   className,
+  asChild = false,
   render,
+  children,
   ...props
-}: useRender.ComponentProps<'a'>) {
-  return useRender({
-    defaultTagName: 'a',
-    props: mergeProps<'a'>(
-      {
-        className: cn('transition-colors hover:text-foreground', className),
-      },
-      props
-    ),
-    render,
-    state: {
-      slot: 'breadcrumb-link',
-    },
-  })
+}: React.ComponentProps<'a'> & {
+  asChild?: boolean
+  render?: ReactNode
+}) {
+  const Comp = hasAsChild(asChild, render) ? Slot : 'a'
+
+  return (
+    <Comp
+      data-slot='breadcrumb-link'
+      className={cn('transition-colors hover:text-foreground', className)}
+      {...props}
+    >
+      {mergeRenderChild(render, children)}
+    </Comp>
+  )
 }
 
 function BreadcrumbPage({ className, ...props }: React.ComponentProps<'span'>) {

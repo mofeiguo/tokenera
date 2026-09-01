@@ -63,18 +63,11 @@ func GetAndValidAudioRequest(c *gin.Context, relayMode int) (*dto.AudioRequest, 
 	if err != nil {
 		return nil, err
 	}
-	switch relayMode {
-	case relayconstant.RelayModeAudioSpeech:
-		if audioRequest.Model == "" {
-			return nil, errors.New("model is required")
-		}
-	default:
-		if audioRequest.Model == "" {
-			return nil, errors.New("model is required")
-		}
-		if audioRequest.ResponseFormat == "" {
-			audioRequest.ResponseFormat = "json"
-		}
+	if audioRequest.Model == "" {
+		return nil, errors.New("model is required")
+	}
+	if relayMode != relayconstant.RelayModeAudioSpeech && audioRequest.ResponseFormat == "" {
+		audioRequest.ResponseFormat = "json"
 	}
 	return audioRequest, nil
 }

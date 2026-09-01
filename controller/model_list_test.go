@@ -182,11 +182,10 @@ func seedModelBinding(t *testing.T, db *gorm.DB, channelID int, group string, mo
 		return
 	}
 	require.NoError(t, db.Create(&model.ModelBinding{
-		ModelId:       catalogModel.Id,
-		ChannelId:     channelID,
-		UpstreamModel: modelName,
-		Enabled:       true,
-		GroupsRaw:     group,
+		ModelId:   catalogModel.Id,
+		ChannelId: channelID,
+		Enabled:   true,
+		GroupsRaw: group,
 	}).Error)
 }
 
@@ -330,6 +329,48 @@ func TestGetUserModelsFiltersByRequestedGroup(t *testing.T) {
 	require.Equal(t, []string{"zz-default-only-model"}, decodeUserModelsResponse(t, vipRecorder))
 }
 
+func TestGetUserModelsIncludesCatalogEndpointTypes(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&model.User{
+		Id:       1005,
+		Username: "playground-endpoint-user",
+		Password: "password",
+		Group:    "default",
+		Status:   common.UserStatusEnabled,
+	}).Error)
+	seedModelBinding(t, db, 1, "default", "zz-endpoint-model", true)
+	seedModelBinding(t, db, 1, "default", "zz-open-model", true)
+	publishModelListCatalog(t, db, "zz-endpoint-model", "zz-open-model")
+	require.NoError(t, db.Model(&model.Model{}).Where("model_name = ?", "zz-endpoint-model").Update("endpoints", `{
+		"anthropic": "/v1/messages",
+		"openai": "/v1/chat/completions"
+	}`).Error)
+	model.InvalidatePricingCache()
+	model.GetPricing()
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/user/models", nil)
+	context.Set("id", 1005)
+
+	GetUserModels(context)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var payload struct {
+		Success                bool                               `json:"success"`
+		Data                   []string                           `json:"data"`
+		SupportedEndpointTypes map[string][]constant.EndpointType `json:"supported_endpoint_types"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	assert.ElementsMatch(t, []string{"zz-endpoint-model", "zz-open-model"}, payload.Data)
+	assert.Equal(t, []constant.EndpointType{
+		constant.EndpointTypeAnthropic,
+		constant.EndpointTypeOpenAI,
+	}, payload.SupportedEndpointTypes["zz-endpoint-model"])
+	assert.Empty(t, payload.SupportedEndpointTypes["zz-open-model"])
+}
+
 func TestGetUserModelsUsesAccessibleGroups(t *testing.T) {
 	originalInherit := setting.GroupInherit2JSONString()
 	require.NoError(t, setting.UpdateGroupInheritByJSONString(`{"default":["default"],"vip":["vip","default"]}`))
@@ -436,7 +477,7 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 	require.Empty(t, missingExprPricing.BillingExpr)
 }
 
-func TestListModelsUsesBifrostEndpointTypesFromPricingCache(t *testing.T) {
+func TestListModelsDoesNotInferEndpointTypesFromChannel(t *testing.T) {
 	withSelfUseModeEnabled(t)
 	db := setupModelListControllerTestDB(t)
 
@@ -481,10 +522,64 @@ func TestListModelsUsesBifrostEndpointTypesFromPricingCache(t *testing.T) {
 	payload := decodeListModelsPayload(t, recorder)
 	require.Len(t, payload.Data, 1)
 	require.Equal(t, "gpt-5", payload.Data[0].Id)
+	require.Empty(t, payload.Data[0].SupportedEndpointTypes)
+}
+
+func TestListModelsUsesCatalogEndpointTypes(t *testing.T) {
+	withSelfUseModeEnabled(t)
+	db := setupModelListControllerTestDB(t)
+
+	originalMemoryCacheEnabled := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = true
+	t.Cleanup(func() {
+		common.MemoryCacheEnabled = originalMemoryCacheEnabled
+		model.InvalidatePricingCache()
+	})
+
+	require.NoError(t, db.Create(&model.User{
+		Id:       1004,
+		Username: "catalog-endpoint-model-list-user",
+		Password: "password",
+		Group:    "default",
+		Status:   common.UserStatusEnabled,
+	}).Error)
+
+	channel := &model.Channel{
+		Id:     702,
+		Type:   constant.ChannelTypeBifrost,
+		Key:    "bifrost-key",
+		Status: common.ChannelStatusEnabled,
+		Name:   "bifrost-channel",
+		Group:  "default",
+		Models: "gpt-5",
+	}
+	require.NoError(t, db.Create(channel).Error)
+	seedModelBinding(t, db, 702, "default", "gpt-5", true)
+	publishModelListCatalog(t, db, "gpt-5")
+	require.NoError(t, db.Model(&model.Model{}).Where("model_name = ?", "gpt-5").Update("endpoints", `{
+		"openai": "/v1/chat/completions",
+		"openai-response": "/v1/responses",
+		"anthropic": "/v1/messages"
+	}`).Error)
+	model.InvalidatePricingCache()
+
+	model.InitChannelCache()
+	model.GetPricing()
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	ctx.Set("id", 1004)
+
+	ListModels(ctx, constant.ChannelTypeOpenAI)
+
+	payload := decodeListModelsPayload(t, recorder)
+	require.Len(t, payload.Data, 1)
+	require.Equal(t, "gpt-5", payload.Data[0].Id)
 	require.Equal(t, []constant.EndpointType{
+		constant.EndpointTypeAnthropic,
 		constant.EndpointTypeOpenAI,
 		constant.EndpointTypeOpenAIResponse,
-		constant.EndpointTypeAnthropic,
 	}, payload.Data[0].SupportedEndpointTypes)
 }
 

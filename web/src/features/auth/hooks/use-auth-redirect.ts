@@ -22,6 +22,7 @@ import {
   getSavedLanguage,
   sanitizeAuthRedirect,
 } from '@/features/auth/lib/auth-redirect'
+import { normalizeInterfaceLanguage } from '@/i18n/languages'
 import { applyAuthBundle } from '@/lib/api'
 import { useNavigate } from '@/lib/router'
 import type { AuthBundle } from '@/stores/auth-store'
@@ -43,8 +44,11 @@ export function useAuthRedirect() {
   ) => {
     applyAuthBundle(bundle)
     const savedLang = getSavedLanguage(bundle.user)
-    if (savedLang && savedLang !== i18n.language) {
-      await i18n.changeLanguage(savedLang)
+    const language = savedLang
+      ? normalizeInterfaceLanguage(savedLang)
+      : undefined
+    if (language && language !== i18n.language) {
+      await i18n.changeLanguage(language)
     }
 
     const targetPath =

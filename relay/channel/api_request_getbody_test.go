@@ -187,10 +187,6 @@ type stubTaskAdaptor struct {
 	capturedReq *http.Request
 }
 
-func (s *stubTaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	return s.baseURL + "/v1/video/generations", nil
-}
-
 func (s *stubTaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) error {
 	s.capturedReq = req
 	return nil
@@ -224,7 +220,10 @@ func TestDoTaskApiRequest_KeepsReplayableGetBody(t *testing.T) {
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/video/generations", bytes.NewReader(payload))
 
 	info := &relaycommon.RelayInfo{
-		ChannelMeta: &relaycommon.ChannelMeta{},
+		RequestURLPath: "/v1/video/generations",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelBaseUrl: server.URL,
+		},
 	}
 
 	adaptor := &stubTaskAdaptor{baseURL: server.URL}
@@ -249,6 +248,53 @@ func TestDoTaskApiRequest_KeepsReplayableGetBody(t *testing.T) {
 		require.NoError(t, rc.Close())
 		assert.Equal(t, payload, replay, "replay %d must equal the original payload", i+1)
 	}
+}
+
+func TestDoTaskApiRequestUsesClientPathAndContentType(t *testing.T) {
+	service.InitHttpClient()
+
+	type received struct {
+		path        string
+		contentType string
+		auth        string
+	}
+	receivedCh := make(chan received, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedCh <- received{
+			path:        r.URL.RequestURI(),
+			contentType: r.Header.Get("Content-Type"),
+			auth:        r.Header.Get("Authorization"),
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	payload := []byte("fake-multipart")
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/videos?seconds=4", bytes.NewReader(payload))
+	ctx.Request.Header.Set("Content-Type", "multipart/form-data; boundary=----test")
+
+	info := &relaycommon.RelayInfo{
+		RequestURLPath: "/v1/videos?seconds=4",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelBaseUrl: server.URL,
+			HeadersOverride: map[string]interface{}{
+				"Authorization": "Bearer override-key",
+			},
+		},
+	}
+
+	adaptor := &stubTaskAdaptor{baseURL: "http://vendor.example/should-not-be-used"}
+	resp, err := DoTaskApiRequest(adaptor, ctx, info, bytes.NewReader(payload))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	got := <-receivedCh
+	assert.Equal(t, "/v1/videos?seconds=4", got.path)
+	assert.Equal(t, "multipart/form-data; boundary=----test", got.contentType)
+	assert.Equal(t, "Bearer override-key", got.auth)
 }
 
 type h2ServerResult struct {

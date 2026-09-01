@@ -17,29 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { TFunction } from 'i18next'
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import {
   Copy,
   Check,
-  Route,
-  Settings2,
   AlertTriangle,
   Headphones,
   Monitor,
@@ -49,6 +29,7 @@ import {
   UserCog,
   Info,
   LogIn,
+  Route,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -66,8 +47,6 @@ import { cn } from '@/lib/utils'
 import type { UsageLog } from '../../data/schema'
 import {
   parseLogOther,
-  getParamOverrideActionLabel,
-  parseAuditLine,
   decodeBillingExprB64,
   getTieredBillingSummary,
   hasAnyCacheTokens,
@@ -1041,22 +1020,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
           />
         )}
 
-        {/* Model mapping */}
-        {other?.is_model_mapped && other?.upstream_model_name && (
-          <DetailSection label={t('Model Mapping')}>
-            <DetailRow
-              label={t('Request Model')}
-              value={props.log.model_name}
-              mono
-            />
-            <DetailRow
-              label={t('Actual Model')}
-              value={other.upstream_model_name}
-              mono
-            />
-          </DetailSection>
-        )}
-
         {/* Token breakdown (for consume/error types with token data) */}
         {isDisplayableType(props.log.type) && other && (
           <TokenBreakdown log={props.log} other={other} />
@@ -1192,36 +1155,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 mono
               />
             )}
-          </DetailSection>
-        )}
-
-        {/* Param override */}
-        {other?.po && Array.isArray(other.po) && other.po.length > 0 && (
-          <DetailSection
-            icon={<Settings2 className='size-3.5' aria-hidden='true' />}
-            iconTone='chart-3'
-            label={`${t('Param Override')} (${other.po.length})`}
-          >
-            {other.po.filter(Boolean).map((line) => {
-              const parsed = parseAuditLine(line)
-              if (!parsed) return null
-              return (
-                <div
-                  key={`${parsed.action}-${parsed.content}`}
-                  className='bg-background/60 flex min-w-0 flex-col gap-1.5 rounded border p-2 sm:flex-row sm:items-start sm:gap-2'
-                >
-                  <StatusBadge
-                    variant='neutral'
-                    label={getParamOverrideActionLabel(parsed.action, t)}
-                    className='shrink-0 font-medium'
-                    copyable={false}
-                  />
-                  <span className='min-w-0 font-mono text-[11px] leading-relaxed break-all sm:wrap-break-word'>
-                    {parsed.content}
-                  </span>
-                </div>
-              )
-            })}
           </DetailSection>
         )}
 

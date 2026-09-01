@@ -197,9 +197,6 @@ func InitDB() (err error) {
 		if !common.IsMasterNode {
 			return nil
 		}
-		if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
-			//_, _ = sqlDB.Exec("ALTER TABLE channels MODIFY model_mapping TEXT;") // TODO: delete this line when most users have upgraded
-		}
 		common.SysLog("database migration started")
 		err = migrateDB()
 		return err
@@ -260,6 +257,12 @@ func migrateDB() error {
 	needBindingPriorityBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "priority")
 	needBindingGroupsBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "groups")
 	needBindingWeightBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "weight")
+	if err := migrateDropOutboundRewriteColumns(); err != nil {
+		return err
+	}
+	if err := migrateDropMidjourneyTable(); err != nil {
+		return err
+	}
 
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -272,7 +275,6 @@ func migrateDB() error {
 		&Option{},
 		&Redemption{},
 		&Log{},
-		&Midjourney{},
 		&TopUp{},
 		&QuotaData{},
 		&Task{},
@@ -338,6 +340,12 @@ func migrateDBFast() error {
 	needBindingPriorityBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "priority")
 	needBindingGroupsBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "groups")
 	needBindingWeightBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "weight")
+	if err := migrateDropOutboundRewriteColumns(); err != nil {
+		return err
+	}
+	if err := migrateDropMidjourneyTable(); err != nil {
+		return err
+	}
 
 	var wg sync.WaitGroup
 
@@ -356,7 +364,6 @@ func migrateDBFast() error {
 		{&Redemption{}, "Redemption"},
 		{&ModelBinding{}, "ModelBinding"},
 		{&Log{}, "Log"},
-		{&Midjourney{}, "Midjourney"},
 		{&TopUp{}, "TopUp"},
 		{&QuotaData{}, "QuotaData"},
 		{&Task{}, "Task"},

@@ -207,10 +207,6 @@ export function Footer(props: FooterProps) {
             href: 'https://github.com/songquanpeng/one-api',
           },
           {
-            text: t('footer.columns.related.links.midjourney'),
-            href: 'https://github.com/novicezk/midjourney-proxy',
-          },
-          {
             text: t('footer.columns.related.links.newApiKeyTool'),
             href: 'https://github.com/Calcium-Ion/new-api-key-tool',
           },
@@ -247,9 +243,8 @@ export function Footer(props: FooterProps) {
   }
 
   return (
-    <footer
-      className={cn('border-border/40 relative z-10 border-t', props.className)}
-    >
+    <footer className={cn('relative z-10 bg-background', props.className)}>
+      <div className='via-border absolute top-0 right-0 left-0 h-px bg-linear-to-r from-transparent to-transparent' />
       <div className='mx-auto max-w-6xl px-6 py-12 md:py-16'>
         <div className='flex flex-col justify-between gap-10 md:flex-row md:gap-16'>
           {/* Brand column */}

@@ -59,14 +59,14 @@ export function AuthLayout(props: AuthLayoutProps) {
           {loading ? (
             <Skeleton className='h-5 w-24' />
           ) : (
-            <span className='truncate text-sm font-semibold tracking-tight'>
+            <span className='truncate text-xl font-bold tracking-tight'>
               {systemName}
             </span>
           )}
         </Link>
         <div className='flex items-center gap-1'>
           <LanguageSwitcher />
-          <ThemeSwitch />
+          <ThemeSwitch size='compact' />
         </div>
       </header>
 

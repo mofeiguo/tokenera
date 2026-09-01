@@ -14,7 +14,6 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/model_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -65,16 +64,6 @@ func buildMessageDeltaPatchUsage(claudeResponse *dto.ClaudeResponse, claudeInfo 
 	return relayconvert.BuildMessageDeltaPatchUsage(claudeResponse, claudeInfo)
 }
 
-func shouldSkipClaudeMessageDeltaUsagePatch(info *relaycommon.RelayInfo) bool {
-	if model_setting.GetGlobalSettings().PassThroughRequestEnabled {
-		return true
-	}
-	if info == nil {
-		return false
-	}
-	return info.ChannelSetting.PassThroughBodyEnabled
-}
-
 func patchClaudeMessageDeltaUsageData(data string, usage *dto.ClaudeUsage) string {
 	return relayconvert.PatchClaudeMessageDeltaUsageData(data, usage)
 }
@@ -107,12 +96,10 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 			if claudeResponse.Message != nil {
 				info.UpstreamModelName = claudeResponse.Message.Model
 			}
-		} else if claudeResponse.Type == "message_delta" {
+		} else 			if claudeResponse.Type == "message_delta" {
 			// 确保 message_delta 的 usage 包含完整的 input_tokens 和 cache 相关字段
 			// 解决 AWS Bedrock 等上游返回的 message_delta 缺少这些字段的问题
-			if !shouldSkipClaudeMessageDeltaUsagePatch(info) {
-				data = patchClaudeMessageDeltaUsageData(data, buildMessageDeltaPatchUsage(&claudeResponse, claudeInfo))
-			}
+			data = patchClaudeMessageDeltaUsageData(data, buildMessageDeltaPatchUsage(&claudeResponse, claudeInfo))
 		}
 		countClaudeStreamBillableTools(c, info, &claudeResponse)
 		helper.ClaudeChunkData(c, claudeResponse, data)

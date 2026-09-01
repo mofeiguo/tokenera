@@ -41,14 +41,10 @@ import {
 } from './section-registry'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
-const TASK_LOG_SECTIONS = ['drawing', 'task'] as const
 
 const SECTION_META: Record<UsageLogsSectionId, { titleKey: string }> = {
   common: {
     titleKey: 'Common Logs',
-  },
-  drawing: {
-    titleKey: 'Drawing Logs',
   },
   task: {
     titleKey: 'Task Logs',
@@ -76,10 +72,12 @@ function UsageLogsContent() {
     () => [
       {
         title: 'Task Logs',
-        items: TASK_LOG_SECTIONS.map((section) => ({
-          title: SECTION_META[section].titleKey,
-          url: `/usage-logs/${section}`,
-        })),
+        items: [
+          {
+            title: SECTION_META.task.titleKey,
+            url: '/usage-logs/task',
+          },
+        ],
       },
     ],
     []

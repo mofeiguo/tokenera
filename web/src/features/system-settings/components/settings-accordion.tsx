@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import {
+  Accordion,
   AccordionItem,
   AccordionTrigger,
   AccordionContent,
@@ -37,13 +38,18 @@ export function SettingsAccordion({
   className,
 }: SettingsAccordionProps) {
   return (
-    <AccordionItem value={value} className={cn('border-border/80', className)}>
-      <AccordionTrigger className='py-3 hover:no-underline'>
-        <div className='flex flex-col gap-0.5 text-left'>
-          <div className='text-sm font-semibold'>{title}</div>
-        </div>
-      </AccordionTrigger>
-      <AccordionContent className='pt-2 pb-3'>{children}</AccordionContent>
-    </AccordionItem>
+    <Accordion type='single' collapsible>
+      <AccordionItem
+        value={value}
+        className={cn('border-border/80', className)}
+      >
+        <AccordionTrigger className='py-3 hover:no-underline'>
+          <div className='flex flex-col gap-0.5 text-left'>
+            <div className='text-sm font-semibold'>{title}</div>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className='pt-2 pb-3'>{children}</AccordionContent>
+      </AccordionItem>
+    </Accordion>
   )
 }

@@ -29,7 +29,6 @@ import {
   Info,
   ListTree,
   Plus,
-  Shuffle,
   Trash2,
   type LucideIcon,
 } from 'lucide-react'
@@ -79,7 +78,6 @@ import {
   ADVANCED_CUSTOM_BALANCE_LABEL,
   ADVANCED_CUSTOM_BALANCE_PATH,
   ADVANCED_CUSTOM_AUTH_MODE_OPTIONS,
-  ADVANCED_CUSTOM_CONVERTER_OPTIONS,
   ADVANCED_CUSTOM_INCOMING_PATH_OPTIONS,
   ADVANCED_CUSTOM_MODEL_LIST_LABEL,
   ADVANCED_CUSTOM_MODEL_LIST_PATH,
@@ -90,8 +88,6 @@ import {
   createAdvancedCustomManagementRoute,
   createAdvancedCustomRoute,
   getAdvancedCustomAuthMode,
-  getAdvancedCustomConverterDefaults,
-  getAdvancedCustomConverterOptions,
   getAdvancedCustomIncomingPathLabel,
   getAdvancedCustomModelRuleKind,
   getAdvancedCustomManagementRoute,
@@ -99,7 +95,6 @@ import {
   getAdvancedCustomTemplateConfig,
   getAdvancedCustomUpstreamPathPlaceholder,
   getDefaultAdvancedCustomIncomingPath,
-  isAdvancedCustomIncomingPathAllowed,
   isAdvancedCustomManagementPath,
   normalizeAdvancedCustomConfig,
   parseAdvancedCustomRouteModels,
@@ -112,7 +107,6 @@ import {
 import type {
   AdvancedCustomAuthType,
   AdvancedCustomConfig,
-  AdvancedCustomConverter,
   AdvancedCustomRoute,
 } from '../../types'
 
@@ -168,50 +162,17 @@ function isCatchAllRoute(route: AdvancedCustomRoute): boolean {
   return !route.models || route.models.length === 0
 }
 
-function getRouteConverterLabel(route: AdvancedCustomRoute): string {
-  const converter = route.converter || 'none'
-  return (
-    ADVANCED_CUSTOM_CONVERTER_OPTIONS.find(
-      (option) => option.value === converter
-    )?.triggerLabel || converter
-  )
-}
-
-function getRouteConverters(
-  routes: AdvancedCustomRoute[]
-): Array<{ converter: AdvancedCustomConverter; label: string }> {
-  const converters = new Map<
-    AdvancedCustomConverter,
-    { converter: AdvancedCustomConverter; label: string }
-  >()
-  for (const route of routes) {
-    const converter = route.converter || 'none'
-    if (!converters.has(converter)) {
-      converters.set(converter, {
-        converter,
-        label: getRouteConverterLabel(route),
-      })
-    }
-  }
-  return [...converters.values()]
-}
-
 export function RouteModeBadges(props: { routes: AdvancedCustomRoute[] }) {
   const { t } = useTranslation()
-  return getRouteConverters(props.routes).map((item) => (
-    <Badge
-      key={item.converter}
-      variant={item.converter === 'none' ? 'secondary' : 'outline'}
-      className='max-w-full'
-    >
-      {item.converter === 'none' ? (
-        <ArrowRight aria-hidden='true' />
-      ) : (
-        <Shuffle aria-hidden='true' />
-      )}
-      <span className='truncate'>{t(item.label)}</span>
+  if (props.routes.length === 0) {
+    return null
+  }
+  return (
+    <Badge variant='secondary' className='max-w-full'>
+      <ArrowRight aria-hidden='true' />
+      <span className='truncate'>{t('Native forwarding')}</span>
     </Badge>
-  ))
+  )
 }
 
 function buildRouteGroups(
@@ -458,16 +419,10 @@ export function AdvancedCustomEditorDialog({
           models: [],
         }
       }
-      const converter = route.converter || 'none'
       return {
         ...route,
         incoming_path: resolvedIncomingPath,
-        converter: isAdvancedCustomIncomingPathAllowed(
-          resolvedIncomingPath,
-          converter
-        )
-          ? converter
-          : 'none',
+        converter: 'none' as const,
       }
     })
     replaceRoutes(nextRoutes)
@@ -1352,40 +1307,14 @@ function RouteEditor({
   onRemove: () => void
 }) {
   const { t } = useTranslation()
-  const converter = route.converter || 'none'
   const authMode = getAdvancedCustomAuthMode(route)
   const incomingPath =
-    route.incoming_path || getDefaultAdvancedCustomIncomingPath(converter)
+    route.incoming_path || getDefaultAdvancedCustomIncomingPath('none')
   const isModelListRoute = incomingPath === ADVANCED_CUSTOM_MODEL_LIST_PATH
-  const converterOptions = useMemo(
-    () => getAdvancedCustomConverterOptions(incomingPath),
-    [incomingPath]
-  )
-  const converterTriggerLabel =
-    ADVANCED_CUSTOM_CONVERTER_OPTIONS.find(
-      (option) => option.value === converter
-    )?.triggerLabel || converter
   const authLabel = getOptionLabel(ADVANCED_CUSTOM_AUTH_MODE_OPTIONS, authMode)
   const modelsInputValue = route.models?.join(', ') || ''
   const parsedRouteModels = parseAdvancedCustomRouteModels(modelsInputValue)
   const isFallback = !isModelListRoute && parsedRouteModels.length === 0
-
-  const setConverter = (nextConverter: AdvancedCustomConverter) => {
-    let nextIncomingPath = incomingPath
-    if (!isAdvancedCustomIncomingPathAllowed(nextIncomingPath, nextConverter)) {
-      nextIncomingPath = getDefaultAdvancedCustomIncomingPath(nextConverter)
-    }
-    const defaults = getAdvancedCustomConverterDefaults(
-      nextConverter,
-      nextIncomingPath
-    )
-    onChange({
-      converter: nextConverter,
-      incoming_path: nextIncomingPath,
-      upstream_path: defaults.upstream_path,
-      auth: defaults.auth,
-    })
-  }
 
   const setAuthMode = (mode: AdvancedCustomAuthMode) => {
     onChange({ auth: buildAdvancedCustomAuth(mode, route.auth) })
@@ -1546,7 +1475,7 @@ function RouteEditor({
               })
             }
             placeholder={getAdvancedCustomUpstreamPathPlaceholder(
-              converter,
+              'none',
               incomingPath
             )}
           />
@@ -1560,37 +1489,9 @@ function RouteEditor({
           className='lg:gap-1'
           labelClassName='lg:sr-only'
         >
-          <Select
-            value={converter}
-            disabled={isModelListRoute && converter === 'none'}
-            onValueChange={(value) =>
-              setConverter(value as AdvancedCustomConverter)
-            }
-          >
-            <SelectTrigger className='w-full max-w-full lg:h-8'>
-              <SelectValue className='min-w-0 truncate'>
-                {t(converterTriggerLabel)}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent
-              alignItemWithTrigger={false}
-              className={longSelectContentClass}
-            >
-              <SelectGroup>
-                {converterOptions.map((option) => (
-                  <SelectItem
-                    key={option.value}
-                    value={option.value}
-                    className={longSelectItemClass}
-                  >
-                    <span className='min-w-0 leading-snug break-words whitespace-normal'>
-                      {t(option.label)}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <div className='text-muted-foreground flex h-9 items-center text-sm'>
+            {t('Native forwarding')}
+          </div>
         </FieldBlock>
 
         <FieldBlock

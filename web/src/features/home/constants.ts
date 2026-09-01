@@ -60,24 +60,24 @@ export const GATEWAY_FEATURES = [
 // Stats section - Default statistics
 export const DEFAULT_STATS = [
   {
-    value: '50',
-    suffix: '+',
-    description: 'upstream services integrated',
-  },
-  {
     value: '100',
     suffix: '+',
-    description: 'model billing support',
+    description: 'mainstream models',
   },
   {
     value: '50',
     suffix: '+',
-    description: 'compatible API routes',
+    description: 'model providers',
+  },
+  {
+    value: '50',
+    suffix: '+',
+    description: 'unified protocol endpoints',
   },
   {
     value: '10',
     suffix: '+',
-    description: 'scheduling controls',
+    description: 'usage and cost metrics',
   },
 ] as const
 
@@ -102,7 +102,8 @@ export const DEFAULT_FEATURES = [
   },
   {
     title: 'Developer Friendly',
-    description: 'Compatible API routes for common AI application workflows',
+    description:
+      'Call different models with the same request format. Token usage is recorded automatically.',
     iconName: 'Code',
   },
   {
@@ -112,7 +113,7 @@ export const DEFAULT_FEATURES = [
   },
   {
     title: 'Transparent Billing',
-    description: 'Pay-as-you-go with real-time usage monitoring',
+    description: 'Pay as you go, and review token usage by model.',
     iconName: 'DollarSign',
   },
   {

@@ -55,15 +55,6 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       models: 'Wanxiang / video task models',
     },
   },
-  24: {
-    id: 24,
-    name: CHANNEL_TYPES[24],
-    icon: 'google',
-    hints: {
-      key: 'Google API Key',
-      models: 'Veo / Gemini video task models',
-    },
-  },
   35: {
     id: 35,
     name: CHANNEL_TYPES[35],
@@ -80,17 +71,6 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
     hints: {
       key: 'Suno API Key',
       models: 'Suno music models',
-    },
-  },
-  41: {
-    id: 41,
-    name: CHANNEL_TYPES[41],
-    icon: 'google',
-    requiresRegion: true,
-    hints: {
-      key: 'Service account JSON or API key',
-      models: 'Vertex video models',
-      other: 'Region config: {"default": "us-central1"}',
     },
   },
   45: {

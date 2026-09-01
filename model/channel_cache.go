@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,9 +17,9 @@ import (
 )
 
 var group2model2channels map[string]map[string][]int // enabled channel
-var model2channel2upstream map[string]map[int][]string
 var model2channel2priority map[string]map[int]int64
 var model2channel2weight map[string]map[int]int
+var model2channel2upstream map[string]map[int]string
 var channelsIDM map[int]*Channel // all channels include disabled
 // channel2advancedCustomConfig caches parsed Advanced Custom (type 58) configs so
 // path-aware selection avoids re-parsing JSON per request. Refreshed on full sync.
@@ -43,19 +44,19 @@ func InitChannelCache() {
 		}
 	}
 	newGroup2model2channels := make(map[string]map[string][]int)
-	newModel2channel2upstream := make(map[string]map[int][]string)
 	newModel2channel2priority := make(map[string]map[int]int64)
 	newModel2channel2weight := make(map[string]map[int]int)
+	newModel2channel2upstream := make(map[string]map[int]string)
 	var bindings []struct {
 		ModelName     string
 		ChannelId     int
-		UpstreamModel string
 		Priority      int64
 		Weight        int
 		Enabled       bool
+		UpstreamModel string
 	}
 	DB.Table("model_bindings").
-		Select("models.model_name, model_bindings.channel_id, model_bindings.upstream_model, model_bindings.priority, model_bindings.weight, model_bindings.enabled").
+		Select("models.model_name, model_bindings.channel_id, model_bindings.priority, model_bindings.weight, model_bindings.enabled, model_bindings.upstream_model").
 		Joins("JOIN models ON models.id = model_bindings.model_id").
 		Where("model_bindings.deleted = ?", false).
 		Scan(&bindings)
@@ -64,35 +65,29 @@ func InitChannelCache() {
 		if !exists || !binding.Enabled || channel.Status != common.ChannelStatusEnabled {
 			continue
 		}
-		if _, ok := newModel2channel2upstream[binding.ModelName]; !ok {
-			newModel2channel2upstream[binding.ModelName] = make(map[int][]string)
-		}
 		if _, ok := newModel2channel2priority[binding.ModelName]; !ok {
 			newModel2channel2priority[binding.ModelName] = make(map[int]int64)
 		}
 		if _, ok := newModel2channel2weight[binding.ModelName]; !ok {
 			newModel2channel2weight[binding.ModelName] = make(map[int]int)
 		}
+		if _, ok := newModel2channel2upstream[binding.ModelName]; !ok {
+			newModel2channel2upstream[binding.ModelName] = make(map[int]string)
+		}
 		weight := binding.Weight
 		if weight < 0 {
 			weight = 0
+		}
+		upstreamModel := strings.TrimSpace(binding.UpstreamModel)
+		if upstreamModel == "" {
+			upstreamModel = binding.ModelName
 		}
 		currentPriority, hasPriority := newModel2channel2priority[binding.ModelName][binding.ChannelId]
 		if !hasPriority || binding.Priority > currentPriority ||
 			(binding.Priority == currentPriority && weight > newModel2channel2weight[binding.ModelName][binding.ChannelId]) {
 			newModel2channel2priority[binding.ModelName][binding.ChannelId] = binding.Priority
 			newModel2channel2weight[binding.ModelName][binding.ChannelId] = weight
-		}
-		upstreams := newModel2channel2upstream[binding.ModelName][binding.ChannelId]
-		alreadyListed := false
-		for _, upstream := range upstreams {
-			if upstream == binding.UpstreamModel {
-				alreadyListed = true
-				break
-			}
-		}
-		if !alreadyListed {
-			newModel2channel2upstream[binding.ModelName][binding.ChannelId] = append(upstreams, binding.UpstreamModel)
+			newModel2channel2upstream[binding.ModelName][binding.ChannelId] = upstreamModel
 		}
 		for _, group := range servingGroupsFromRaw(channel.Group) {
 			if _, ok := newGroup2model2channels[group]; !ok {
@@ -125,9 +120,9 @@ func InitChannelCache() {
 
 	channelSyncLock.Lock()
 	group2model2channels = newGroup2model2channels
-	model2channel2upstream = newModel2channel2upstream
 	model2channel2priority = newModel2channel2priority
 	model2channel2weight = newModel2channel2weight
+	model2channel2upstream = newModel2channel2upstream
 	//channelsIDM = newChannelId2channel
 	for i, channel := range newChannelId2channel {
 		if channel.ChannelInfo.IsMultiKey {
@@ -145,10 +140,8 @@ func InitChannelCache() {
 	channelsIDM = newChannelId2channel
 	channel2advancedCustomConfig = newChannel2advancedCustomConfig
 	channelSyncLock.Unlock()
-	// Lock ordering: InvalidatePricingCache acquires updatePricingLock, and
-	// GetPricing (holding updatePricingLock) nests channelSyncLock.RLock via
-	// loadPricingAdvancedCustomConfigs. channelSyncLock MUST be released before
-	// invalidating the pricing cache, otherwise the reversed order deadlocks.
+	// Release channelSyncLock before InvalidatePricingCache so channel lookups
+	// are not blocked while waiting for updatePricingLock.
 	InvalidatePricingCache()
 	common.SysLog("channels synced from database")
 }
@@ -193,6 +186,23 @@ func lookupBindingWeight(model string, channelId int) int {
 		}
 	}
 	return 0
+}
+
+func lookupBindingUpstreamModel(model string, channelId int) string {
+	if byChannel, ok := model2channel2upstream[model]; ok {
+		if name := strings.TrimSpace(byChannel[channelId]); name != "" {
+			return name
+		}
+	}
+	normalized := ratio_setting.FormatMatchingModelName(model)
+	if normalized != "" && normalized != model {
+		if byChannel, ok := model2channel2upstream[normalized]; ok {
+			if name := strings.TrimSpace(byChannel[channelId]); name != "" {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 func GetRandomSatisfiedChannel(group string, model string, retry int, requestPath string) (*Channel, error) {
@@ -384,10 +394,8 @@ func CacheUpdateChannel(channel *Channel) {
 		}
 	}
 	logger.LogDebug(nil, "CacheUpdateChannel after: id=%d, name=%s, status=%d, polling_index=%d", channel.Id, channel.Name, channel.Status, channel.ChannelInfo.MultiKeyPollingIndex)
-	// Lock ordering: do NOT hold channelSyncLock while calling
-	// InvalidatePricingCache. GetPricing acquires updatePricingLock first and then
-	// channelSyncLock.RLock (via loadPricingAdvancedCustomConfigs); acquiring
-	// updatePricingLock while holding channelSyncLock would be an AB-BA deadlock.
+	// Release channelSyncLock before InvalidatePricingCache so channel lookups
+	// are not blocked while waiting for updatePricingLock.
 	channelSyncLock.Unlock()
 	InvalidatePricingCache()
 }

@@ -42,13 +42,8 @@ export function Pricing() {
   const selectedModelName =
     typeof search.model === 'string' ? search.model : null
 
-  const {
-    models,
-    endpointMap,
-    isLoading,
-    priceRate,
-    usdExchangeRate,
-  } = usePricingData()
+  const { models, endpointMap, isLoading, priceRate, usdExchangeRate } =
+    usePricingData()
 
   const {
     searchInput,

@@ -119,6 +119,7 @@ export interface ChatCompletionResponse {
 export interface PlaygroundConfig {
   model: string
   group: string
+  endpointType: PlaygroundEndpointType
   temperature: number
   top_p: number
   max_tokens: number
@@ -138,9 +139,16 @@ export interface ParameterEnabled {
 }
 
 // Model and group options
+export type PlaygroundEndpointType =
+  | 'openai'
+  | 'openai-response'
+  | 'anthropic'
+  | 'gemini'
+
 export interface ModelOption {
   label: string
   value: string
+  supportedEndpointTypes?: string[]
 }
 
 export interface GroupOption {

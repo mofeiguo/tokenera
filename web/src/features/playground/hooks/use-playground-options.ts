@@ -27,6 +27,7 @@ import {
   getGroupFallback,
   getModelFallback,
   getOptionLoadErrorMessage,
+  resolvePlaygroundEndpointType,
   shouldClearModelForGroup,
 } from '../lib'
 import type { GroupOption, ModelOption, PlaygroundConfig } from '../types'
@@ -34,6 +35,7 @@ import type { GroupOption, ModelOption, PlaygroundConfig } from '../types'
 type UsePlaygroundOptionsParams = {
   currentGroup: string
   currentModel: string
+  currentEndpointType: string
   setGroups: (groups: GroupOption[]) => void
   setModels: (models: ModelOption[]) => void
   updateConfig: <K extends keyof PlaygroundConfig>(
@@ -45,6 +47,7 @@ type UsePlaygroundOptionsParams = {
 export function usePlaygroundOptions({
   currentGroup,
   currentModel,
+  currentEndpointType,
   setGroups,
   setModels,
   updateConfig,
@@ -98,16 +101,23 @@ export function usePlaygroundOptions({
 
     setModels(modelsData)
     const fallback = getModelFallback(modelsData, currentModel)
+    const nextModel = fallback ?? currentModel
+    const selected = modelsData.find((model) => model.value === nextModel)
+    const nextEndpoint = resolvePlaygroundEndpointType(
+      selected?.supportedEndpointTypes,
+      fallback ? '' : currentEndpointType
+    )
 
     if (fallback) {
       updateConfig('model', fallback)
-      return
-    }
-
-    if (shouldClearModelForGroup(modelsData, currentModel)) {
+    } else if (shouldClearModelForGroup(modelsData, currentModel)) {
       updateConfig('model', '')
     }
-  }, [modelsData, currentModel, setModels, updateConfig])
+
+    if (nextEndpoint !== currentEndpointType) {
+      updateConfig('endpointType', nextEndpoint)
+    }
+  }, [modelsData, currentModel, currentEndpointType, setModels, updateConfig])
 
   useEffect(() => {
     if (!groupsData) return

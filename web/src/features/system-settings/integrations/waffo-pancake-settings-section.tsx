@@ -545,7 +545,7 @@ export function WaffoPancakeSettingsSection({
                     items={storeSelectItems}
                     value={chosenStoreID}
                     onValueChange={(value) => {
-                      // Base UI Select can deliver null on deselect.
+                      // Select can deliver null on deselect.
                       onSelectedBindingChange({
                         storeID: value ?? '',
                         productID: '',
