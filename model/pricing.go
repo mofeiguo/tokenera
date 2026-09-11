@@ -10,7 +10,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
-	"github.com/QuantumNous/new-api/types"
 )
 
 type Pricing struct {
@@ -34,7 +33,7 @@ type Pricing struct {
 	ImageRatio             *float64                `json:"image_ratio,omitempty"`
 	AudioRatio             *float64                `json:"audio_ratio,omitempty"`
 	AudioCompletionRatio   *float64                `json:"audio_completion_ratio,omitempty"`
-	EnableGroup            []string                `json:"enable_groups"`
+	EnableGroup            []string                `json:"-"`
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
 	BillingMode            string                  `json:"billing_mode,omitempty"`
 	BillingExpr            string                  `json:"billing_expr,omitempty"`
@@ -237,18 +236,12 @@ func updatePricing() {
 		})
 	}
 
-	modelGroupsMap := make(map[string]*types.Set[string])
-
+	publishedModels := make(map[string]struct{})
 	for _, binding := range enabledBindings {
 		if !publishedCatalogModels[binding.Model] {
 			continue
 		}
-		groups, ok := modelGroupsMap[binding.Model]
-		if !ok {
-			groups = types.NewSet[string]()
-			modelGroupsMap[binding.Model] = groups
-		}
-		groups.Add(binding.Group)
+		publishedModels[binding.Model] = struct{}{}
 	}
 
 	// Advertised public endpoints come only from models.endpoints.
@@ -306,15 +299,15 @@ func updatePricing() {
 	}
 
 	pricingMap = make([]Pricing, 0)
-	for model, groups := range modelGroupsMap {
+	for modelName := range publishedModels {
 		pricing := Pricing{
-			ModelName:              model,
-			EnableGroup:            groups.Items(),
-			SupportedEndpointTypes: modelSupportEndpointTypes[model],
+			ModelName:              modelName,
+			EnableGroup:            nil,
+			SupportedEndpointTypes: modelSupportEndpointTypes[modelName],
 		}
 
 		// 补充模型元数据（描述、标签、供应商、状态）
-		if meta, ok := metaMap[model]; ok {
+		if meta, ok := metaMap[modelName]; ok {
 			// 若模型被禁用(status!=1)，则直接跳过，不返回给前端
 			if meta.Status != 1 {
 				continue
@@ -329,7 +322,7 @@ func updatePricing() {
 			pricing.ContextLength = meta.ContextLength
 			pricing.MaxOutputTokens = meta.MaxOutputTokens
 		}
-		resolvedPricing := ResolveModelPricing(model)
+		resolvedPricing := ResolveModelPricing(modelName)
 		if resolvedPricing.Mode == ModelPricingModePerRequest {
 			pricing.ModelPrice = resolvedPricing.ModelPrice
 			pricing.QuotaType = 1

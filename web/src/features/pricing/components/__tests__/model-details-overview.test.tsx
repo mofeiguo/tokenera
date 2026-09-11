@@ -70,7 +70,6 @@ function createModel(overrides: Partial<PricingModel> = {}): PricingModel {
     model_ratio: 1,
     completion_ratio: 2,
     cache_ratio: 0.5,
-    enable_groups: [],
     tags: 'preview',
     supported_endpoint_types: ['openai-response'],
     context_length: 128_000,

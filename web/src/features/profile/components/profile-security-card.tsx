@@ -16,11 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Shield, Key, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { IconBadge } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TitledCard } from '@/components/ui/titled-card'
 import { useDialogs } from '@/hooks/use-dialog'
@@ -68,21 +66,18 @@ export function ProfileSecurityCard({
 
   const securityActions = [
     {
-      icon: Shield,
       title: t('Change Password'),
       description: t('Update your password to keep your account secure'),
       action: () => dialogs.open('password'),
       variant: 'default' as const,
     },
     {
-      icon: Key,
       title: t('Access Token'),
       description: t('Generate and manage your API access token'),
       action: () => dialogs.open('token'),
       variant: 'default' as const,
     },
     {
-      icon: Trash2,
       title: t('Delete Account'),
       description: t('Permanently delete your account and all data'),
       action: () => dialogs.open('delete'),
@@ -94,27 +89,24 @@ export function ProfileSecurityCard({
     <>
       <TitledCard
         title={t('Security')}
-        description={t('Manage your security settings and account access')}
-        icon={<Shield className='h-4 w-4' />}
-        iconTone='success'
         disableHoverEffect
+        titleClassName='text-[15px] font-semibold tracking-tight'
       >
-        <div className='grid grid-cols-1 gap-2.5 sm:gap-3 md:grid-cols-3'>
+        <div className='flex flex-col'>
           {securityActions.map((item) => (
             <button
               key={item.title}
               type='button'
               onClick={item.action}
-              className={`flex items-center gap-3 rounded-lg border p-3 text-left md:flex-col md:gap-2 md:p-4 md:text-center ${
-                item.variant === 'destructive' ? 'border-destructive/30' : ''
+              className={`hover:bg-muted/40 focus-visible:ring-ring -mx-2 flex items-center justify-between rounded-lg px-2 py-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none ${
+                item.variant === 'destructive'
+                  ? 'text-destructive'
+                  : ''
               }`}
             >
-              <IconBadge tone='neutral' size='sm'>
-                <item.icon />
-              </IconBadge>
-              <div className='min-w-0 md:contents'>
-                <p className='text-sm font-medium'>{item.title}</p>
-                <p className='text-muted-foreground line-clamp-1 text-xs md:line-clamp-none'>
+              <div className='min-w-0'>
+                <p className='text-[13px] font-medium'>{item.title}</p>
+                <p className='text-[#999999] mt-0.5 text-[12px]'>
                   {item.description}
                 </p>
               </div>

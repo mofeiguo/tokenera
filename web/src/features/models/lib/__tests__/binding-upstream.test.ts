@@ -40,9 +40,14 @@ describe('resolveBindingUpstreamModel', () => {
     ).toBe('my-alias')
   })
 
-  test('falls back to the first channel model', () => {
+  test('skips channel models already used by another binding', () => {
     expect(
-      resolveBindingUpstreamModel(['deepseek-v4-pro', 'deepseek-chat'], 'my-alias')
-    ).toBe('deepseek-v4-pro')
+      resolveBindingUpstreamModel(
+        ['deepseek-v4-pro', 'deepseek-chat'],
+        'my-alias',
+        undefined,
+        ['deepseek-v4-pro']
+      )
+    ).toBe('deepseek-chat')
   })
 })

@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { TFunction } from 'i18next'
 
-import type { NameRule, ModelStatus, SyncSource } from './types'
+import type { NameRule, ModelStatus } from './types'
 
 // ============================================================================
 // Pagination
@@ -88,18 +88,6 @@ export function getModelStatusConfig(
 }
 
 // ============================================================================
-// Sync Status Options
-// ============================================================================
-
-export function getSyncStatusOptions(t: TFunction) {
-  return [
-    { label: t('All Sync Status'), value: 'all' },
-    { label: t('Official Sync'), value: 'yes' },
-    { label: t('No Sync'), value: 'no' },
-  ] as const
-}
-
-// ============================================================================
 // Quota Type
 // ============================================================================
 
@@ -127,33 +115,4 @@ export const ENDPOINT_TEMPLATES: Record<
   'jina-rerank': { path: '/rerank', method: 'POST' },
   'image-generation': { path: '/v1/images/generations', method: 'POST' },
   embeddings: { path: '/v1/embeddings', method: 'POST' },
-}
-
-// ============================================================================
-// Sync Locale Options
-// ============================================================================
-
-export function getSyncLocaleOptions(t: TFunction) {
-  return [
-    { label: t('Chinese'), value: 'zh' },
-    { label: t('English'), value: 'en' },
-    { label: t('Japanese'), value: 'ja' },
-  ] as const
-}
-
-export function getSyncSourceOptions(t: TFunction) {
-  return [
-    {
-      label: t('Official Repository'),
-      value: 'official' as SyncSource,
-      description: t('Sync from the public upstream metadata repository.'),
-      disabled: false,
-    },
-    {
-      label: t('Configuration File'),
-      value: 'config' as SyncSource,
-      description: t('Upload or reference a local configuration file.'),
-      disabled: true,
-    },
-  ] as const
 }

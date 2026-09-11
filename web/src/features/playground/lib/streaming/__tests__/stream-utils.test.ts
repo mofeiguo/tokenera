@@ -20,6 +20,7 @@ import { describe, expect, test } from 'vitest'
 
 import {
   isStreamDoneMessage,
+  isStreamTerminalMessage,
   parseStreamMessageUpdates,
 } from '../stream-utils'
 
@@ -98,5 +99,47 @@ describe('isStreamDoneMessage', () => {
     expect(isStreamDoneMessage(JSON.stringify({ type: 'content_block_delta' }))).toBe(
       false
     )
+  })
+})
+
+describe('isStreamTerminalMessage', () => {
+  test('identifies Gemini candidates with finishReason as terminal', () => {
+    expect(
+      isStreamTerminalMessage(
+        JSON.stringify({
+          candidates: [
+            {
+              content: { parts: [{ text: 'done' }] },
+              finishReason: 'STOP',
+            },
+          ],
+        })
+      )
+    ).toBe(true)
+  })
+
+  test('identifies Gemini promptFeedback blockReason as terminal', () => {
+    expect(
+      isStreamTerminalMessage(
+        JSON.stringify({
+          promptFeedback: { blockReason: 'SAFETY' },
+        })
+      )
+    ).toBe(true)
+  })
+
+  test('returns false for non-terminal messages', () => {
+    expect(
+      isStreamTerminalMessage(
+        JSON.stringify({
+          candidates: [
+            {
+              content: { parts: [{ text: 'in progress' }] },
+            },
+          ],
+        })
+      )
+    ).toBe(false)
+    expect(isStreamTerminalMessage('invalid json')).toBe(false)
   })
 })

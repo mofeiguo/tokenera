@@ -25,11 +25,6 @@ type ChannelFormErrorMap = Partial<
 >
 
 const ADVANCED_SETTINGS_FIELDS = new Set<FieldPath<ChannelFormValues>>([
-  'priority',
-  'weight',
-  'test_model',
-  'auto_ban',
-  'tag',
   'remark',
   'header_override',
   'status_code_mapping',
@@ -40,9 +35,6 @@ const ADVANCED_SETTINGS_FIELDS = new Set<FieldPath<ChannelFormValues>>([
   'http_protocol',
   'http2_connection_shards',
   'disable_task_polling_sleep',
-  'upstream_model_update_check_enabled',
-  'upstream_model_update_auto_sync_enabled',
-  'upstream_model_update_ignored_models',
 ])
 
 export function isAdvancedSettingsField(

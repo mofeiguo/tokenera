@@ -42,18 +42,18 @@ func TestGetMonitorSetting_ChannelTestEnabledEnvCanEnableDisabledConfig(t *testi
 	assert.Equal(t, float64(12), setting.AutoTestChannelMinutes)
 }
 
-func TestGetMonitorSettingPreservesAutoBanOnlyMode(t *testing.T) {
+func TestGetMonitorSettingNormalizesLegacyAutoBanOnlyMode(t *testing.T) {
 	orig := monitorSetting
 	t.Cleanup(func() { monitorSetting = orig })
 
 	t.Setenv("CHANNEL_TEST_ENABLED", "")
 	t.Setenv("CHANNEL_TEST_FREQUENCY", "")
-	monitorSetting = MonitorSetting{ChannelTestMode: ChannelTestModeAutoBanOnly}
+	monitorSetting = MonitorSetting{ChannelTestMode: "auto_ban_only"}
 
 	setting := GetMonitorSetting()
 
 	require.NotNil(t, setting)
-	assert.Equal(t, ChannelTestModeAutoBanOnly, setting.ChannelTestMode)
+	assert.Equal(t, ChannelTestModeScheduledAll, setting.ChannelTestMode)
 }
 
 func TestGetMonitorSettingNormalizesChannelTestConcurrency(t *testing.T) {

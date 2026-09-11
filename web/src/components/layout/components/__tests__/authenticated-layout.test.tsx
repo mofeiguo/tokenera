@@ -90,6 +90,15 @@ describe('authenticated console shell', () => {
     ).toBeGreaterThan(0)
   })
 
+  test('places the brand in the full-width platform header', () => {
+    renderAuthenticatedShell(<div>dashboard-ok</div>)
+
+    const banner = screen.getByRole('banner')
+    expect(banner).toContainElement(
+      screen.getByRole('link', { name: 'Go to home' })
+    )
+  })
+
   test('renders the overview dashboard without crashing', () => {
     renderAuthenticatedShell(<Dashboard />)
 

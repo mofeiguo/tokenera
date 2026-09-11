@@ -45,7 +45,6 @@ function model(
     quota_type: 0,
     model_ratio: 1,
     completion_ratio: 1,
-    enable_groups: ['default'],
     supported_endpoint_types: endpoints,
   }
 }
@@ -90,7 +89,6 @@ describe('pricing model intent filters', () => {
       search: '',
       intent: MODEL_INTENTS.CHAT,
       vendor: 'OpenAI',
-      group: FILTER_ALL,
       quotaType: QUOTA_TYPES.ALL,
       endpointType: ENDPOINT_TYPES.ALL,
       tag: FILTER_ALL,

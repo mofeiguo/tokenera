@@ -51,6 +51,7 @@ import {
 } from '@/lib/oauth'
 
 import { getSelfOAuthBindings, unbindCustomOAuth } from '../../api'
+import { shouldOfferAccountBinding } from '../../lib/account-binding-visibility'
 import type { UserProfile, BindingItem } from '../../types'
 import { EmailBindDialog } from '../dialogs/email-bind-dialog'
 import { TelegramBindDialog } from '../dialogs/telegram-bind-dialog'
@@ -89,7 +90,7 @@ export function AccountBindingsTab({
 }: AccountBindingsTabProps) {
   const { t } = useTranslation()
   const dialogs = useDialogs<DialogKey>()
-  const { status, loading } = useStatus()
+  const { status } = useStatus()
   const [customBindings, setCustomBindings] = useState<CustomOAuthBinding[]>([])
   const [unbindTarget, setUnbindTarget] = useState<CustomOAuthBinding | null>(
     null
@@ -294,7 +295,7 @@ export function AccountBindingsTab({
 
   // Memoize bindings to prevent unnecessary recalculations
   const bindings: BindingItem[] = useMemo(() => {
-    if (!profile || !status) return []
+    if (!profile) return []
 
     return [
       {
@@ -303,7 +304,7 @@ export function AccountBindingsTab({
         icon: Mail,
         value: profile.email,
         isBound: Boolean(profile.email),
-        isEnabled: true,
+        isEnabled: shouldOfferAccountBinding('email', status),
         onBind: () => dialogs.open('email'),
       },
       {
@@ -314,7 +315,7 @@ export function AccountBindingsTab({
         isBound: Boolean(
           (profile as unknown as Record<string, unknown>).wechat_id
         ),
-        isEnabled: status?.wechat_login || false,
+        isEnabled: shouldOfferAccountBinding('wechat', status),
         onBind: () => dialogs.open('wechat'),
       },
       {
@@ -327,7 +328,7 @@ export function AccountBindingsTab({
         isBound: Boolean(
           (profile as unknown as Record<string, unknown>).github_id
         ),
-        isEnabled: status?.github_oauth || false,
+        isEnabled: shouldOfferAccountBinding('github', status),
         onBind: () => {
           const clientId = status?.github_client_id
           if (clientId) {
@@ -347,7 +348,7 @@ export function AccountBindingsTab({
         isBound: Boolean(
           (profile as unknown as Record<string, unknown>).discord_id
         ),
-        isEnabled: status?.discord_oauth || false,
+        isEnabled: shouldOfferAccountBinding('discord', status),
         onBind: () => {
           const clientId = status?.discord_client_id
           if (clientId) {
@@ -367,7 +368,7 @@ export function AccountBindingsTab({
         isBound: Boolean(
           (profile as unknown as Record<string, unknown>).oidc_id
         ),
-        isEnabled: status?.oidc_enabled || false,
+        isEnabled: shouldOfferAccountBinding('oidc', status),
         onBind: () => {
           const authorizationEndpoint = status?.oidc_authorization_endpoint
           const clientId = status?.oidc_client_id
@@ -388,7 +389,7 @@ export function AccountBindingsTab({
         isBound: Boolean(
           (profile as unknown as Record<string, unknown>).telegram_id
         ),
-        isEnabled: status?.telegram_oauth || false,
+        isEnabled: shouldOfferAccountBinding('telegram', status),
         onBind: () => dialogs.open('telegram'),
       },
       {
@@ -401,7 +402,7 @@ export function AccountBindingsTab({
         isBound: Boolean(
           (profile as unknown as Record<string, unknown>).linux_do_id
         ),
-        isEnabled: status?.linuxdo_oauth || false,
+        isEnabled: shouldOfferAccountBinding('linuxdo', status),
         onBind: () => {
           const clientId = status?.linuxdo_client_id
           if (clientId) {
@@ -415,7 +416,7 @@ export function AccountBindingsTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, status, t])
 
-  if (!profile || loading) return null
+  if (!profile) return null
 
   return (
     <>

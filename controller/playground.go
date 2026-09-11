@@ -2,11 +2,8 @@ package controller
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -54,11 +51,9 @@ func Playground(c *gin.Context) {
 	}
 	userCache.WriteContext(c)
 
-	usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 	tempToken := &model.Token{
 		UserId: userId,
-		Name:   fmt.Sprintf("playground-%s", usingGroup),
-		Group:  usingGroup,
+		Name:   "playground",
 	}
 	_ = middleware.SetupContextForToken(c, tempToken)
 

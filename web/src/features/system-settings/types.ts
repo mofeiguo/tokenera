@@ -170,19 +170,15 @@ export type ContentSettings = {
   'console_setting.api_info': string
   'console_setting.announcements': string
   'console_setting.faq': string
-  'console_setting.uptime_kuma_groups': string
   'console_setting.api_info_enabled': boolean
   'console_setting.announcements_enabled': boolean
   'console_setting.faq_enabled': boolean
-  'console_setting.uptime_kuma_enabled': boolean
   DataExportEnabled: boolean
   DataExportDefaultTime: string
   DataExportInterval: number
-  Chats: string
 }
 
 export type ModelSettings = {
-  'global.thinking_model_blacklist': string
   'general_setting.ping_interval_enabled': boolean
   'general_setting.ping_interval_seconds': number
   'gemini.safety_settings': string
@@ -210,15 +206,6 @@ export type ModelSettings = {
   'billing_setting.billing_mode': string
   'billing_setting.billing_expr': string
   'tool_price_setting.prices': string
-  TopupGroupRatio: string
-  GroupRatio: string
-  UserUsableGroups: string
-  GroupInherit: string
-  GroupGroupRatio: string
-  AutoGroups: string
-  MaxTokenAutoGroups: number
-  DefaultUseAutoGroup: boolean
-  'group_ratio_setting.group_special_usable_group': string
   RetryTimes: number
   ChannelDisableThreshold: string
   AutomaticDisableChannelEnabled: boolean
@@ -231,7 +218,6 @@ export type ModelSettings = {
   'monitor_setting.channel_test_concurrency': number
   'monitor_setting.channel_test_mode':
     | 'scheduled_all'
-    | 'auto_ban_only'
     | 'passive_recovery'
   'channel_affinity_setting.enabled': boolean
   'channel_affinity_setting.switch_on_success': boolean
@@ -244,8 +230,6 @@ export type ModelSettings = {
 export type BillingSettings = {
   QuotaForNewUser: number
   PreConsumedQuota: number
-  QuotaForInviter: number
-  QuotaForInvitee: number
   TopUpLink: string
   'general_setting.docs_link': string
   'quota_setting.enable_free_model_pre_consume': boolean
@@ -268,15 +252,6 @@ export type BillingSettings = {
   'billing_setting.billing_mode': string
   'billing_setting.billing_expr': string
   'tool_price_setting.prices': string
-  TopupGroupRatio: string
-  GroupRatio: string
-  UserUsableGroups: string
-  GroupInherit: string
-  GroupGroupRatio: string
-  AutoGroups: string
-  MaxTokenAutoGroups: number
-  DefaultUseAutoGroup: boolean
-  'group_ratio_setting.group_special_usable_group': string
   PayAddress: string
   EpayId: string
   EpayKey: string

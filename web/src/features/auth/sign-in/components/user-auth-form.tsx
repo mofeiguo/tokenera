@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
 import axios from 'axios'
-import { Loader2, LogIn, KeyRound } from 'lucide-react'
+import { Loader2, LogIn, KeyRound, Mail } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -40,6 +40,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { login, wechatLoginByCode } from '@/features/auth/api'
+import { AuthMethodButton } from '@/features/auth/components/auth-method-button'
 import { LegalConsent } from '@/features/auth/components/legal-consent'
 import { OAuthProviders } from '@/features/auth/components/oauth-providers'
 import { loginFormSchema } from '@/features/auth/constants'
@@ -62,10 +63,12 @@ import { useAuthStore } from '@/stores/auth-store'
 export function UserAuthForm({
   className,
   redirectTo,
+  variant = 'default',
   ...props
 }: AuthFormProps) {
-  const { t } = useTranslation()
+  const isZenmux = variant === 'zenmux'
   const [isLoading, setIsLoading] = useState(false)
+  const [showEmailForm, setShowEmailForm] = useState(!isZenmux)
   const [wechatCode, setWeChatCode] = useState('')
   const [agreedToLegal, setAgreedToLegal] = useState(false)
   const [passkeySupported, setPasskeySupported] = useState(false)
@@ -73,6 +76,7 @@ export function UserAuthForm({
   const [isWeChatDialogOpen, setIsWeChatDialogOpen] = useState(false)
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
   const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0)
+  const { t } = useTranslation()
   const legalConsentErrorMessage = t('Please agree to the legal terms first')
   const loginFailedMessage = t('Login failed')
 
@@ -91,6 +95,7 @@ export function UserAuthForm({
     setTurnstileToken,
     validateTurnstile,
   } = useTurnstile()
+  const turnstileReady = !isTurnstileEnabled || Boolean(turnstileToken)
   const { handleLoginSuccess, redirectTo2FA } = useAuthRedirect()
   const setPending2FAFlowToken = useAuthStore(
     (state) => state.auth.setPending2FAFlowToken
@@ -311,117 +316,182 @@ export function UserAuthForm({
     }
   }
 
+  useEffect(() => {
+    if (!isZenmux) {
+      setShowEmailForm(true)
+      return
+    }
+
+    setShowEmailForm(!hasAlternativeLogin && passwordLoginEnabled)
+  }, [hasAlternativeLogin, isZenmux, passwordLoginEnabled])
+
+  const passkeyMethod = passkeyLoginEnabled ? (
+    <div className={cn(isZenmux ? 'contents' : 'mt-2 space-y-1')}>
+      {isZenmux ? (
+        <AuthMethodButton
+          label={t('Sign in with Passkey')}
+          icon={
+            isPasskeyLoading ? (
+              <Loader2 className='size-4 animate-spin' />
+            ) : (
+              <KeyRound className='size-4' />
+            )
+          }
+          disabled={passkeyButtonDisabled}
+          onClick={handlePasskeyLogin}
+        />
+      ) : (
+        <Button
+          type='button'
+          variant='outline'
+          disabled={passkeyButtonDisabled}
+          onClick={handlePasskeyLogin}
+          className='h-11 w-full justify-center gap-2 rounded-lg'
+        >
+          {isPasskeyLoading ? (
+            <Loader2 className='h-4 w-4 animate-spin' />
+          ) : (
+            <KeyRound className='h-4 w-4' />
+          )}
+          {t('Sign in with Passkey')}
+        </Button>
+      )}
+      {!isZenmux && !passkeySupported && (
+        <p className='text-muted-foreground text-xs'>
+          {t('Passkey is not supported on this device.')}
+        </p>
+      )}
+    </div>
+  ) : null
+
   const alternativeLoginMethods = (
     <>
-      {passkeyLoginEnabled && (
-        <div className='mt-2 space-y-1'>
-          <Button
-            type='button'
-            variant='outline'
-            disabled={passkeyButtonDisabled}
-            onClick={handlePasskeyLogin}
-            className='h-11 w-full justify-center gap-2 rounded-lg'
-          >
-            {isPasskeyLoading ? (
-              <Loader2 className='h-4 w-4 animate-spin' />
-            ) : (
-              <KeyRound className='h-4 w-4' />
-            )}
-            {t('Sign in with Passkey')}
-          </Button>
-          {!passkeySupported && (
-            <p className='text-muted-foreground text-xs'>
-              {t('Passkey is not supported on this device.')}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* OAuth Providers */}
+      {!isZenmux ? passkeyMethod : null}
       <OAuthProviders
         status={status}
         redirectTo={redirectTo}
         disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
         onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
         isWeChatLoading={isWeChatSubmitting}
+        variant={isZenmux ? 'zenmux' : 'default'}
       />
+      {isZenmux ? passkeyMethod : null}
     </>
   )
+
+  const passwordFields =
+    passwordLoginEnabled && (!isZenmux || showEmailForm) ? (
+      <>
+        <FormField
+          control={form.control}
+          name='username'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Username or Email')}</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder={t('Enter your username or email')}
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name='password'
+          render={({ field }) => (
+            <FormItem className='relative'>
+              <FormLabel>{t('Password')}</FormLabel>
+              <FormControl>
+                <PasswordInput placeholder={t('Enter password')} {...field} />
+              </FormControl>
+              <FormMessage />
+              <Link
+                to='/forgot-password'
+                className='text-muted-foreground absolute end-0 -top-0.5 z-10 text-sm font-medium hover:opacity-75'
+              >
+                {t('Forgot password?')}
+              </Link>
+            </FormItem>
+          )}
+        />
+
+        {isTurnstileEnabled && isZenmux ? (
+          <p className='text-muted-foreground text-xs'>
+            {t('Complete the human verification below before signing in.')}
+          </p>
+        ) : null}
+
+        <Button
+          type='submit'
+          className={cn(
+            'w-full justify-center gap-2',
+            isZenmux ? 'bg-foreground text-background hover:bg-foreground/90 h-10' : 'mt-2'
+          )}
+          disabled={
+            isLoading ||
+            (requiresLegalConsent && !agreedToLegal) ||
+            !turnstileReady
+          }
+        >
+          {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
+          {t('Sign in')}
+        </Button>
+
+        {isTurnstileEnabled && (
+          <div className={cn(isZenmux ? '' : 'mt-2')}>
+            <Turnstile
+              key={turnstileWidgetKey}
+              siteKey={turnstileSiteKey}
+              onVerify={setTurnstileToken}
+              onExpire={() => setTurnstileToken('')}
+            />
+          </div>
+        )}
+      </>
+    ) : null
 
   return (
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className={cn('grid gap-4', className)}
+        className={cn(isZenmux ? 'space-y-6' : 'grid gap-4', className)}
         {...props}
       >
-        {hasAlternativeLogin && alternativeLoginMethods}
-
-        {passwordLoginEnabled && (
+        {isZenmux ? (
           <>
-            {/* Username Field */}
-            <FormField
-              control={form.control}
-              name='username'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Username or Email')}</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder={t('Enter your username or email')}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Password Field */}
-            <FormField
-              control={form.control}
-              name='password'
-              render={({ field }) => (
-                <FormItem className='relative'>
-                  <FormLabel>{t('Password')}</FormLabel>
-                  <FormControl>
-                    <PasswordInput
-                      placeholder={t('Enter password')}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                  <Link
-                    to='/forgot-password'
-                    className='text-muted-foreground absolute end-0 -top-0.5 z-10 text-sm font-medium hover:opacity-75'
-                  >
-                    {t('Forgot password?')}
-                  </Link>
-                </FormItem>
-              )}
-            />
-
-            {/* Submit Button */}
-            <Button
-              type='submit'
-              className='mt-2 w-full justify-center gap-2'
-              disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
-            >
-              {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
-              {t('Sign in')}
-            </Button>
-
-            {/* Turnstile */}
-            {isTurnstileEnabled && (
-              <div className='mt-2'>
-                <Turnstile
-                  key={turnstileWidgetKey}
-                  siteKey={turnstileSiteKey}
-                  onVerify={setTurnstileToken}
-                  onExpire={() => setTurnstileToken('')}
-                />
+            {(hasAlternativeLogin || passwordLoginEnabled) && (
+              <div className='space-y-3'>
+                {hasAlternativeLogin ? alternativeLoginMethods : null}
+                {passwordLoginEnabled && !showEmailForm ? (
+                  <AuthMethodButton
+                    label={t('Sign in with email')}
+                    icon={<Mail className='size-4' />}
+                    disabled={requiresLegalConsent && !agreedToLegal}
+                    onClick={() => setShowEmailForm(true)}
+                  />
+                ) : null}
+                {isTurnstileEnabled && passwordLoginEnabled && !showEmailForm ? (
+                  <p className='text-muted-foreground text-xs'>
+                    {t(
+                      'Password sign-in requires email login and human verification.'
+                    )}
+                  </p>
+                ) : null}
               </div>
             )}
+
+            {passwordFields}
+
+          </>
+        ) : (
+          <>
+            {hasAlternativeLogin && alternativeLoginMethods}
+            {passwordFields}
+            {!hasAlternativeLogin && alternativeLoginMethods}
           </>
         )}
 
@@ -429,10 +499,8 @@ export function UserAuthForm({
           status={status}
           checked={agreedToLegal}
           onCheckedChange={setAgreedToLegal}
-          className='mt-1'
+          className={isZenmux ? '' : 'mt-1'}
         />
-
-        {!hasAlternativeLogin && alternativeLoginMethods}
       </form>
 
       {hasWeChatLogin && (

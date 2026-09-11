@@ -23,7 +23,6 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import * as z from 'zod'
 
-import { JsonCodeEditor } from '@/components/json-code-editor'
 import {
   Form,
   FormControl,
@@ -34,7 +33,6 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 
 import {
@@ -46,27 +44,7 @@ import { SettingsPageFormActions } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 
-const thinkingBlacklistExample = JSON.stringify(
-  ['moonshotai/kimi-k2-thinking', 'kimi-k2-thinking'],
-  null,
-  2
-)
-
-const jsonString = z.string().refine((value) => {
-  const trimmed = value.trim()
-  if (!trimmed) return true
-  try {
-    JSON.parse(trimmed)
-    return true
-  } catch {
-    return false
-  }
-}, 'Invalid JSON format')
-
 const schema = z.object({
-  global: z.object({
-    thinking_model_blacklist: jsonString,
-  }),
   general_setting: z.object({
     ping_interval_enabled: z.boolean(),
     ping_interval_seconds: z.coerce.number().min(1),
@@ -77,7 +55,6 @@ type GlobalModelSettingsFormValues = z.output<typeof schema>
 type GlobalModelSettingsFormInput = z.input<typeof schema>
 
 type FlatGlobalModelSettings = {
-  'global.thinking_model_blacklist': string
   'general_setting.ping_interval_enabled': boolean
   'general_setting.ping_interval_seconds': number
 }
@@ -85,20 +62,11 @@ type FlatGlobalModelSettings = {
 const flattenGlobalValues = (
   values: GlobalModelSettingsFormValues
 ): FlatGlobalModelSettings => ({
-  'global.thinking_model_blacklist': normalizeJsonText(
-    values.global.thinking_model_blacklist,
-    '[]'
-  ),
   'general_setting.ping_interval_enabled':
     values.general_setting.ping_interval_enabled,
   'general_setting.ping_interval_seconds':
     values.general_setting.ping_interval_seconds,
 })
-
-function normalizeJsonText(value: string, fallback: string) {
-  const trimmed = (value ?? '').toString().trim()
-  return trimmed ? trimmed : fallback
-}
 
 type GlobalSettingsCardProps = {
   defaultValues: GlobalModelSettingsFormValues
@@ -152,37 +120,6 @@ export function GlobalSettingsCard({ defaultValues }: GlobalSettingsCardProps) {
             onSave={form.handleSubmit(onSubmit)}
             isSaving={updateOption.isPending}
           />
-          <FormField
-            control={form.control}
-            name='global.thinking_model_blacklist'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  {t('Models that skip thinking suffix processing')}
-                </FormLabel>
-                <FormControl>
-                  <JsonCodeEditor
-                    value={field.value}
-                    onChange={(value) => field.onChange(value)}
-                    name={field.name}
-                    onBlur={field.onBlur}
-                    textareaRef={field.ref}
-                    placeholder={`${t('Example:')}\n${thinkingBlacklistExample}`}
-                    heightClassName='h-32 min-h-32 max-h-32'
-                  />
-                </FormControl>
-                <FormDescription>
-                  {t(
-                    'Models listed here will not automatically append or remove -thinking / -nothinking suffixes.'
-                  )}
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <Separator />
-
           <FormField
             control={form.control}
             name='general_setting.ping_interval_enabled'

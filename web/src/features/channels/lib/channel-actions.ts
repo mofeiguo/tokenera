@@ -25,15 +25,10 @@ import {
   copyChannel,
   deleteChannel,
   testChannel,
-  updateChannel,
   updateChannelStatus,
   batchUpdateChannelStatus,
   batchDeleteChannels,
-  batchSetChannelTag,
-  enableTagChannels,
-  disableTagChannels,
   deleteDisabledChannels,
-  editTagChannels,
   testAllChannels,
   updateAllChannelsBalance,
 } from '../api'
@@ -193,72 +188,6 @@ export async function handleDeleteChannel(
     }
   } catch {
     toast.error(i18next.t(ERROR_MESSAGES.DELETE_FAILED))
-  }
-}
-
-/**
- * Update a specific channel field (e.g., priority, weight)
- */
-export async function handleUpdateChannelField(
-  id: number,
-  fieldName: string,
-  value: number,
-  queryClient?: QueryClient,
-  onSuccess?: () => void
-): Promise<void> {
-  try {
-    const response = await updateChannel(id, { [fieldName]: value })
-    if (response.success) {
-      // Show success toast with field name
-      const fieldLabel =
-        fieldName.charAt(0).toUpperCase() + fieldName.slice(1).toLowerCase()
-      toast.success(
-        i18next.t('{{field}} updated to {{value}}', {
-          field: fieldLabel,
-          value,
-        })
-      )
-      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-      onSuccess?.()
-    } else {
-      toast.error(response.message || i18next.t(ERROR_MESSAGES.UPDATE_FAILED))
-    }
-  } catch {
-    toast.error(i18next.t(ERROR_MESSAGES.UPDATE_FAILED))
-  }
-}
-
-/**
- * Update a specific field for all channels with a tag
- */
-export async function handleUpdateTagField(
-  tag: string,
-  fieldName: 'priority' | 'weight',
-  value: number,
-  queryClient?: QueryClient,
-  onSuccess?: () => void
-): Promise<void> {
-  try {
-    const params = { tag, [fieldName]: value }
-    const response = await editTagChannels(params)
-    if (response.success) {
-      // Show success toast with field name
-      const fieldLabel =
-        fieldName.charAt(0).toUpperCase() + fieldName.slice(1).toLowerCase()
-      toast.success(
-        i18next.t('{{field}} updated to {{value}} for tag: {{tag}}', {
-          field: fieldLabel,
-          value,
-          tag,
-        })
-      )
-      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-      onSuccess?.()
-    } else {
-      toast.error(response.message || i18next.t(ERROR_MESSAGES.UPDATE_FAILED))
-    }
-  } catch {
-    toast.error(i18next.t(ERROR_MESSAGES.UPDATE_FAILED))
   }
 }
 
@@ -472,90 +401,6 @@ export async function handleBatchDisable(
     }
   } catch {
     toast.error(i18next.t('Failed to disable channels'))
-  }
-}
-
-/**
- * Batch set tag
- */
-export async function handleBatchSetTag(
-  ids: number[],
-  tag: string | null,
-  queryClient?: QueryClient,
-  onSuccess?: () => void
-): Promise<void> {
-  if (ids.length === 0) {
-    toast.error(i18next.t('No channels selected'))
-    return
-  }
-
-  try {
-    const response = await batchSetChannelTag({ ids, tag })
-    if (response.success) {
-      toast.success(i18next.t(SUCCESS_MESSAGES.TAG_SET))
-      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-      onSuccess?.()
-    } else {
-      toast.error(response.message || i18next.t('Failed to set tag'))
-    }
-  } catch {
-    toast.error(i18next.t('Failed to set tag'))
-  }
-}
-
-// ============================================================================
-// Tag-Based Actions
-// ============================================================================
-
-/**
- * Enable all channels with a tag
- */
-export async function handleEnableTagChannels(
-  tag: string,
-  queryClient?: QueryClient,
-  onSuccess?: () => void
-): Promise<void> {
-  try {
-    const response = await enableTagChannels(tag)
-    if (response.success) {
-      toast.success(
-        i18next.t('Enabled all channels with tag: {{tag}}', { tag })
-      )
-      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-      onSuccess?.()
-    } else {
-      toast.error(
-        response.message || i18next.t('Failed to enable tag channels')
-      )
-    }
-  } catch {
-    toast.error(i18next.t('Failed to enable tag channels'))
-  }
-}
-
-/**
- * Disable all channels with a tag
- */
-export async function handleDisableTagChannels(
-  tag: string,
-  queryClient?: QueryClient,
-  onSuccess?: () => void
-): Promise<void> {
-  try {
-    const response = await disableTagChannels(tag)
-    if (response.success) {
-      toast.success(
-        i18next.t('Disabled all channels with tag: {{tag}}', { tag })
-      )
-      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-      onSuccess?.()
-    } else {
-      toast.error(
-        response.message || i18next.t('Failed to disable tag channels')
-      )
-    }
-  } catch {
-    toast.error(i18next.t('Failed to disable tag channels'))
   }
 }
 

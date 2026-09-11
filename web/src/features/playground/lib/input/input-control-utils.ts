@@ -16,11 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { GroupOption, ModelOption } from '../../types'
+import type { ModelOption, PlaygroundImageAttachment } from '../../types'
+import { extractPlaygroundImages } from '../message/image-utils'
 
 type InputControlStateOptions = {
   disabled?: boolean
-  groups: GroupOption[]
+  hasAttachments?: boolean
   hasStopHandler: boolean
   isGenerating?: boolean
   isModelLoading?: boolean
@@ -35,23 +36,42 @@ type InputControlState = {
 }
 
 type SubmittableInputMessage = {
+  files?: Array<{
+    filename?: string
+    mediaType?: string
+    url?: string
+  }>
   text?: string | null
 }
 
-export function getSubmittableInputText(
+export type PlaygroundSubmitPayload = {
+  images: PlaygroundImageAttachment[]
+  text: string
+}
+
+export function getPlaygroundSubmitPayload(
   message: SubmittableInputMessage,
   disabled?: boolean
-): string | null {
-  if (disabled || !message.text?.trim()) {
+): PlaygroundSubmitPayload | null {
+  if (disabled) {
     return null
   }
 
-  return message.text
+  const images = extractPlaygroundImages(message.files ?? [])
+  const hasFiles = (message.files?.length ?? 0) > 0
+  if (!message.text?.trim() && images.length === 0 && !hasFiles) {
+    return null
+  }
+
+  return {
+    text: message.text ?? '',
+    images,
+  }
 }
 
 export function getInputControlState({
   disabled,
-  groups,
+  hasAttachments = false,
   hasStopHandler,
   isGenerating,
   isModelLoading,
@@ -61,8 +81,11 @@ export function getInputControlState({
   const hasModels = models.length > 0
 
   return {
-    canSubmit: !disabled && hasModels && text.trim().length > 0,
-    isSelectorDisabled: disabled || isModelLoading || groups.length === 0,
+    canSubmit:
+      !disabled &&
+      hasModels &&
+      (text.trim().length > 0 || hasAttachments),
+    isSelectorDisabled: disabled || isModelLoading || !hasModels,
     shouldShowStop: Boolean(isGenerating && hasStopHandler),
   }
 }

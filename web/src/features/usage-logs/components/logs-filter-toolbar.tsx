@@ -138,7 +138,10 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
     return (
       <Drawer open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
         <div
-          className={cn('bg-card/50 rounded-lg border p-2.5', props.className)}
+          className={cn(
+            'bg-card rounded-xl border shadow-xs p-3',
+            props.className
+          )}
         >
           {!mobilePanelCollapsed && (
             <div className='grid gap-2'>{props.mobilePinnedFilters}</div>
@@ -150,8 +153,12 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
               !mobilePanelCollapsed && 'mt-2'
             )}
           >
-            {!mobilePanelCollapsed && props.stats}
-            <div className='flex items-center justify-end gap-1.5'>
+            <div
+              className={cn(
+                'border-border/60 flex items-center justify-end gap-1.5',
+                !mobilePanelCollapsed && 'border-t pt-2'
+              )}
+            >
               <Button
                 type='button'
                 variant='ghost'
@@ -170,7 +177,6 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
                   )}
                 />
               </Button>
-              {props.actionStart}
               <DrawerTrigger asChild>
                 <Button
                   type='button'
@@ -245,31 +251,30 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
   return (
     <div
       className={cn(
-        'bg-card/50 rounded-lg border p-2.5 sm:p-3',
+        'bg-card rounded-xl border shadow-xs p-3 sm:p-3.5',
         props.className
       )}
     >
       <div className='flex flex-wrap items-start gap-2'>
-        <div className='grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]'>
+        <div className='grid min-w-0 flex-1 grid-cols-1 gap-2.5 sm:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]'>
           {props.primaryFilters}
         </div>
         {advancedToggle && (
-          <div className='flex shrink-0 items-center justify-end'>
+          <div className='flex shrink-0 items-center justify-end self-end'>
             {advancedToggle}
           </div>
         )}
       </div>
 
       {advancedOpen && props.advancedFilters && (
-        <div className='mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]'>
+        <div className='border-border/60 mt-3 grid grid-cols-1 gap-2.5 border-t pt-3 sm:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]'>
           {props.advancedFilters}
         </div>
       )}
 
-      <div className='mt-2 flex flex-wrap items-center gap-2'>
+      <div className='border-border/60 mt-3 flex flex-wrap items-center gap-2 border-t pt-3'>
         {props.stats}
         <div className='ms-auto flex flex-wrap items-center justify-end gap-1.5 sm:gap-2'>
-          {props.actionStart}
           <Button
             type='button'
             variant='outline'

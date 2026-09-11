@@ -39,10 +39,8 @@ export const channelSchema = z.object({
   type: z.number(),
   key: z.string(),
   openai_organization: z.string().nullish(),
-  test_model: z.string().nullish(),
   status: z.number(), // 1: enabled, 0: manual disabled, 2: auto disabled
   name: z.string(),
-  weight: z.number().nullish(),
   created_time: z.number(),
   test_time: z.number(),
   response_time: z.number(), // in milliseconds
@@ -51,11 +49,8 @@ export const channelSchema = z.object({
   balance: z.number().default(0), // in USD
   balance_updated_time: z.number(),
   models: z.string().default(''),
-  group: z.string().default('default'),
   used_quota: z.number().default(0),
   status_code_mapping: z.string().nullish(),
-  priority: z.number().nullish(),
-  auto_ban: z.number().nullish(),
   other_info: z.string().default(''),
   tag: z.string().nullish(),
   setting: z.string().nullish(),
@@ -89,11 +84,6 @@ export interface ChannelOtherSettings {
   openrouter_enterprise?: boolean
   aws_key_type?: 'ak_sk' | 'api_key'
   disable_task_polling_sleep?: boolean
-  upstream_model_update_check_enabled?: boolean
-  upstream_model_update_auto_sync_enabled?: boolean
-  upstream_model_update_ignored_models?: string[]
-  upstream_model_update_last_check_time?: number
-  upstream_model_update_last_detected_models?: string[]
   advanced_custom?: AdvancedCustomConfig
 }
 
@@ -245,7 +235,6 @@ export interface MultiKeyStatusResponse {
 export type ChannelSortBy =
   | 'id'
   | 'name'
-  | 'priority'
   | 'balance'
   | 'response_time'
   | 'test_time'
@@ -257,21 +246,17 @@ export interface GetChannelsParams {
   page_size?: number
   status?: string // 'enabled', 'disabled', or empty for all
   type?: number
-  group?: string
   id_sort?: boolean
-  tag_mode?: boolean
   sort_by?: ChannelSortBy
   sort_order?: ChannelSortOrder
 }
 
 export interface SearchChannelsParams {
   keyword?: string
-  group?: string
   model?: string
   status?: string
   type?: number
   id_sort?: boolean
-  tag_mode?: boolean
   sort_by?: ChannelSortBy
   sort_order?: ChannelSortOrder
   p?: number
@@ -280,6 +265,7 @@ export interface SearchChannelsParams {
 
 export interface ChannelTestParams {
   test_model?: string
+  endpoint_type?: string
 }
 
 export interface CopyChannelParams {
@@ -307,20 +293,6 @@ export interface BatchDeleteParams {
   ids: number[]
 }
 
-export interface BatchSetTagParams {
-  ids: number[]
-  tag: string | null
-}
-
-export interface TagOperationParams {
-  tag: string
-  new_tag?: string
-  priority?: number
-  weight?: number
-  models?: string
-  groups?: string
-}
-
 // ============================================================================
 // Form Data Types
 // ============================================================================
@@ -332,14 +304,8 @@ export interface ChannelFormData {
   key: string
   openai_organization?: string
   models: string
-  group: string
-  priority?: number
-  weight?: number
-  test_model?: string
-  auto_ban?: number
   status: number
   status_code_mapping?: string
-  tag?: string
   remark?: string
   setting?: string
   header_override?: string

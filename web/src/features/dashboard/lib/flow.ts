@@ -104,7 +104,6 @@ const FLOW_NODE_KINDS: readonly FlowNodeKind[] = [
   'user',
   'node',
   'token',
-  'group',
   'model',
   'channel',
 ]
@@ -114,7 +113,6 @@ const OTHER_FLOW_NODE_IDS: Record<FlowNodeKind, string> = {
   user: 'user:__other__',
   node: 'node:__other__',
   token: 'token:__other__',
-  group: 'group:__other__',
   model: 'model:__other__',
   channel: 'channel:__other__',
 }
@@ -123,7 +121,6 @@ const DEFAULT_OTHER_FLOW_NODE_LABELS: Record<FlowNodeKind, string> = {
   user: 'Other users',
   node: 'Other nodes',
   token: 'Other tokens',
-  group: 'Other groups',
   model: 'Other models',
   channel: 'Other channels',
 }
@@ -134,7 +131,6 @@ const SENSITIVE_FLOW_KINDS = new Set<FlowNodeKind>([
   'user',
   'node',
   'token',
-  'group',
   'channel',
 ])
 
@@ -200,15 +196,6 @@ function deletedTokenLabel(tokenID: number, ctx: FlowPathContext): string {
   return ctx.deletedTokenLabel?.(tokenID) ?? `token-${tokenID}`
 }
 
-function groupNode(row: FlowQuotaDataItem): FlowPathNode {
-  const useGroup = row.use_group || 'unknown'
-  return {
-    id: `group:${useGroup}`,
-    label: useGroup,
-    kind: 'group',
-  }
-}
-
 function modelNode(row: FlowQuotaDataItem): FlowPathNode {
   const model = row.model_name || 'unknown'
   return {
@@ -238,15 +225,14 @@ const NODE_BUILDERS: Record<
   user: userNode,
   node: nodeNameNode,
   token: tokenNode,
-  group: groupNode,
   model: modelNode,
   channel: channelNode,
 }
 
 const ROLE_FLOW_STAGES: Record<FlowRole, FlowNodeKind[]> = {
-  root: ['user', 'node', 'token', 'group', 'model', 'channel'],
-  admin: ['user', 'group', 'model', 'channel'],
-  user: ['token', 'group', 'model'],
+  root: ['user', 'node', 'token', 'model', 'channel'],
+  admin: ['user', 'model', 'channel'],
+  user: ['token', 'model'],
 }
 
 // A Sankey needs at least two columns to draw any link, so hiding stages can

@@ -56,8 +56,8 @@
 
 | 接口 | 鉴权 | 用途 |
 | --- | --- | --- |
-| `POST /api/user/auth/refresh` | Refresh Cookie；Secure 模式附加 Origin 校验 | 轮换 Refresh Token 并签发新的 Access Token |
-| `POST /api/user/auth/logout` | Refresh Cookie；Secure 模式附加 Origin 校验，可同时携带 Bearer | 撤销当前登录会话并清除 Cookie |
+| `POST /api/user/auth/refresh` | Refresh Cookie | 轮换 Refresh Token 并签发新的 Access Token |
+| `POST /api/user/auth/logout` | Refresh Cookie，可同时携带 Bearer | 撤销当前登录会话并清除 Cookie |
 | `GET /api/user/sessions` | Bearer | 查看当前鉴权版本的有效登录会话，当前会话优先，最多 100 条 |
 | `DELETE /api/user/sessions/:sid` | Bearer | 撤销指定登录会话，包括当前会话 |
 | `POST /api/user/sessions/revoke-others` | Bearer | 保留当前会话并撤销其他会话 |
@@ -88,40 +88,6 @@
 
 仅 master 节点每小时分批删除过期 Session 和超过保留期的 revoked Session。`USER_SESSION_HOURLY_ALERT_THRESHOLD`（默认 `5000`）只在最近一小时全局签发量异常时记录告警，不会形成可被滥用的全站登录拒绝开关。
 
-## Refresh/Logout 的 Origin 校验
-
-refresh/logout 的 Origin 防护与 Refresh Cookie 的 Secure 模式绑定：
-
-- 未配置 `SESSION_COOKIE_SECURE` 或显式设为 `false` 时，Refresh Cookie 可用于本地 HTTP，refresh/logout 的 OriginGuard 关闭，并且不得配置 `SESSION_COOKIE_TRUSTED_URL`。这使 `http://localhost` 上不同端口的 Rsbuild/Vite 开发代理可以正常转发请求。该模式仅用于可信的本地开发环境，不应暴露到公网。
-- `SESSION_COOKIE_SECURE=true` 时，Refresh Cookie 仅通过 HTTPS 发送，同时启用严格 OriginGuard。`POST /api/user/auth/refresh` 和 `POST /api/user/auth/logout` 会校验浏览器的 `Origin`；缺少 `Origin` 时只接受合法的单一 `Referer` 作为回退。允许来源包括请求自身的精确 Origin，以及 `SESSION_COOKIE_TRUSTED_URL` 中配置的精确 Origin。
-
-Secure 模式的 Origin 校验不信任客户端直接发送的 `X-Forwarded-Proto`。TLS 在反向代理终止时，应将面板的公开 HTTPS Origin 明确写入 `SESSION_COOKIE_TRUSTED_URL`。
-
-`SESSION_COOKIE_TRUSTED_URL` 现在具有明确的新语义：它是 refresh/logout Cookie 端点的可信 Origin 列表，不是 CORS 白名单。配置规则如下：
-
-- 仅在 `SESSION_COOKIE_SECURE=true` 时配置；多个值用英文逗号分隔。
-- 每项必须是精确的 HTTPS Origin，例如 `https://panel.example.com` 或 `https://panel.example.com:8443`。
-- 不接受通配符、路径、查询参数、用户信息或域名后缀匹配。
-- 不会修改 relay、旧 billing dashboard、`/api/usage/token` 或 `/api/log/token` 的 CORS 行为。浏览器使用 `sk-` key 直连 relay 的场景保持不变。
-
-本地 HTTP 开发示例（OriginGuard 关闭）：
-
-```env
-SESSION_SECRET=<local-random-value>
-SESSION_COOKIE_SECURE=false
-# SESSION_COOKIE_TRUSTED_URL 不得设置
-```
-
-生产 HTTPS 示例（OriginGuard 开启）：
-
-```env
-SESSION_SECRET=<high-entropy-random-value>
-SESSION_COOKIE_SECURE=true
-SESSION_COOKIE_TRUSTED_URL=https://panel.example.com,https://admin.example.com
-```
-
-该开关只控制面板 Refresh Cookie 和 refresh/logout 的 OriginGuard，不会修改 relay、旧 billing dashboard、`/api/usage/token` 或 `/api/log/token` 的 CORS 行为。
-
 ## 可信代理与 IP 限流
 
 Gin 默认会信任所有代理提供的客户端 IP 请求头。本项目改为兼顾常见反代拓扑和公网直连安全的三态配置：
@@ -146,7 +112,7 @@ PAT 不是浏览器登录会话，不能调用登录会话管理接口，也不�
 
 ## 临时鉴权流程与二次验证
 
-OAuth state、2FA pending、Passkey ceremony、Telegram bind 等临时状态存放在 `auth_flows`。客户端只持有随机 `flow_token`，数据库仅保存 HMAC 摘要；流程具有用途、provider、intent、用户和登录会话绑定，并且只能原子消费一次。OAuth 注册的 affiliate code 也随登录 AuthFlow 保存。
+OAuth state、2FA pending、Passkey ceremony、Telegram bind 等临时状态存放在 `auth_flows`。客户端只持有随机 `flow_token`，数据库仅保存 HMAC 摘要；流程具有用途、provider、intent、用户和登录会话绑定，并且只能原子消费一次。
 
 标准 OAuth 绑定回调由 popup 通过同源 `postMessage` 交给 opener；只有 opener 使用自身内存中的 Bearer 调用后端绑定接口。Telegram 绑定先由已登录前端创建绑定 AuthFlow，再让 widget 回调携带路径中的 `flow_token`，回调时会重新确认原登录会话仍有效。Telegram 的已签名 widget assertion 也会登记为一次性凭据，重复回放会被拒绝。
 

@@ -65,7 +65,6 @@ import { FAQPanel } from './faq-panel'
 import { PerformanceHealthPanel } from './performance-health-panel'
 import { QuickActionsCard } from './quick-actions-card'
 import { SummaryCards } from './summary-cards'
-import { UptimePanel } from './uptime-panel'
 import { UsageOverviewCard } from './usage-overview-card'
 
 const SETUP_GUIDE_VISIBILITY_STORAGE_KEY =
@@ -416,7 +415,6 @@ export function OverviewDashboard() {
     apiInfo: showApiInfoPanel,
     announcements: showAnnouncementsPanel,
     faq: showFAQPanel,
-    uptimeKuma: showUptimePanel,
   } = useDashboardContentVisibility()
   const [manualSetupGuideExpanded, setManualSetupGuideExpanded] = useState<
     boolean | null
@@ -524,9 +522,8 @@ export function OverviewDashboard() {
   const setupStatusReady = apiKeysQuery.isFetched && Boolean(user)
   const setupGuideExpanded =
     manualSetupGuideExpanded ?? (setupStatusReady && !setupComplete)
-  const showLeftContentPanels =
+  const showContentPanels =
     isAdmin || showApiInfoPanel || showAnnouncementsPanel || showFAQPanel
-  const showContentPanels = showLeftContentPanels || showUptimePanel
 
   const handleSetupGuideToggle = () => {
     const nextExpanded = !setupGuideExpanded
@@ -645,49 +642,35 @@ export function OverviewDashboard() {
       )}
 
       {showContentPanels && (
-        <CardStaggerContainer
-          className={cn(
-            'grid grid-cols-1 gap-4',
-            showLeftContentPanels &&
-              showUptimePanel &&
-              'xl:grid-cols-[minmax(0,1fr)_22rem]'
-          )}
-        >
-          {showLeftContentPanels && (
-            <div
-              className={cn(
-                'grid min-w-0 grid-cols-1 gap-4',
-                (showApiInfoPanel || showAnnouncementsPanel || showFAQPanel) &&
-                  'lg:grid-cols-2'
-              )}
-            >
-              {isAdmin && (
-                <CardStaggerItem className='lg:col-span-2'>
-                  <PerformanceHealthPanel />
-                </CardStaggerItem>
-              )}
-              {showApiInfoPanel && (
-                <CardStaggerItem>
-                  <ApiInfoPanel />
-                </CardStaggerItem>
-              )}
-              {showAnnouncementsPanel && (
-                <CardStaggerItem>
-                  <AnnouncementsPanel />
-                </CardStaggerItem>
-              )}
-              {showFAQPanel && (
-                <CardStaggerItem>
-                  <FAQPanel />
-                </CardStaggerItem>
-              )}
-            </div>
-          )}
-          {showUptimePanel && (
-            <CardStaggerItem>
-              <UptimePanel />
-            </CardStaggerItem>
-          )}
+        <CardStaggerContainer className='grid grid-cols-1 gap-4'>
+          <div
+            className={cn(
+              'grid min-w-0 grid-cols-1 gap-4',
+              (showApiInfoPanel || showAnnouncementsPanel || showFAQPanel) &&
+                'lg:grid-cols-2'
+            )}
+          >
+            {isAdmin && (
+              <CardStaggerItem className='lg:col-span-2'>
+                <PerformanceHealthPanel />
+              </CardStaggerItem>
+            )}
+            {showApiInfoPanel && (
+              <CardStaggerItem>
+                <ApiInfoPanel />
+              </CardStaggerItem>
+            )}
+            {showAnnouncementsPanel && (
+              <CardStaggerItem>
+                <AnnouncementsPanel />
+              </CardStaggerItem>
+            )}
+            {showFAQPanel && (
+              <CardStaggerItem>
+                <FAQPanel />
+              </CardStaggerItem>
+            )}
+          </div>
         </CardStaggerContainer>
       )}
     </div>

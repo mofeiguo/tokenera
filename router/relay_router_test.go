@@ -21,7 +21,6 @@ func TestListModelsSupportsOpenAIAndGeminiAuthentication(t *testing.T) {
 	user := model.User{
 		Username: "models-user",
 		Status:   common.UserStatusEnabled,
-		Group:    "default",
 		Quota:    100,
 	}
 	require.NoError(t, model.DB.Create(&user).Error)

@@ -90,11 +90,6 @@ export function CacheStatsDialog(props: Props) {
         key: t('Rule'),
         value: (s.rule_name || props.target?.rule_name || '') as string,
       })
-    if (s.using_group || props.target?.using_group)
-      data.push({
-        key: t('Group'),
-        value: (s.using_group || props.target?.using_group || '') as string,
-      })
     if (props.target?.key_hint)
       data.push({ key: t('Key Summary'), value: props.target.key_hint })
     if (s.key_fp || props.target?.key_fp)

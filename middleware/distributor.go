@@ -59,19 +59,12 @@ func Distribute() func(c *gin.Context) {
 				return
 			}
 			if shouldSelectChannel && modelRequest.Model != "" {
-				accessible := service.GetRequestAccessibleGroups(c)
-				if !model.IsChannelEnabledForAnyGroupModel(accessible, modelRequest.Model, channel.Id) {
+				if !model.IsChannelEnabledForModel(modelRequest.Model, channel.Id) {
 					abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{
-						"Group": common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
+						"Group": "",
 						"Model": modelRequest.Model,
 					}), types.ErrorCodeModelNotFound)
 					return
-				}
-				for _, group := range accessible {
-					if model.IsChannelEnabledForGroupModel(group, modelRequest.Model, channel.Id) {
-						common.SetContextKey(c, constant.ContextKeyMatchedGroup, group)
-						break
-					}
 				}
 			}
 		} else {
@@ -102,24 +95,15 @@ func Distribute() func(c *gin.Context) {
 					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorModelNameRequired))
 					return
 				}
-				var selectGroup string
-				usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
-				accessible := service.GetRequestAccessibleGroups(c)
-
-				if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
+				if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, ""); found {
 					affinityUsable := false
 					preferred, err := model.CacheGetChannel(preferredChannelID)
 					if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled &&
-						channelSupportsRequestPath(preferred, c.Request.URL.Path, modelRequest.Model) {
-						for _, group := range accessible {
-							if model.IsChannelEnabledForGroupModel(group, modelRequest.Model, preferred.Id) {
-								selectGroup = group
-								channel = preferred
-								affinityUsable = true
-								service.MarkChannelAffinityUsed(c, group, preferred.Id)
-								break
-							}
-						}
+						channelSupportsRequestPath(preferred, c.Request.URL.Path, modelRequest.Model) &&
+						model.IsChannelEnabledForModel(modelRequest.Model, preferred.Id) {
+						channel = preferred
+						affinityUsable = true
+						service.MarkChannelAffinityUsed(c, "", preferred.Id)
 					}
 					if !affinityUsable && !service.ShouldKeepChannelAffinityOnChannelDisabled() {
 						service.ClearCurrentChannelAffinityCache(c)
@@ -127,15 +111,15 @@ func Distribute() func(c *gin.Context) {
 				}
 
 				if channel == nil {
-					channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
+					var selectedUpstream string
+					channel, selectedUpstream, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
 						Ctx:         c,
 						ModelName:   modelRequest.Model,
-						TokenGroup:  usingGroup,
 						RequestPath: c.Request.URL.Path,
 						Retry:       common.GetPointer(0),
 					})
 					if err != nil {
-						message := i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": usingGroup, "Model": modelRequest.Model, "Error": err.Error()})
+						message := i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": "", "Model": modelRequest.Model, "Error": err.Error()})
 						// 如果错误，但是渠道不为空，说明是数据库一致性问题
 						//if channel != nil {
 						//	common.SysError(fmt.Sprintf("渠道不存在：%d", channel.Id))
@@ -145,12 +129,10 @@ func Distribute() func(c *gin.Context) {
 						return
 					}
 					if channel == nil {
-						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": "", "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
 						return
 					}
-				}
-				if selectGroup != "" {
-					common.SetContextKey(c, constant.ContextKeyMatchedGroup, selectGroup)
+					SetSelectedBindingUpstream(c, selectedUpstream)
 				}
 			}
 		}
@@ -246,18 +228,7 @@ func getJSONStringValue(result gjson.Result, field string) (string, error) {
 func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 	var modelRequest ModelRequest
 	shouldSelectChannel := true
-	if strings.Contains(c.Request.URL.Path, "/suno/") {
-		relayMode := relayconstant.Path2RelaySuno(c.Request.Method, c.Request.URL.Path)
-		if relayMode == relayconstant.RelayModeSunoFetch ||
-			relayMode == relayconstant.RelayModeSunoFetchByID {
-			shouldSelectChannel = false
-		} else {
-			modelName := service.CoverTaskActionToModelName(constant.TaskPlatformSuno, c.Param("action"))
-			modelRequest.Model = modelName
-		}
-		c.Set("platform", string(constant.TaskPlatformSuno))
-		c.Set("relay_mode", relayMode)
-	} else if strings.Contains(c.Request.URL.Path, "/v1/videos/") && strings.HasSuffix(c.Request.URL.Path, "/remix") {
+	if strings.Contains(c.Request.URL.Path, "/v1/videos/") && strings.HasSuffix(c.Request.URL.Path, "/remix") {
 		relayMode := relayconstant.RelayModeVideoSubmit
 		c.Set("relay_mode", relayMode)
 		shouldSelectChannel = false
@@ -401,12 +372,19 @@ func getTaskOriginModelName(c *gin.Context) string {
 	return ""
 }
 
+func SetSelectedBindingUpstream(c *gin.Context, upstream string) {
+	common.SetContextKey(c, constant.ContextKeySelectedBindingUpstream, strings.TrimSpace(upstream))
+}
+
 func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, modelName string) *types.NewAPIError {
 	c.Set("original_model", modelName) // for retry
 	if channel == nil {
 		return types.NewError(errors.New("channel is nil"), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
-	upstreamModel := model.GetBindingUpstreamModel(modelName, channel.Id)
+	upstreamModel := strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeySelectedBindingUpstream))
+	if upstreamModel == "" {
+		upstreamModel = model.GetBindingUpstreamModel(modelName, channel.Id)
+	}
 	if upstreamModel == "" {
 		upstreamModel = modelName
 	}
@@ -422,7 +400,6 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	if nil != channel.OpenAIOrganization && *channel.OpenAIOrganization != "" {
 		common.SetContextKey(c, constant.ContextKeyChannelOrganization, *channel.OpenAIOrganization)
 	}
-	common.SetContextKey(c, constant.ContextKeyChannelAutoBan, channel.GetAutoBan())
 	common.SetContextKey(c, constant.ContextKeyChannelStatusCodeMapping, channel.GetStatusCodeMapping())
 
 	key, index, newAPIError := channel.GetNextEnabledKey()

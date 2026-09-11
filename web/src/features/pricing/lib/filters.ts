@@ -65,17 +65,6 @@ export function filterByVendor(
 }
 
 /**
- * Filter models by group
- */
-export function filterByGroup(
-  models: PricingModel[],
-  group: string
-): PricingModel[] {
-  if (group === FILTER_ALL) return models
-  return models.filter((m) => m.enable_groups?.includes(group))
-}
-
-/**
  * Filter models by quota type
  */
 export function filterByQuotaType(
@@ -194,7 +183,6 @@ export function filterAndSortModels(
     search: string
     intent: string
     vendor: string
-    group: string
     quotaType: string
     endpointType: string
     tag: string
@@ -205,7 +193,6 @@ export function filterAndSortModels(
   let result = filterBySearch(models, filters.search)
   result = filterByModelIntent(result, filters.intent)
   result = filterByVendor(result, filters.vendor)
-  result = filterByGroup(result, filters.group)
   result = filterByQuotaType(result, filters.quotaType)
   result = filterByEndpointType(result, filters.endpointType)
   result = filterByTag(result, filters.tag)

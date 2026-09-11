@@ -144,11 +144,6 @@ function DetailSection(props: {
   )
 }
 
-function formatRatio(ratio: number | undefined): string {
-  if (ratio == null) return '-'
-  return ratio.toFixed(4)
-}
-
 function getUsageBillingPathLabel(
   t: TFunction,
   adminInfo: LogOtherData['admin_info']
@@ -260,16 +255,6 @@ function BillingBreakdown(props: {
     }
   }
 
-  const userGR = other.user_group_ratio
-  const isUserGR = userGR != null && Number.isFinite(userGR) && userGR !== -1
-  const effectiveGR = isUserGR ? userGR : other.group_ratio
-  if (effectiveGR != null && Number.isFinite(effectiveGR)) {
-    rows.push({
-      label: isUserGR ? t('User Exclusive Ratio') : t('Group Ratio'),
-      value: `${formatRatio(effectiveGR)}x`,
-    })
-  }
-
   if (!isTieredExpr && isClaude && hasAnyCacheTokens(other)) {
     if (other.cache_ratio != null && other.cache_ratio !== 1) {
       rows.push({
@@ -353,7 +338,12 @@ function BillingBreakdown(props: {
     })
   }
 
-  if (other.audio_input_seperate_price && other.audio_input_price) {
+  if (other.audio_input_ratio != null && other.audio_input_token_count) {
+    rows.push({
+      label: t('Audio input ratio'),
+      value: String(other.audio_input_ratio),
+    })
+  } else if (other.audio_input_seperate_price && other.audio_input_price) {
     rows.push({
       label: t('Audio Input Price'),
       value: fmtPrice(other.audio_input_price),
@@ -625,7 +615,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
               mono
             />
           )}
-          {props.log.upstream_request_id && (
+          {props.isAdmin && props.log.upstream_request_id && (
             <DetailRow
               label={t('Upstream Request ID')}
               value={props.log.upstream_request_id}
@@ -657,14 +647,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
 
           {props.log.token_name && (
             <DetailRow label={t('Token')} value={props.log.token_name} mono />
-          )}
-
-          {(props.log.group || other?.group) && (
-            <DetailRow
-              label={t('Group')}
-              value={props.log.group || other?.group || ''}
-              mono
-            />
           )}
 
           {showAdminIp && (

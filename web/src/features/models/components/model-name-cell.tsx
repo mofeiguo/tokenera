@@ -17,33 +17,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { TruncatedText } from '@/components/truncated-text'
-import { getLobeIcon } from '@/lib/lobe-icon'
 
-import type { Model, Vendor } from '../types'
+import type { Model } from '../types'
 
 type ModelNameCellProps = {
   model: Model
-  vendor?: Vendor
 }
 
-function getModelIcon(iconKey: string) {
-  const baseIconKey = iconKey.split('.')[0]
-  return getLobeIcon(`${baseIconKey}.Avatar.type={'platform'}`, 16)
-}
-
-export function ModelNameCell({ model, vendor }: ModelNameCellProps) {
-  const iconKey = model.icon || vendor?.icon || model.model_name?.[0] || 'N'
-
+export function ModelNameCell({ model }: ModelNameCellProps) {
   return (
-    <div className='flex max-w-full min-w-0 items-center gap-2'>
-      <div className='bg-muted flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md'>
-        {getModelIcon(iconKey)}
-      </div>
-      <TruncatedText
-        text={model.model_name}
-        className='font-medium'
-        maxWidth='max-w-full'
-      />
-    </div>
+    <TruncatedText
+      text={model.model_name}
+      className='font-medium'
+      maxWidth='max-w-full'
+    />
   )
 }

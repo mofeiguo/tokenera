@@ -65,7 +65,7 @@ export function Hero(props: HeroProps) {
   ]
 
   return (
-    <section className='relative border-b pt-20 pb-24 md:pt-24 md:pb-32'>
+    <section className='relative border-b pt-8 pb-24 md:pt-12 md:pb-32'>
       <div className='mx-auto max-w-7xl px-6'>
         <div className='grid min-w-0 items-center gap-14 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:gap-16'>
           <div className='landing-animate-fade-up min-w-0'>
@@ -76,7 +76,7 @@ export function Hero(props: HeroProps) {
               </span>
             </div>
 
-            <h1 className='font-display text-foreground max-w-[11ch] text-5xl font-bold tracking-[-0.045em] [overflow-wrap:anywhere] sm:text-6xl lg:text-7xl'>
+            <h1 className='font-display text-foreground max-w-[11ch] text-5xl font-bold tracking-[-0.03em] [overflow-wrap:anywhere] sm:text-6xl lg:text-7xl'>
               {t('Change models, not your integration.')}
             </h1>
             <p className='text-muted-foreground mt-7 max-w-xl text-base leading-7 md:text-lg md:leading-8'>

@@ -23,7 +23,6 @@ import { BadgeCell, BadgeListCell } from '@/components/data-table'
 import { ProviderBadge } from '@/components/provider-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Tooltip,
   TooltipContent,
@@ -61,29 +60,6 @@ export function useModelsColumns(vendors: Vendor[] = []): ColumnDef<Model>[] {
   })
 
   return [
-    // Checkbox column
-    {
-      id: 'select',
-      header: ({ table }) => (
-        <Checkbox
-          checked={table.getIsAllPageRowsSelected()}
-          indeterminate={table.getIsSomePageRowsSelected()}
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label='Select all'
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label='Select row'
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-      size: 40,
-    },
-
     // ID column
     {
       accessorKey: 'id',
@@ -102,12 +78,7 @@ export function useModelsColumns(vendors: Vendor[] = []): ColumnDef<Model>[] {
       meta: { mobileTitle: true },
       cell: ({ row }) => {
         const model = row.original
-        return (
-          <ModelNameCell
-            model={model}
-            vendor={vendorMap[model.vendor_id || 0]}
-          />
-        )
+        return <ModelNameCell model={model} />
       },
       size: 200,
       minSize: 160,
@@ -341,35 +312,6 @@ export function useModelsColumns(vendors: Vendor[] = []): ColumnDef<Model>[] {
         )
       },
       size: 150,
-      enableSorting: false,
-    },
-
-    // Sync Official column
-    {
-      accessorKey: 'sync_official',
-      header: t('Official Sync'),
-      meta: { mobileHidden: true },
-      cell: ({ row }) => {
-        const syncOfficial = row.getValue('sync_official') as number
-        return (
-          <StatusBadge
-            variant={syncOfficial === 1 ? 'success' : 'warning'}
-            size='sm'
-            copyable={false}
-            className='-ml-1.5 max-w-none shrink-0'
-          >
-            {syncOfficial === 1 ? t('Official Sync') : t('No Sync')}
-          </StatusBadge>
-        )
-      },
-      filterFn: (row, id, value) => {
-        if (!value || value.length === 0 || value.includes('all')) return true
-        const syncOfficial = row.getValue(id) as number
-        if (value.includes('yes')) return syncOfficial === 1
-        if (value.includes('no')) return syncOfficial !== 1
-        return false
-      },
-      size: 100,
       enableSorting: false,
     },
 

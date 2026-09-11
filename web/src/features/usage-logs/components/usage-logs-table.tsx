@@ -98,7 +98,6 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       },
       { columnId: 'model_name', searchKey: 'model', type: 'string' as const },
       { columnId: 'token_name', searchKey: 'token', type: 'string' as const },
-      { columnId: 'group', searchKey: 'group', type: 'string' as const },
       ...(isAdmin
         ? [
             {
@@ -182,10 +181,18 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       columns={columns as ColumnDef<Record<string, unknown>>[]}
       isLoading={isLoadingData}
       isFetching={isFetching}
-      emptyTitle={t('No Logs Found')}
-      emptyDescription={t(
-        'No usage logs available. Logs will appear here once API calls are made.'
-      )}
+      emptyTitle={
+        isCommon ? t('No Logs Found') : t('No Task Logs Found')
+      }
+      emptyDescription={
+        isCommon
+          ? t(
+              'No usage logs available. Logs will appear here once API calls are made.'
+            )
+          : t(
+              'No task logs in this range. Async jobs will appear here once submitted.'
+            )
+      }
       skeletonKeyPrefix='usage-log-skeleton'
       applyHeaderSize
       tableClassName={cn(

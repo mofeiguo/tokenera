@@ -61,10 +61,7 @@ const CONTEXT_KEY_PRESETS = [
   'id',
   'token_id',
   'token_key',
-  'token_group',
-  'group',
   'username',
-  'user_group',
   'user_email',
   'specific_channel_id',
 ]
@@ -79,7 +76,6 @@ interface RuleFormValues {
   value_regex: string
   ttl_seconds: number
   skip_retry_on_failure: boolean
-  include_using_group: boolean
   include_model_name: boolean
   include_rule_name: boolean
 }
@@ -127,7 +123,6 @@ export function RuleEditorDialog(props: Props) {
       value_regex: '',
       ttl_seconds: 0,
       skip_retry_on_failure: false,
-      include_using_group: true,
       include_model_name: false,
       include_rule_name: true,
     },
@@ -142,7 +137,6 @@ export function RuleEditorDialog(props: Props) {
       value_regex: r.value_regex || '',
       ttl_seconds: r.ttl_seconds || 0,
       skip_retry_on_failure: !!r.skip_retry_on_failure,
-      include_using_group: r.include_using_group ?? true,
       include_model_name: !!r.include_model_name,
       include_rule_name: r.include_rule_name ?? true,
     })
@@ -170,7 +164,6 @@ export function RuleEditorDialog(props: Props) {
         value_regex: '',
         ttl_seconds: 0,
         skip_retry_on_failure: false,
-        include_using_group: true,
         include_model_name: false,
         include_rule_name: true,
       })
@@ -204,7 +197,7 @@ export function RuleEditorDialog(props: Props) {
       value_regex: values.value_regex.trim(),
       ttl_seconds: Number(values.ttl_seconds || 0),
       skip_retry_on_failure: values.skip_retry_on_failure,
-      include_using_group: values.include_using_group,
+      include_using_group: false,
       include_model_name: values.include_model_name,
       include_rule_name: values.include_rule_name,
     }
@@ -406,13 +399,7 @@ export function RuleEditorDialog(props: Props) {
               </div>
             </div>
 
-            <div className='grid gap-3 sm:grid-cols-3'>
-              <SettingsSwitchField
-                checked={form.watch('include_using_group')}
-                onCheckedChange={(v) => form.setValue('include_using_group', v)}
-                label={t('Include Group')}
-                className='py-0'
-              />
+            <div className='grid gap-3 sm:grid-cols-2'>
               <SettingsSwitchField
                 checked={form.watch('include_model_name')}
                 onCheckedChange={(v) => form.setValue('include_model_name', v)}

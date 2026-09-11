@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 
 import { API_ENDPOINTS } from './constants'
-import type { ModelOption, GroupOption } from './types'
+import type { ModelOption } from './types'
 
 export type PlaygroundRequestPayload = Record<string, unknown>
 
@@ -41,10 +41,8 @@ export async function sendChatCompletion(
 /**
  * Get user available models
  */
-export async function getUserModels(group: string): Promise<ModelOption[]> {
-  const res = await api.get(API_ENDPOINTS.USER_MODELS, {
-    params: { group },
-  })
+export async function getUserModels(): Promise<ModelOption[]> {
+  const res = await api.get(API_ENDPOINTS.USER_MODELS)
   const { data } = res
 
   if (!data.success || !Array.isArray(data.data)) {
@@ -54,32 +52,25 @@ export async function getUserModels(group: string): Promise<ModelOption[]> {
   const endpointMap =
     (data.supported_endpoint_types as Record<string, string[]> | undefined) ??
     {}
+  const modalityMap =
+    (data.input_modalities as Record<string, string[]> | undefined) ?? {}
+  const capabilityMap =
+    (data.capabilities as Record<string, string[]> | undefined) ?? {}
+  const iconMap = (data.model_icons as Record<string, string> | undefined) ?? {}
+  const vendorMap =
+    (data.vendor_names as Record<string, string> | undefined) ?? {}
+
+  const outputModalityMap =
+    (data.output_modalities as Record<string, string[]> | undefined) ?? {}
 
   return data.data.map((model: string) => ({
     label: model,
     value: model,
     supportedEndpointTypes: endpointMap[model] ?? [],
-  }))
-}
-
-/**
- * Get user groups
- */
-export async function getUserGroups(): Promise<GroupOption[]> {
-  const res = await api.get(API_ENDPOINTS.USER_GROUPS)
-  const { data } = res
-
-  if (!data.success || !data.data) {
-    return []
-  }
-
-  const groupData = data.data as Record<string, { desc: string; ratio: number }>
-
-  // label is for button display (name only); desc is for dropdown content
-  return Object.entries(groupData).map(([group, info]) => ({
-    label: group,
-    value: group,
-    ratio: info.ratio,
-    desc: info.desc,
+    inputModalities: modalityMap[model] ?? [],
+    outputModalities: outputModalityMap[model] ?? [],
+    capabilities: capabilityMap[model] ?? [],
+    icon: iconMap[model],
+    vendorName: vendorMap[model],
   }))
 }

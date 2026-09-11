@@ -17,7 +17,6 @@ type MonitorSetting struct {
 
 const (
 	ChannelTestModeScheduledAll    = "scheduled_all"
-	ChannelTestModeAutoBanOnly     = "auto_ban_only"
 	ChannelTestModePassiveRecovery = "passive_recovery"
 
 	ChannelTestConcurrencyOptionKey = "monitor_setting.channel_test_concurrency"
@@ -54,7 +53,7 @@ func GetMonitorSetting() *MonitorSetting {
 		}
 	}
 	switch monitorSetting.ChannelTestMode {
-	case ChannelTestModeAutoBanOnly, ChannelTestModePassiveRecovery:
+	case ChannelTestModePassiveRecovery:
 	default:
 		monitorSetting.ChannelTestMode = ChannelTestModeScheduledAll
 	}

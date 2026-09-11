@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { STUDIO_NAV_ITEMS } from '@/components/layout/lib/studio-nav'
 import { useStatus } from '@/hooks/use-status'
 import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 import { useAuthStore } from '@/stores/auth-store'
@@ -62,14 +63,16 @@ export function useTopNavLinks(): TopNavLink[] {
 
   const links: TopNavLink[] = []
 
-  // Home
-  if (modules?.home !== false) {
-    links.push({ title: t('Home'), href: '/' })
-  }
-
-  // Console -> /dashboard (new console path)
+  // Studio workspace (ZenMux-style: Chat / Image / Video)
   if (modules?.console !== false) {
-    links.push({ title: t('Console'), href: '/dashboard' })
+    const requiresAuth = !isAuthed
+    for (const item of STUDIO_NAV_ITEMS) {
+      links.push({
+        title: t(item.titleKey),
+        href: item.href,
+        requiresAuth,
+      })
+    }
   }
 
   // Pricing

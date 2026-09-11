@@ -63,7 +63,6 @@ func performHeaderNavRequest(t *testing.T, handler gin.HandlerFunc, authenticate
 			Password:    "unused-password-hash",
 			Role:        common.RoleCommonUser,
 			Status:      common.UserStatusEnabled,
-			Group:       "default",
 			AuthVersion: 1,
 		}
 		user.SetAccessToken(accessToken)

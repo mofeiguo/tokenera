@@ -52,7 +52,8 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: '0.0.0.0',
-      strictPort: false,
+      port: 9527,
+      strictPort: true,
       proxy,
     },
     preview: {

@@ -136,7 +136,6 @@ func makeTask(userId, channelId, quota, tokenId int, billingSource string, subsc
 		ChannelId: channelId,
 		Quota:     quota,
 		Status:    model.TaskStatus(model.TaskStatusInProgress),
-		Group:     "default",
 		Data:      json.RawMessage(`{}`),
 		CreatedAt: time.Now().Unix(),
 		UpdatedAt: time.Now().Unix(),

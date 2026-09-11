@@ -27,17 +27,15 @@ export function getMessageContentStyles() {
     'group-[.is-assistant]:max-w-[78ch]',
     'group-[.is-user]:w-fit',
 
-    // User bubble: compact surface that stays calm in both light and dark themes.
-    'group-[.is-user]:rounded-2xl',
-    'group-[.is-user]:rounded-br-md',
-    'group-[.is-user]:border',
-    'group-[.is-user]:border-border/70',
-    'group-[.is-user]:bg-muted/70',
+    // User bubble: light gray chip on the white field (ZenMux #f2f2f2).
+    'group-[.is-user]:rounded-xl',
+    'group-[.is-user]:border-0',
+    'group-[.is-user]:bg-playground-user-bubble',
+    'group-[.is-user]:shadow-none',
     'group-[.is-user]:px-4',
     'group-[.is-user]:py-2.5',
+    'group-[.is-user]:text-left',
     'group-[.is-user]:text-foreground',
-    'group-[.is-user]:shadow-sm',
-    'group-[.is-user]:shadow-black/5',
 
     // Assistant response: flat reading surface using the active UI font axis.
     'group-[.is-assistant]:bg-transparent',
@@ -45,7 +43,7 @@ export function getMessageContentStyles() {
     'group-[.is-assistant]:rounded-none',
     'group-[.is-assistant]:overflow-visible',
     'group-[.is-assistant]:[font-family:var(--font-body)]',
-    'group-[.is-assistant]:text-foreground/90',
+    'group-[.is-assistant]:text-foreground',
 
     // Preferred readable widths and wrapping
     'text-[0.95rem]',

@@ -94,14 +94,47 @@ function trimMessages(messages: Message[]): Message[] {
   return messages.slice(-MAX_STORED_MESSAGES)
 }
 
+function stripMessageImages(message: Message): Message {
+  if (!message.images?.length) {
+    return message
+  }
+
+  const { images: _images, ...rest } = message
+  return rest
+}
+
+function fitMessagesIntoStorageBudget(messages: Message[]): Message[] {
+  const trimmed = trimMessages(messages)
+  const envelopeSize = (data: Message[]) =>
+    JSON.stringify({ version: STORAGE_VERSION, data }).length
+
+  if (envelopeSize(trimmed) <= MAX_STORED_MESSAGES_BYTES) {
+    return trimmed
+  }
+
+  const fitted = trimmed.map((message) => ({ ...message }))
+  for (let index = 0; index < fitted.length; index++) {
+    if (envelopeSize(fitted) <= MAX_STORED_MESSAGES_BYTES) {
+      break
+    }
+    fitted[index] = stripMessageImages(fitted[index])
+  }
+
+  return fitted
+}
+
 function getMessageSize(message: Message): number {
   const versionsSize = message.versions.reduce(
     (total, version) => total + version.content.length,
     0
   )
   const reasoningSize = message.reasoning?.content.length ?? 0
+  const imagesSize = (message.images ?? []).reduce(
+    (total, image) => total + image.url.length + (image.filename?.length ?? 0),
+    0
+  )
 
-  return versionsSize + reasoningSize
+  return versionsSize + reasoningSize + imagesSize
 }
 
 function truncateText(text: string, maxLength: number): string {
@@ -374,7 +407,7 @@ export function loadMessages(): Message[] | null {
  */
 export function saveMessages(messages: Message[]): void {
   try {
-    const trimmed = trimMessages(messages)
+    const trimmed = fitMessagesIntoStorageBudget(messages)
     const parsed = messagesSchema.parse(trimmed) as Message[]
     writeStoredValue(STORAGE_KEYS.MESSAGES, parsed)
   } catch (error) {

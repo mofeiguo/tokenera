@@ -227,7 +227,6 @@ func TestSecurityFactorMutationsAdvanceUserAuthVersion(t *testing.T) {
 		Password:    "password",
 		Role:        common.RoleCommonUser,
 		Status:      common.UserStatusEnabled,
-		Group:       "default",
 		AuthVersion: 1,
 	}
 	require.NoError(t, DB.Create(&user).Error)

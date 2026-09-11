@@ -32,7 +32,6 @@ const rows: FlowQuotaDataItem[] = [
     node_name: 'node-a',
     token_id: 11,
     token_name: 'primary',
-    use_group: 'vip',
     channel_id: 101,
     channel_name: 'east',
     model_name: 'gpt-4.1',
@@ -46,7 +45,6 @@ const rows: FlowQuotaDataItem[] = [
     node_name: 'node-a',
     token_id: 11,
     token_name: 'primary',
-    use_group: 'vip',
     channel_id: 102,
     channel_name: 'west',
     model_name: 'gpt-4.1',
@@ -60,7 +58,6 @@ const rows: FlowQuotaDataItem[] = [
     node_name: 'node-b',
     token_id: 22,
     token_name: 'backup',
-    use_group: 'default',
     channel_id: 101,
     channel_name: 'east',
     model_name: 'claude-4-sonnet',
@@ -74,7 +71,6 @@ const topLimitRows: FlowQuotaDataItem[] = [
   {
     user_id: 1,
     username: 'alpha',
-    use_group: 'vip',
     channel_id: 201,
     channel_name: 'channel-a',
     model_name: 'model-a',
@@ -85,7 +81,6 @@ const topLimitRows: FlowQuotaDataItem[] = [
   {
     user_id: 2,
     username: 'beta',
-    use_group: 'default',
     channel_id: 202,
     channel_name: 'channel-b',
     model_name: 'model-b',
@@ -96,7 +91,6 @@ const topLimitRows: FlowQuotaDataItem[] = [
   {
     user_id: 3,
     username: 'gamma',
-    use_group: 'free',
     channel_id: 203,
     channel_name: 'channel-c',
     model_name: 'model-c',
@@ -107,7 +101,7 @@ const topLimitRows: FlowQuotaDataItem[] = [
 ]
 
 describe('dashboard flow data', () => {
-  test('builds normal user token-group-model flow', () => {
+  test('builds normal user token-model flow', () => {
     const result = buildDashboardFlowData(rows.slice(0, 2), 'quota', {
       role: 'user',
     })
@@ -117,16 +111,13 @@ describe('dashboard flow data', () => {
     expect(result.summary.requests).toBe(3)
     expect(
       result.flow.links.map((link) => [link.source, link.target, link.value])
-    ).toEqual([
-      ['group:vip', 'model:gpt-4.1', 150],
-      ['token:11', 'group:vip', 150],
-    ])
+    ).toEqual([['token:11', 'model:gpt-4.1', 150]])
     expect(result.flow.nodes.some((node) => node.kind === 'channel')).toBe(
       false
     )
   })
 
-  test('builds admin user-group-model-channel flow', () => {
+  test('builds admin user-model-channel flow', () => {
     const result = buildDashboardFlowData(rows, 'quota', {
       role: 'admin',
     })
@@ -134,17 +125,15 @@ describe('dashboard flow data', () => {
     expect(
       result.flow.links.map((link) => [link.source, link.target, link.value])
     ).toEqual([
-      ['group:default', 'model:claude-4-sonnet', 70],
-      ['group:vip', 'model:gpt-4.1', 150],
       ['model:claude-4-sonnet', 'channel:101', 70],
       ['model:gpt-4.1', 'channel:101', 100],
       ['model:gpt-4.1', 'channel:102', 50],
-      ['user:1', 'group:vip', 150],
-      ['user:2', 'group:default', 70],
+      ['user:1', 'model:gpt-4.1', 150],
+      ['user:2', 'model:claude-4-sonnet', 70],
     ])
   })
 
-  test('builds root user-node-token-group-model-channel flow', () => {
+  test('builds root user-node-token-model-channel flow', () => {
     const result = buildDashboardFlowData(rows, 'requests', {
       role: 'root',
     })
@@ -152,15 +141,13 @@ describe('dashboard flow data', () => {
     expect(
       result.flow.links.map((link) => [link.source, link.target, link.value])
     ).toEqual([
-      ['group:default', 'model:claude-4-sonnet', 3],
-      ['group:vip', 'model:gpt-4.1', 3],
       ['model:claude-4-sonnet', 'channel:101', 3],
       ['model:gpt-4.1', 'channel:101', 2],
       ['model:gpt-4.1', 'channel:102', 1],
       ['node:node-a', 'token:11', 3],
       ['node:node-b', 'token:22', 3],
-      ['token:11', 'group:vip', 3],
-      ['token:22', 'group:default', 3],
+      ['token:11', 'model:gpt-4.1', 3],
+      ['token:22', 'model:claude-4-sonnet', 3],
       ['user:1', 'node:node-a', 3],
       ['user:2', 'node:node-b', 3],
     ])
@@ -176,9 +163,8 @@ describe('dashboard flow data', () => {
     expect(
       result.flow.links.map((link) => [link.source, link.target, link.value])
     ).toEqual([
-      ['group:default', 'model:claude-4-sonnet', 70],
       ['model:claude-4-sonnet', 'channel:101', 70],
-      ['user:2', 'group:default', 70],
+      ['user:2', 'model:claude-4-sonnet', 70],
     ])
   })
 
@@ -192,10 +178,9 @@ describe('dashboard flow data', () => {
     expect(
       result.flow.links.map((link) => [link.source, link.target, link.value])
     ).toEqual([
-      ['group:vip', 'model:gpt-4.1', 150],
       ['model:gpt-4.1', 'channel:101', 100],
       ['model:gpt-4.1', 'channel:102', 50],
-      ['user:1', 'group:vip', 150],
+      ['user:1', 'model:gpt-4.1', 150],
     ])
   })
 
@@ -224,9 +209,8 @@ describe('dashboard flow data', () => {
         link.value,
       ])
     ).toEqual([
-      ['group:vip', 'model:gpt-4.1', 100],
       ['model:gpt-4.1', 'channel:101', 100],
-      ['user:1', 'group:vip', 100],
+      ['user:1', 'model:gpt-4.1', 100],
     ])
   })
 
@@ -241,9 +225,8 @@ describe('dashboard flow data', () => {
     expect(
       result.flow.links.map((link) => [link.source, link.target, link.value])
     ).toEqual([
-      ['group:vip', 'model:gpt-4.1', 100],
       ['model:gpt-4.1', 'channel:101', 100],
-      ['user:1', 'group:vip', 100],
+      ['user:1', 'model:gpt-4.1', 100],
     ])
   })
 
@@ -262,7 +245,9 @@ describe('dashboard flow data', () => {
       ['user:1', 'model:gpt-4.1', 150],
       ['user:2', 'model:claude-4-sonnet', 70],
     ])
-    expect(result.flow.nodes.some((node) => node.kind === 'group')).toBe(false)
+    expect(result.flow.nodes.some((node) => node.id.startsWith('group:'))).toBe(
+      false
+    )
   })
 
   test('ignores stage filters that would leave fewer than two columns', () => {
@@ -273,10 +258,7 @@ describe('dashboard flow data', () => {
 
     expect(
       result.flow.links.map((link) => [link.source, link.target, link.value])
-    ).toEqual([
-      ['group:vip', 'model:gpt-4.1', 150],
-      ['token:11', 'group:vip', 150],
-    ])
+    ).toEqual([['token:11', 'model:gpt-4.1', 150]])
   })
 
   test('builds user filter options with stable values', () => {
@@ -404,7 +386,7 @@ describe('dashboard flow data', () => {
     )
     const otherFirstStepLink = result.flow.links.find(
       (link) =>
-        link.source === 'user:__other__' && link.target === 'group:__other__'
+        link.source === 'user:__other__' && link.target === 'model:__other__'
     )
     const firstStepTotal = result.flow.links
       .filter((link) => link.source.startsWith('user:'))
@@ -415,11 +397,9 @@ describe('dashboard flow data', () => {
     expect(otherUser?.label).toBe('Other user')
     expect(otherFirstStepLink?.value).toBe(10)
     expect(nodeIds.has('user:3')).toBe(false)
-    expect(nodeIds.has('group:free')).toBe(false)
     expect(nodeIds.has('model:model-c')).toBe(false)
     expect(nodeIds.has('channel:203')).toBe(false)
     expect(nodeIds.has('user:__other__')).toBe(true)
-    expect(nodeIds.has('group:__other__')).toBe(true)
     expect(nodeIds.has('model:__other__')).toBe(true)
     expect(nodeIds.has('channel:__other__')).toBe(true)
   })
@@ -480,7 +460,6 @@ describe('dashboard flow data', () => {
     expect(nodeIds.has('user:__other__')).toBe(true)
     expect(nodeIds.has('model:model-a')).toBe(true)
     expect(nodeIds.has('model:__other__')).toBe(true)
-    expect(nodeIds.has('group:__other__')).toBe(false)
     expect(nodeIds.has('channel:__other__')).toBe(false)
     expect(
       result.flow.links.map((link) => [link.source, link.target, link.value])
@@ -505,9 +484,8 @@ describe('dashboard flow data', () => {
     expect(
       result.flow.links.map((link) => [link.source, link.target, link.value])
     ).toEqual([
-      ['group:free', 'model:model-c', 10],
       ['model:model-c', 'channel:203', 10],
-      ['user:3', 'group:free', 10],
+      ['user:3', 'model:model-c', 10],
     ])
   })
 
@@ -515,11 +493,11 @@ describe('dashboard flow data', () => {
     const result = buildDashboardFlowData(rows, 'quota', {
       role: 'admin',
       visibleStages: ['user', 'model', 'channel'],
-      selectedNodes: [{ kind: 'group', id: 'group:vip' }],
+      selectedNodes: [{ kind: 'token', id: 'token:11' }],
     })
 
     expect(result.summary.quota).toBe(220)
-    expect(result.flow.nodes.some((node) => node.id === 'group:vip')).toBe(
+    expect(result.flow.nodes.some((node) => node.id === 'token:11')).toBe(
       false
     )
   })
@@ -621,7 +599,6 @@ describe('dashboard flow data', () => {
       {
         user_id: 1,
         username: 'alice',
-        use_group: 'vip',
         channel_id: 101,
         channel_name: 'east',
         model_name: 'gpt-4.1',
@@ -632,7 +609,6 @@ describe('dashboard flow data', () => {
       {
         user_id: 2,
         username: 'bob',
-        use_group: 'vip',
         channel_id: 101,
         channel_name: 'east',
         model_name: 'gpt-4.1',
@@ -646,10 +622,11 @@ describe('dashboard flow data', () => {
       activeNode: { kind: 'user', id: 'user:1' },
     })
     const sharedLink = result.flow.links.find(
-      (link) => link.source === 'group:vip' && link.target === 'model:gpt-4.1'
+      (link) =>
+        link.source === 'model:gpt-4.1' && link.target === 'channel:101'
     )
     const inactiveUserLink = result.flow.links.find(
-      (link) => link.source === 'user:2' && link.target === 'group:vip'
+      (link) => link.source === 'user:2' && link.target === 'model:gpt-4.1'
     )
 
     expect(sharedLink?.value).toBe(150)
@@ -711,8 +688,8 @@ describe('dashboard flow data', () => {
     expect(flowSpec.tooltip.mark.visible({ datum: aliceNode })).toBe(true)
     expect(flowSpec.tooltip.mark.visible({ datum: userNodeLink })).toBe(true)
     expect(flowSpec.animation).toBe(false)
-    expect(values.nodes.length).toBe(6)
-    expect(values.links.length).toBe(5)
+    expect(values.nodes.length).toBe(5)
+    expect(values.links.length).toBe(4)
     expect(aliceNode.name).toBe('alice')
     expect(userNodeLink.linkColor).toMatch(/^rgba\(/)
 

@@ -25,14 +25,23 @@ import { useStatus } from '@/hooks/use-status'
 /**
  * Hook for managing Turnstile verification
  */
+function readTurnstileStatus(status: ReturnType<typeof useStatus>['status']) {
+  const turnstileCheck =
+    status?.turnstile_check ?? status?.data?.turnstile_check ?? false
+  const turnstileSiteKey =
+    status?.turnstile_site_key ?? status?.data?.turnstile_site_key ?? ''
+
+  return {
+    isTurnstileEnabled: Boolean(turnstileCheck && turnstileSiteKey),
+    turnstileSiteKey,
+  }
+}
+
 export function useTurnstile() {
   const { status } = useStatus()
   const [turnstileToken, setTurnstileToken] = useState('')
 
-  const isTurnstileEnabled = !!(
-    status?.turnstile_check && status?.turnstile_site_key
-  )
-  const turnstileSiteKey = status?.turnstile_site_key || ''
+  const { isTurnstileEnabled, turnstileSiteKey } = readTurnstileStatus(status)
 
   /**
    * Validate if turnstile is ready when required

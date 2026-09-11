@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils'
 
 import { useOAuthLogin } from '../hooks/use-oauth-login'
 import type { SystemStatus } from '../types'
+import { AuthMethodButton } from './auth-method-button'
 import { TelegramLoginDialog } from './telegram-login-dialog'
 
 type OAuthProvidersProps = {
@@ -40,6 +41,7 @@ type OAuthProvidersProps = {
   onWeChatLogin?: () => void
   isWeChatLoading?: boolean
   redirectTo?: string
+  variant?: 'default' | 'zenmux'
 }
 
 type ProviderButton = {
@@ -57,6 +59,7 @@ export function OAuthProviders({
   onWeChatLogin,
   isWeChatLoading = false,
   redirectTo,
+  variant = 'default',
 }: OAuthProvidersProps) {
   const { t } = useTranslation()
   const {
@@ -149,35 +152,68 @@ export function OAuthProviders({
 
   if (providerButtons.length === 0) return null
 
+  const isZenmux = variant === 'zenmux'
+  const labelFor = (key: string, fallback: string) => {
+    if (!isZenmux) return fallback
+    if (key === 'github') return t('Sign in with GitHub')
+    if (key === 'wechat') return t('Sign in with WeChat')
+    if (key === 'discord') return t('Sign in with Discord')
+    if (key === 'linuxdo') return t('Sign in with LinuxDO')
+    if (key === 'telegram') return t('Sign in with Telegram')
+    if (key === 'oidc') {
+      const oidcDisplayName = status?.oidc_display_name?.trim() || 'OIDC'
+      return t('Sign in with {{name}}', { name: oidcDisplayName })
+    }
+    if (key.startsWith('custom-')) {
+      const slug = key.replace('custom-', '')
+      const provider = status?.custom_oauth_providers?.find(
+        (item) => item.slug === slug
+      )
+      return t('Sign in with {{name}}', { name: provider?.name ?? slug })
+    }
+    return fallback
+  }
+
   return (
     <>
       <div className={cn('space-y-3', className)}>
-        <div className='relative'>
-          <div className='absolute inset-0 flex items-center'>
-            <span className='w-full border-t' />
+        {!isZenmux && (
+          <div className='relative'>
+            <div className='absolute inset-0 flex items-center'>
+              <span className='w-full border-t' />
+            </div>
+            <div className='relative flex justify-center text-xs uppercase'>
+              <span className='bg-background text-muted-foreground px-2'>
+                {t('Or continue with')}
+              </span>
+            </div>
           </div>
-          <div className='relative flex justify-center text-xs uppercase'>
-            <span className='bg-background text-muted-foreground px-2'>
-              {t('Or continue with')}
-            </span>
-          </div>
-        </div>
+        )}
 
-        <div className='flex flex-col gap-2'>
+        <div className={cn('flex flex-col', isZenmux ? 'gap-3' : 'gap-2')}>
           {providerButtons.map(
-            ({ key, label, onClick, icon, disabled: extraDisabled }) => (
-              <Button
-                key={key}
-                variant='outline'
-                type='button'
-                disabled={disabled || isLoading || extraDisabled}
-                onClick={onClick}
-                className='h-11 w-full justify-center gap-2 rounded-lg'
-              >
-                {icon}
-                {label}
-              </Button>
-            )
+            ({ key, label, onClick, icon, disabled: extraDisabled }) =>
+              isZenmux ? (
+                <AuthMethodButton
+                  key={key}
+                  label={labelFor(key, label)}
+                  icon={icon}
+                  disabled={disabled || isLoading || extraDisabled}
+                  onClick={onClick}
+                />
+              ) : (
+                <Button
+                  key={key}
+                  variant='outline'
+                  type='button'
+                  disabled={disabled || isLoading || extraDisabled}
+                  onClick={onClick}
+                  className='h-11 w-full justify-center gap-2 rounded-lg'
+                >
+                  {icon}
+                  {label}
+                </Button>
+              )
           )}
         </div>
       </div>

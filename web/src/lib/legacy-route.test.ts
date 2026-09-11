@@ -25,7 +25,7 @@ describe('legacy frontend route migration', () => {
     const routes = {
       '/login': '/sign-in',
       '/forbidden': '/403',
-      '/console': '/dashboard',
+      '/console': '/analytics/usage',
       '/console/models': '/models',
       '/console/deployment': '/models/metadata',
       '/console/subscription': '/subscriptions',
@@ -38,7 +38,6 @@ describe('legacy frontend route migration', () => {
       '/console/log': '/usage-logs',
       '/console/midjourney': '/usage-logs/task',
       '/console/task': '/usage-logs/task',
-      '/console/chat/42': '/chat/42',
     }
 
     for (const [source, target] of Object.entries(routes)) {
@@ -59,7 +58,6 @@ describe('legacy frontend route migration', () => {
     const settingsTabs = {
       operation: '/system-settings/operations/behavior',
       dashboard: '/system-settings/content/dashboard',
-      chats: '/system-settings/content/chat',
       payment: '/system-settings/billing/payment',
       ratio: '/system-settings/billing/model-pricing',
       ratelimit: '/system-settings/security/rate-limit',
@@ -81,8 +79,11 @@ describe('legacy frontend route migration', () => {
   })
 
   test('safely redirects unknown console locations without touching new routes', () => {
+    expect(resolveLegacyRoute('/console/chat/42?page=2#old')).toBe(
+      '/analytics/usage?page=2#old'
+    )
     expect(resolveLegacyRoute('/console/removed?page=2#old')).toBe(
-      '/dashboard?page=2#old'
+      '/analytics/usage?page=2#old'
     )
     expect(resolveLegacyRoute('/dashboard')).toBe(null)
     expect(resolveLegacyRoute('/api/status')).toBe(null)

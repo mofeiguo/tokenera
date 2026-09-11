@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Plus, MoreHorizontal, RefreshCw, Building2 } from 'lucide-react'
+import { Plus, MoreHorizontal, Building2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -39,10 +39,6 @@ export function ModelsPrimaryButtons() {
     setOpen('create-model')
   }
 
-  const handleSync = () => {
-    setOpen('sync-wizard')
-  }
-
   const handleManageVendors = () => {
     setOpen('create-vendor')
   }
@@ -52,16 +48,6 @@ export function ModelsPrimaryButtons() {
       <Button onClick={handleCreateModel} size='sm'>
         <Plus className='h-4 w-4' />
         {t('Add Model')}
-      </Button>
-
-      <Button
-        onClick={handleSync}
-        variant='outline'
-        size='sm'
-        aria-label={t('Sync Upstream')}
-      >
-        <RefreshCw className='h-4 w-4' />
-        <span className='hidden sm:inline'>{t('Sync Upstream')}</span>
       </Button>
 
       <DropdownMenu>

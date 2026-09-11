@@ -107,11 +107,11 @@ func TestModelPriceHelperTieredPreConsumeMaxTokensFallback(t *testing.T) {
 			expected:  2250,
 		},
 		{
-			// free group (ratio 0) stays zero; fallback is gated on non-zero group ratio.
-			name:      "free group stays zero without fallback",
+			// group ratio is always 1, so missing max_tokens still uses the 8192 fallback.
+			name:      "missing max_tokens uses fallback regardless of group name",
 			group:     "free",
 			maxTokens: 0,
-			expected:  0,
+			expected:  62940,
 		},
 	}
 
@@ -271,4 +271,32 @@ func TestModelPriceHelperRequestBillingRatiosOnlyApplyToFixedPrice(t *testing.T)
 	require.Equal(t, "QuotaFromFloat", clamp.Op)
 	require.Equal(t, common.QuotaClampOverflow, clamp.Kind)
 	require.Nil(t, info.Billing)
+}
+
+func TestModelPriceHelperChannelTestAllowsUnconfiguredModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	newInfo := func(isChannelTest bool) (*gin.Context, *relaycommon.RelayInfo) {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx.Set("group", "default")
+		return ctx, &relaycommon.RelayInfo{
+			OriginModelName: "channel-test-unpriced-model",
+			UserGroup:       "default",
+			UsingGroup:      "default",
+			IsChannelTest:   isChannelTest,
+		}
+	}
+	meta := &types.TokenCountMeta{}
+
+	ctx, info := newInfo(false)
+	_, err := ModelPriceHelper(ctx, info, 0, meta)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "has not been priced")
+
+	ctx, info = newInfo(true)
+	priceData, err := ModelPriceHelper(ctx, info, 0, meta)
+	require.NoError(t, err)
+	require.False(t, priceData.UsePrice)
+	require.Equal(t, 0.0, priceData.ModelRatio)
+	require.Equal(t, 0, priceData.QuotaToPreConsume)
 }

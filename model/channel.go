@@ -25,10 +25,8 @@ type Channel struct {
 	Type               int     `json:"type" gorm:"default:0"`
 	Key                string  `json:"key" gorm:"not null"`
 	OpenAIOrganization *string `json:"openai_organization"`
-	TestModel          *string `json:"test_model"`
 	Status             int     `json:"status" gorm:"default:1"`
 	Name               string  `json:"name" gorm:"index"`
-	Weight             *uint   `json:"weight" gorm:"default:0"`
 	CreatedTime        int64   `json:"created_time" gorm:"bigint"`
 	TestTime           int64   `json:"test_time" gorm:"bigint"`
 	ResponseTime       int     `json:"response_time"` // in milliseconds
@@ -37,12 +35,9 @@ type Channel struct {
 	Balance            float64 `json:"balance"` // in USD
 	BalanceUpdatedTime int64   `json:"balance_updated_time" gorm:"bigint"`
 	Models             string  `json:"models"`
-	Group              string  `json:"group" gorm:"type:varchar(64);default:'default'"`
 	UsedQuota          int64   `json:"used_quota" gorm:"bigint;default:0"`
 	//MaxInputTokens     *int    `json:"max_input_tokens" gorm:"default:0"`
 	StatusCodeMapping *string `json:"status_code_mapping" gorm:"type:varchar(1024);default:''"`
-	Priority          *int64  `json:"priority" gorm:"bigint;default:0"`
-	AutoBan           *int    `json:"auto_ban" gorm:"default:1"`
 	OtherInfo         string  `json:"other_info"`
 	Tag               *string `json:"tag" gorm:"index"`
 	Setting           *string `json:"setting" gorm:"type:text"` // 渠道额外设置
@@ -76,7 +71,6 @@ type ChannelSortOptions struct {
 var channelSortColumns = map[string]string{
 	"id":            "id",
 	"name":          "name",
-	"priority":      "priority",
 	"balance":       "balance",
 	"response_time": "response_time",
 	"test_time":     "test_time",
@@ -106,14 +100,8 @@ func (options ChannelSortOptions) Apply(query *gorm.DB) *gorm.DB {
 			Desc:   options.SortOrder != "asc",
 		})
 	}
-	if options.IDSort {
-		return query.Order(clause.OrderByColumn{
-			Column: clause.Column{Name: "id"},
-			Desc:   true,
-		})
-	}
 	return query.Order(clause.OrderByColumn{
-		Column: clause.Column{Name: "priority"},
+		Column: clause.Column{Name: "id"},
 		Desc:   true,
 	})
 }
@@ -125,38 +113,6 @@ func resolveChannelSortOptions(idSort bool, sortOptions []ChannelSortOptions) Ch
 	options := sortOptions[0]
 	options.IDSort = options.IDSort || idSort
 	return options
-}
-
-func NormalizeChannelGroupFilter(group string) string {
-	group = strings.TrimSpace(group)
-	if group == "" || strings.EqualFold(group, "all") || strings.EqualFold(group, "null") {
-		return ""
-	}
-	return group
-}
-
-func channelGroupFilterCondition() string {
-	if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
-		return `CONCAT(',', ` + commonGroupCol + `, ',') LIKE ? ESCAPE '!'`
-	}
-	return `(',' || ` + commonGroupCol + ` || ',') LIKE ? ESCAPE '!'`
-}
-
-func channelGroupFilterPattern(group string) string {
-	group = strings.NewReplacer(
-		"!", "!!",
-		"%", "!%",
-		"_", "!_",
-	).Replace(group)
-	return "%," + group + ",%"
-}
-
-func ApplyChannelGroupFilter(query *gorm.DB, group string) *gorm.DB {
-	group = NormalizeChannelGroupFilter(group)
-	if group == "" {
-		return query
-	}
-	return query.Where(channelGroupFilterCondition(), channelGroupFilterPattern(group))
 }
 
 // Value implements driver.Valuer interface
@@ -291,10 +247,6 @@ func (channel *Channel) GetModels() []string {
 	return strings.Split(strings.Trim(channel.Models, ","), ",")
 }
 
-func (channel *Channel) GetGroups() []string {
-	return servingGroupsFromRaw(channel.Group)
-}
-
 func (channel *Channel) GetOtherInfo() map[string]interface{} {
 	otherInfo := make(map[string]interface{})
 	if channel.OtherInfo != "" {
@@ -324,13 +276,6 @@ func (channel *Channel) GetTag() string {
 
 func (channel *Channel) SetTag(tag string) {
 	channel.Tag = &tag
-}
-
-func (channel *Channel) GetAutoBan() bool {
-	if channel.AutoBan == nil {
-		return false
-	}
-	return *channel.AutoBan == 1
 }
 
 func (channel *Channel) Save() error {
@@ -366,18 +311,7 @@ func GetAllChannels(startIdx int, num int, selectAll bool, idSort bool, sortOpti
 	return channels, err
 }
 
-func GetChannelsByTag(tag string, idSort bool, selectAll bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
-	var channels []*Channel
-	order := resolveChannelSortOptions(idSort, sortOptions)
-	query := order.Apply(DB.Where("tag = ?", tag))
-	if !selectAll {
-		query = query.Omit("key")
-	}
-	err := query.Find(&channels).Error
-	return channels, err
-}
-
-func SearchChannels(keyword string, group string, model string, idSort bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
+func SearchChannels(keyword string, model string, idSort bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
 	var channels []*Channel
 	baseURLCol := "`base_url`"
 	// 如果是 PostgreSQL，使用双引号
@@ -400,7 +334,7 @@ func SearchChannels(keyword string, group string, model string, idSort bool, sor
 	// 构造WHERE子句
 	whereClause := "(channels.id = ? OR channels.name LIKE ? OR channels." + commonKeyCol + " = ? OR channels." + baseURLCol + " LIKE ?)"
 	args := []any{common.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%"}
-	baseQuery = ApplyChannelGroupFilter(baseQuery.Where(whereClause, args...), group)
+	baseQuery = baseQuery.Where(whereClause, args...)
 
 	// 执行查询
 	err := order.Apply(baseQuery).Find(&channels).Error
@@ -473,20 +407,6 @@ func BatchDeleteChannels(ids []int) (int64, error) {
 		return 0, err
 	}
 	return deletedCount, nil
-}
-
-func (channel *Channel) GetPriority() int64 {
-	if channel.Priority == nil {
-		return 0
-	}
-	return *channel.Priority
-}
-
-func (channel *Channel) GetWeight() int {
-	if channel.Weight == nil {
-		return 0
-	}
-	return int(*channel.Weight)
 }
 
 func (channel *Channel) GetBaseURL() string {
@@ -762,59 +682,6 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 	return true
 }
 
-func EnableChannelByTag(tag string) error {
-	err := DB.Model(&Channel{}).Where("tag = ?", tag).Update("status", common.ChannelStatusEnabled).Error
-	if err != nil {
-		return err
-	}
-	if common.MemoryCacheEnabled {
-		InitChannelCache()
-	}
-	return nil
-}
-
-func DisableChannelByTag(tag string) error {
-	err := DB.Model(&Channel{}).Where("tag = ?", tag).Update("status", common.ChannelStatusManuallyDisabled).Error
-	if err != nil {
-		return err
-	}
-	if common.MemoryCacheEnabled {
-		InitChannelCache()
-	}
-	return nil
-}
-
-func EditChannelByTag(tag string, newTag *string, models *string, group *string, priority *int64, weight *uint, headerOverride *string) error {
-	updateData := Channel{}
-	if newTag != nil && *newTag != tag {
-		updateData.Tag = newTag
-	}
-	if models != nil && *models != "" {
-		updateData.Models = *models
-	}
-	if group != nil && *group != "" {
-		updateData.Group = *group
-	}
-	if priority != nil {
-		updateData.Priority = priority
-	}
-	if weight != nil {
-		updateData.Weight = weight
-	}
-	if headerOverride != nil {
-		updateData.HeaderOverride = headerOverride
-	}
-
-	err := DB.Model(&Channel{}).Where("tag = ?", tag).Updates(updateData).Error
-	if err != nil {
-		return err
-	}
-	if common.MemoryCacheEnabled {
-		InitChannelCache()
-	}
-	return nil
-}
-
 func UpdateChannelUsedQuota(id int, quota int) {
 	if common.BatchUpdateEnabled {
 		addNewRecord(BatchUpdateTypeChannelUsedQuota, id, quota)
@@ -848,66 +715,6 @@ func DeleteDisabledChannel() (int64, error) {
 	return BatchDeleteChannels(ids)
 }
 
-func GetPaginatedTags(offset int, limit int) ([]*string, error) {
-	return GetPaginatedChannelTags(DB.Model(&Channel{}), offset, limit)
-}
-
-func GetPaginatedChannelTags(query *gorm.DB, offset int, limit int) ([]*string, error) {
-	var tags []*string
-	err := query.
-		Select("DISTINCT tag").
-		Where("tag is not null AND tag != ''").
-		Order(clause.OrderByColumn{Column: clause.Column{Name: "tag"}}).
-		Offset(offset).
-		Limit(limit).
-		Find(&tags).Error
-	return tags, err
-}
-
-func SearchTags(keyword string, group string, model string, idSort bool) ([]*string, error) {
-	var tags []*string
-	baseURLCol := "`base_url`"
-	// 如果是 PostgreSQL，使用双引号
-	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
-		baseURLCol = `"base_url"`
-	}
-
-	order := "priority desc"
-	if idSort {
-		order = "id desc"
-	}
-
-	// 构造基础查询
-	baseQuery := DB.Model(&Channel{}).Omit("key")
-	if strings.TrimSpace(model) != "" {
-		baseQuery = baseQuery.
-			Joins("JOIN model_bindings ON model_bindings.channel_id = channels.id").
-			Joins("JOIN models AS catalog_models ON catalog_models.id = model_bindings.model_id").
-			Where("catalog_models.model_name LIKE ? AND model_bindings.deleted = ?", "%"+model+"%", false).
-			Distinct()
-	}
-
-	// 构造WHERE子句
-	whereClause := "(channels.id = ? OR channels.name LIKE ? OR channels." + commonKeyCol + " = ? OR channels." + baseURLCol + " LIKE ?)"
-	args := []any{common.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%"}
-	baseQuery = ApplyChannelGroupFilter(baseQuery.Where(whereClause, args...), group)
-
-	subQuery := baseQuery.
-		Select("tag").
-		Where("tag != ''").
-		Order(order)
-
-	err := DB.Table("(?) as sub", subQuery).
-		Select("DISTINCT tag").
-		Find(&tags).Error
-
-	if err != nil {
-		return nil, err
-	}
-
-	return tags, nil
-}
-
 func (channel *Channel) ValidateSettings() error {
 	channelParams := &dto.ChannelSettings{}
 	if channel.Setting != nil && *channel.Setting != "" {
@@ -937,11 +744,6 @@ func (channel *Channel) ValidateSettings() error {
 	if channelOtherSettings.AdvancedCustom != nil {
 		if err := channelOtherSettings.AdvancedCustom.Validate(); err != nil {
 			return err
-		}
-	}
-	if channel.Type == constant.ChannelTypeAdvancedCustom && channelOtherSettings.UpstreamModelUpdateCheckEnabled {
-		if _, ok := channelOtherSettings.AdvancedCustom.ModelListRoute(); !ok {
-			return fmt.Errorf("advanced custom channels require a %s route when upstream model update checks are enabled", dto.AdvancedCustomModelListPath)
 		}
 	}
 	return nil
@@ -1008,24 +810,6 @@ func GetChannelsByIds(ids []int) ([]*Channel, error) {
 	return channels, err
 }
 
-func BatchSetChannelTag(ids []int, tag *string) error {
-	// 开启事务
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return tx.Error
-	}
-
-	// 更新标签
-	err := tx.Model(&Channel{}).Where("id in (?)", ids).Update("tag", tag).Error
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	// 提交事务
-	return tx.Commit().Error
-}
-
 // CountAllChannels returns total channels in DB
 func CountAllChannels() (int64, error) {
 	var total int64
@@ -1033,25 +817,10 @@ func CountAllChannels() (int64, error) {
 	return total, err
 }
 
-// CountAllTags returns number of non-empty distinct tags
-func CountAllTags() (int64, error) {
-	return CountChannelTags(DB.Model(&Channel{}))
-}
-
-func CountChannelTags(query *gorm.DB) (int64, error) {
-	var total int64
-	err := query.Where("tag is not null AND tag != ''").Distinct("tag").Count(&total).Error
-	return total, err
-}
-
 // Get channels of specified type with pagination
 func GetChannelsByType(startIdx int, num int, idSort bool, channelType int) ([]*Channel, error) {
 	var channels []*Channel
-	order := "priority desc"
-	if idSort {
-		order = "id desc"
-	}
-	err := DB.Where("type = ?", channelType).Order(order).Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
+	err := DB.Where("type = ?", channelType).Order("id desc").Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
 	return channels, err
 }
 

@@ -34,7 +34,6 @@ func createUserBindTestUser(t *testing.T) User {
 		Password:    "unused-password-hash",
 		Role:        common.RoleCommonUser,
 		Status:      common.UserStatusEnabled,
-		Group:       "default",
 		AuthVersion: 1,
 		AffCode:     "bind-test-aff-code",
 	}
@@ -264,7 +263,7 @@ func TestInsertRejectsDuplicateEmailWithoutUniqueIndex(t *testing.T) {
 		Status:   common.UserStatusEnabled,
 	}
 
-	err := user.Insert(0)
+	err := user.Insert()
 	require.ErrorIs(t, err, ErrEmailAlreadyTaken)
 
 	var count int64
@@ -281,7 +280,7 @@ func TestInsertKeepsBlankPasswordForPasswordlessUser(t *testing.T) {
 		Status:   common.UserStatusEnabled,
 	}
 
-	require.NoError(t, user.Insert(0))
+	require.NoError(t, user.Insert())
 
 	var stored User
 	require.NoError(t, DB.Where("username = ?", user.Username).First(&stored).Error)
@@ -295,7 +294,7 @@ func TestUpdateUserBindColumnOnlyTouchesTheBindingColumn(t *testing.T) {
 	require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).Updates(map[string]interface{}{
 		"role":   common.RoleAdminUser,
 		"status": common.UserStatusEnabled,
-		"group":  "vip",
+		"remark": "keep-me",
 	}).Error)
 
 	require.NoError(t, UpdateUserBindColumn(user.Id, "github_id", "gh-12345"))
@@ -305,7 +304,7 @@ func TestUpdateUserBindColumnOnlyTouchesTheBindingColumn(t *testing.T) {
 	assert.Equal(t, "gh-12345", reloaded.GitHubId)
 	assert.Equal(t, common.RoleAdminUser, reloaded.Role)
 	assert.Equal(t, common.UserStatusEnabled, reloaded.Status)
-	assert.Equal(t, "vip", reloaded.Group)
+	assert.Equal(t, "keep-me", reloaded.Remark)
 }
 
 func TestUpdateUserBindColumnPreservesRestrictiveChange(t *testing.T) {

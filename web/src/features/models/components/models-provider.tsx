@@ -19,25 +19,13 @@ For commercial licensing, please contact support@quantumnous.com
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState } from 'react'
 
-import type {
-  Model,
-  Vendor,
-  SyncDiffData,
-  SyncLocale,
-  SyncSource,
-} from '../types'
-
-// ============================================================================
-// Types
-// ============================================================================
+import type { Model, Vendor } from '../types'
 
 type DialogType =
   | 'create-model'
   | 'update-model'
   | 'create-vendor'
   | 'update-vendor'
-  | 'sync-wizard'
-  | 'upstream-conflict'
   | 'description'
   | null
 
@@ -54,23 +42,9 @@ type ModelsContextType = {
   setDescriptionData: (
     data: { modelName: string; description: string } | null
   ) => void
-  upstreamConflicts: SyncDiffData['conflicts']
-  setUpstreamConflicts: (conflicts: SyncDiffData['conflicts']) => void
-  syncWizardOptions: { locale: SyncLocale; source: SyncSource }
-  setSyncWizardOptions: React.Dispatch<
-    React.SetStateAction<{ locale: SyncLocale; source: SyncSource }>
-  >
 }
 
-// ============================================================================
-// Context
-// ============================================================================
-
 const ModelsContext = createContext<ModelsContextType | undefined>(undefined)
-
-// ============================================================================
-// Provider
-// ============================================================================
 
 export function ModelsProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState<DialogType>(null)
@@ -81,16 +55,7 @@ export function ModelsProvider({ children }: { children: React.ReactNode }) {
     modelName: string
     description: string
   } | null>(null)
-  const [upstreamConflicts, setUpstreamConflicts] = useState<
-    SyncDiffData['conflicts']
-  >([])
-  const [syncWizardOptions, setSyncWizardOptions] = useState<{
-    locale: SyncLocale
-    source: SyncSource
-  }>({
-    locale: 'zh',
-    source: 'official',
-  })
+
   return (
     <ModelsContext.Provider
       value={{
@@ -104,20 +69,12 @@ export function ModelsProvider({ children }: { children: React.ReactNode }) {
         setSelectedVendor,
         descriptionData,
         setDescriptionData,
-        upstreamConflicts,
-        setUpstreamConflicts,
-        syncWizardOptions,
-        setSyncWizardOptions,
       }}
     >
       {children}
     </ModelsContext.Provider>
   )
 }
-
-// ============================================================================
-// Hook
-// ============================================================================
 
 export function useModels() {
   const context = useContext(ModelsContext)

@@ -60,25 +60,14 @@ export interface Model {
   capabilities?: ModelCapability[]
   context_length?: number
   max_output_tokens?: number
-  pricing_mode?: '' | 'per_token' | 'per_request'
-  model_price?: number | null
-  model_ratio?: number | null
-  completion_ratio?: number | null
-  cache_ratio?: number | null
-  create_cache_ratio?: number | null
-  image_ratio?: number | null
-  audio_ratio?: number | null
-  audio_completion_ratio?: number | null
   vendor_id?: number
   endpoints?: string
   status: number
-  sync_official: number
   created_time: number
   updated_time: number
   name_rule: number
   // Runtime fields
   bound_channels?: BoundChannel[]
-  enable_groups?: string[]
   quota_types?: number[]
   matched_models?: string[]
   matched_count?: number
@@ -124,7 +113,6 @@ export interface GetModelsParams {
   page_size?: number
   vendor?: string // vendor ID to filter by
   status?: string // filter by status
-  sync_official?: string // filter by sync_official status
 }
 
 /**
@@ -134,7 +122,6 @@ export interface SearchModelsParams {
   keyword?: string
   vendor?: string // vendor ID to filter by
   status?: string // filter by status
-  sync_official?: string // filter by sync_official status
   p?: number
   page_size?: number
 }
@@ -186,52 +173,6 @@ export interface GetVendorResponse {
   data?: Vendor
 }
 
-/**
- * Sync diff data
- */
-export interface SyncDiffData {
-  missing?: string[]
-  conflicts?: Array<{
-    model_name: string
-    local?: Partial<Model>
-    upstream?: Partial<Model>
-    fields?: Array<{
-      field: string
-      local?: unknown
-      upstream?: unknown
-    }>
-    [key: string]: unknown
-  }>
-}
-
-export interface SyncOverwritePayload {
-  model_name: string
-  fields: string[]
-}
-
-/**
- * Sync upstream response
- */
-export interface SyncUpstreamResponse {
-  success: boolean
-  message?: string
-  data?: {
-    created_models?: number
-    updated_models?: number
-    created_vendors?: number
-    skipped_models?: string[]
-  }
-}
-
-/**
- * Preview upstream diff response
- */
-export interface PreviewUpstreamDiffResponse {
-  success: boolean
-  message?: string
-  data?: SyncDiffData
-}
-
 // ============================================================================
 // Form Data Types
 // ============================================================================
@@ -243,7 +184,6 @@ export const modelFormSchema = z.object({
   id: z.number().optional(),
   model_name: z.string().min(1, 'Model name is required'),
   description: z.string().default(''),
-  icon: z.string().default(''),
   tags: z.array(z.string()).default([]),
   input_modalities: z
     .array(z.enum(['text', 'image', 'audio', 'video', 'file']))
@@ -274,7 +214,6 @@ export const modelFormSchema = z.object({
   endpoints: z.string().default(''),
   name_rule: z.number().min(0).max(3).default(0),
   status: z.boolean().default(true),
-  sync_official: z.boolean().default(true),
 })
 
 export type ModelFormValues = z.infer<typeof modelFormSchema>
@@ -310,13 +249,3 @@ export type ModelStatus = 0 | 1 // disabled, enabled
  * Quota type
  */
 export type QuotaType = 0 | 1 // usage-based, per-call
-
-/**
- * Sync locale
- */
-export type SyncLocale = 'zh' | 'en' | 'ja'
-
-/**
- * Sync upstream source
- */
-export type SyncSource = 'official' | 'config'

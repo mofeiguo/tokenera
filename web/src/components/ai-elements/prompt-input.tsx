@@ -90,17 +90,76 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { fileMatchesAccept, resolveFileMimeType } from '@/lib/file-accept'
+
+type PromptInputAttachmentFile = FileUIPart & { id: string; file?: File }
+
+function cloneSelectedFile(file: File): File {
+  return new File([file], file.name, {
+    type: file.type,
+    lastModified: file.lastModified,
+  })
+}
+
+function createAttachmentFile(file: File): PromptInputAttachmentFile {
+  const sourceFile = cloneSelectedFile(file)
+  const mediaType = resolveFileMimeType(file) || file.type
+  return {
+    id: nanoid(),
+    type: 'file',
+    url: URL.createObjectURL(sourceFile),
+    mediaType,
+    filename: file.name,
+    file: sourceFile,
+  }
+}
+
+function readFileAsDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+        return
+      }
+      reject(new Error('Failed to read the attached image.'))
+    }
+    reader.onerror = () => {
+      reject(reader.error ?? new Error('Failed to read the attached image.'))
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+function revokeBlobUrl(url: string | undefined) {
+  if (url?.startsWith('blob:')) {
+    URL.revokeObjectURL(url)
+  }
+}
+
+async function toSubmittedFile(
+  attachment: PromptInputAttachmentFile
+): Promise<FileUIPart> {
+  const { id: _id, file, ...item } = attachment
+  if (file) {
+    return {
+      ...item,
+      url: await readFileAsDataUrl(file),
+    }
+  }
+  return item
+}
 
 // ============================================================================
 // Provider Context & Types
 // ============================================================================
 
 export type AttachmentsContext = {
-  files: (FileUIPart & { id: string })[]
+  files: PromptInputAttachmentFile[]
   add: (files: File[] | FileList) => void
   remove: (id: string) => void
   clear: () => void
-  openFileDialog: () => void
+  openFileDialog: (acceptOverride?: string) => void
   fileInputRef: RefObject<HTMLInputElement | null>
 }
 
@@ -116,7 +175,7 @@ export type PromptInputControllerProps = {
   /** INTERNAL: Allows PromptInput to register its file textInput + "open" callback */
   __registerFileInput: (
     ref: RefObject<HTMLInputElement | null>,
-    open: () => void
+    open: (acceptOverride?: string) => void
   ) => void
 }
 
@@ -170,46 +229,39 @@ export function PromptInputProvider({
   const clearInput = useCallback(() => setTextInput(''), [])
 
   // ----- attachments state (global when wrapped)
-  const [attachements, setAttachements] = useState<
-    (FileUIPart & { id: string })[]
-  >([])
+  const [attachements, setAttachements] = useState<PromptInputAttachmentFile[]>(
+    []
+  )
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const openRef = useRef<() => void>(() => {})
 
   const add = useCallback((files: File[] | FileList) => {
-    const incoming = Array.from(files)
+    const incoming = [...files]
     if (incoming.length === 0) return
 
-    setAttachements((prev) =>
-      prev.concat(
-        incoming.map((file) => ({
-          id: nanoid(),
-          type: 'file' as const,
-          url: URL.createObjectURL(file),
-          mediaType: file.type,
-          filename: file.name,
-        }))
-      )
-    )
+    setAttachements((prev) => [
+      ...prev,
+      ...incoming.map((file) => createAttachmentFile(file)),
+    ])
   }, [])
 
   const remove = useCallback((id: string) => {
     setAttachements((prev) => {
       const found = prev.find((f) => f.id === id)
-      if (found?.url) URL.revokeObjectURL(found.url)
+      revokeBlobUrl(found?.url)
       return prev.filter((f) => f.id !== id)
     })
   }, [])
 
   const clear = useCallback(() => {
     setAttachements((prev) => {
-      for (const f of prev) if (f.url) URL.revokeObjectURL(f.url)
+      for (const f of prev) revokeBlobUrl(f.url)
       return []
     })
   }, [])
 
-  const openFileDialog = useCallback(() => {
-    openRef.current?.()
+  const openFileDialog = useCallback((acceptOverride?: string) => {
+    openRef.current?.(acceptOverride)
   }, [])
 
   const attachments = useMemo<AttachmentsContext>(
@@ -274,7 +326,7 @@ export const usePromptInputAttachments = () => {
 }
 
 export type PromptInputAttachmentProps = HTMLAttributes<HTMLDivElement> & {
-  data: FileUIPart & { id: string }
+  data: PromptInputAttachmentFile
   className?: string
 }
 
@@ -376,7 +428,7 @@ export type PromptInputAttachmentsProps = Omit<
   HTMLAttributes<HTMLDivElement>,
   'children'
 > & {
-  children: (attachment: FileUIPart & { id: string }) => ReactNode
+  children: (attachment: PromptInputAttachmentFile) => ReactNode
 }
 
 export function PromptInputAttachments({
@@ -438,8 +490,10 @@ export type PromptInputProps = Omit<
   // Minimal constraints
   maxFiles?: number
   maxFileSize?: number // bytes
+  /** When false, file pickers, drops, and pastes are rejected. Default true. */
+  attachmentsEnabled?: boolean
   onError?: (err: {
-    code: 'max_files' | 'max_file_size' | 'accept'
+    code: 'max_files' | 'max_file_size' | 'accept' | 'read'
     message: string
   }) => void
   onSubmit: (
@@ -462,6 +516,7 @@ export const PromptInput = ({
   syncHiddenInput,
   maxFiles,
   maxFileSize,
+  attachmentsEnabled = true,
   onError,
   onSubmit,
   children,
@@ -486,32 +541,57 @@ export const PromptInput = ({
   }, [])
 
   // ----- Local attachments (only used when no provider)
-  const [items, setItems] = useState<(FileUIPart & { id: string })[]>([])
+  const [items, setItems] = useState<PromptInputAttachmentFile[]>([])
   const files = usingProvider ? controller.attachments.files : items
+  const filesRef = useRef(files)
+  filesRef.current = files
+  const acceptRef = useRef(accept)
+  acceptRef.current = accept
+  const activePickerAcceptRef = useRef<string | undefined>(undefined)
 
-  const openFileDialogLocal = useCallback(() => {
-    inputRef.current?.click()
+  const resolveActiveAccept = useCallback(
+    () => activePickerAcceptRef.current ?? acceptRef.current,
+    []
+  )
+
+  const applyInputAccept = useCallback((nextAccept?: string) => {
+    const input = inputRef.current
+    if (!input) return
+    if (nextAccept && nextAccept.trim() !== '') {
+      input.accept = nextAccept
+      return
+    }
+    input.removeAttribute('accept')
   }, [])
+
+  const openFileDialogLocal = useCallback(
+    (acceptOverride?: string) => {
+      if (!attachmentsEnabled) return
+      activePickerAcceptRef.current = acceptOverride
+      applyInputAccept(acceptOverride ?? acceptRef.current)
+      inputRef.current?.click()
+    },
+    [applyInputAccept, attachmentsEnabled]
+  )
 
   const matchesAccept = useCallback(
     (f: File) => {
-      if (!accept || accept.trim() === '') {
-        return true
+      if (!attachmentsEnabled) {
+        return false
       }
-      if (accept.includes('image/*')) {
-        return f.type.startsWith('image/')
-      }
-      // NOTE: keep simple; expand as needed
-      return true
+      return fileMatchesAccept(f, resolveActiveAccept())
     },
-    [accept]
+    [attachmentsEnabled, resolveActiveAccept]
   )
 
   const addLocal = useCallback(
     (fileList: File[] | FileList) => {
-      const incoming = Array.from(fileList)
+      const incoming = [...fileList]
+      if (incoming.length === 0) {
+        return
+      }
       const accepted = incoming.filter((f) => matchesAccept(f))
-      if (incoming.length && accepted.length === 0) {
+      if (accepted.length === 0) {
         onError?.({
           code: 'accept',
           message: t('No files match the accepted types.'),
@@ -521,7 +601,7 @@ export const PromptInput = ({
       const withinSize = (f: File) =>
         maxFileSize ? f.size <= maxFileSize : true
       const sized = accepted.filter(withinSize)
-      if (accepted.length > 0 && sized.length === 0) {
+      if (sized.length === 0) {
         onError?.({
           code: 'max_file_size',
           message: t('All files exceed the maximum size.'),
@@ -542,17 +622,10 @@ export const PromptInput = ({
             message: t('Too many files. Some were not added.'),
           })
         }
-        const next: (FileUIPart & { id: string })[] = []
-        for (const file of capped) {
-          next.push({
-            id: nanoid(),
-            type: 'file',
-            url: URL.createObjectURL(file),
-            mediaType: file.type,
-            filename: file.name,
-          })
+        if (capped.length === 0) {
+          return prev
         }
-        return prev.concat(next)
+        return [...prev, ...capped.map((file) => createAttachmentFile(file))]
       })
     },
     [matchesAccept, maxFiles, maxFileSize, onError, t]
@@ -573,9 +646,7 @@ export const PromptInput = ({
         : (id: string) =>
             setItems((prev) => {
               const found = prev.find((file) => file.id === id)
-              if (found?.url) {
-                URL.revokeObjectURL(found.url)
-              }
+              revokeBlobUrl(found?.url)
               return prev.filter((file) => file.id !== id)
             }),
     [controller]
@@ -588,9 +659,7 @@ export const PromptInput = ({
         : () =>
             setItems((prev) => {
               for (const file of prev) {
-                if (file.url) {
-                  URL.revokeObjectURL(file.url)
-                }
+                revokeBlobUrl(file.url)
               }
               return []
             }),
@@ -600,7 +669,8 @@ export const PromptInput = ({
   const openFileDialog = useMemo(
     () =>
       controller
-        ? () => controller.attachments.openFileDialog()
+        ? (acceptOverride?: string) =>
+            controller.attachments.openFileDialog(acceptOverride)
         : openFileDialogLocal,
     [controller, openFileDialogLocal]
   )
@@ -608,8 +678,12 @@ export const PromptInput = ({
   // Let provider know about our hidden file input so external menus can call openFileDialog()
   useEffect(() => {
     if (!usingProvider) return
-    controller.__registerFileInput(inputRef, () => inputRef.current?.click())
-  }, [usingProvider, controller])
+    controller.__registerFileInput(inputRef, (acceptOverride) => {
+      activePickerAcceptRef.current = acceptOverride
+      applyInputAccept(acceptOverride ?? acceptRef.current)
+      inputRef.current?.click()
+    })
+  }, [applyInputAccept, usingProvider, controller])
 
   // Note: File input cannot be programmatically set for security reasons
   // The syncHiddenInput prop is no longer functional
@@ -671,30 +745,25 @@ export const PromptInput = ({
 
   useEffect(
     () => () => {
-      if (!usingProvider) {
-        for (const f of files) {
-          if (f.url) URL.revokeObjectURL(f.url)
-        }
+      if (usingProvider) {
+        return
+      }
+      for (const file of filesRef.current) {
+        revokeBlobUrl(file.url)
       }
     },
-    [usingProvider, files]
+    [usingProvider]
   )
 
   const handleChange: ChangeEventHandler<HTMLInputElement> = (event) => {
-    if (event.currentTarget.files) {
-      add(event.currentTarget.files)
+    const selected = event.currentTarget.files
+    if (!selected || selected.length === 0) {
+      return
     }
-  }
-
-  const convertBlobUrlToDataUrl = async (url: string): Promise<string> => {
-    const response = await fetch(url)
-    const blob = await response.blob()
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
+    add(selected)
+    activePickerAcceptRef.current = undefined
+    applyInputAccept(acceptRef.current)
+    event.currentTarget.value = ''
   }
 
   const ctx = useMemo<AttachmentsContext>(
@@ -720,50 +789,34 @@ export const PromptInput = ({
           return (formData.get('message') as string) || ''
         })()
 
-    // Reset form immediately after capturing text to avoid race condition
-    // where user input during async blob conversion would be lost
-    if (!usingProvider) {
-      form.reset()
-    }
+    void Promise.all(files.map((attachment) => toSubmittedFile(attachment)))
+      .then((convertedFiles: FileUIPart[]) => {
+        try {
+          const result = onSubmit({ text, files: convertedFiles }, event)
 
-    // Convert blob URLs to data URLs asynchronously
-    Promise.all(
-      files.map(async ({ id, ...item }) => {
-        if (item.url && item.url.startsWith('blob:')) {
-          return {
-            ...item,
-            url: await convertBlobUrlToDataUrl(item.url),
-          }
-        }
-        return item
-      })
-    ).then((convertedFiles: FileUIPart[]) => {
-      try {
-        const result = onSubmit({ text, files: convertedFiles }, event)
-
-        // Handle both sync and async onSubmit
-        if (result instanceof Promise) {
-          result
-            .then(() => {
+          if (result instanceof Promise) {
+            return result.then(() => {
               clear()
               if (usingProvider) {
                 controller.textInput.clear()
               }
             })
-            .catch(() => {
-              // Don't clear on error - user may want to retry
-            })
-        } else {
-          // Sync function completed without throwing, clear attachments
+          }
+
           clear()
           if (usingProvider) {
             controller.textInput.clear()
           }
+        } catch {
+          // Don't clear on error - user may want to retry
         }
-      } catch (_error) {
-        // Don't clear on error - user may want to retry
-      }
-    })
+      })
+      .catch(() => {
+        onError?.({
+          code: 'read',
+          message: t('Failed to read the attached image.'),
+        })
+      })
   }
 
   // Render with or without local provider

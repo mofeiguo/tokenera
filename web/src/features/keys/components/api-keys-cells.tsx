@@ -28,6 +28,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { Progress } from '@/components/ui/progress'
 import {
   Tooltip,
   TooltipContent,
@@ -35,11 +36,19 @@ import {
 } from '@/components/ui/tooltip'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { formatQuota } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 import type { ApiKey } from '../types'
 import { useApiKeys } from './api-keys-provider'
 
-export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
+function getQuotaProgressColor(percentage: number): string {
+  if (percentage <= 10) return '[&_[data-slot=progress-indicator]]:bg-destructive'
+  if (percentage <= 30) return '[&_[data-slot=progress-indicator]]:bg-warning'
+  return '[&_[data-slot=progress-indicator]]:bg-success'
+}
+
+export function ApiKeyCell(props: { apiKey: ApiKey }) {
+  const apiKey = props.apiKey
   const { t } = useTranslation()
   const {
     resolveRealKey,
@@ -79,19 +88,20 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
     copyIcon = <Loader2 className='size-3.5 animate-spin' />
     copyTooltip = t('Loading...')
   } else if (isCopied) {
-    copyIcon = <Check className='size-3.5 text-green-600' />
+    copyIcon = <Check className='text-success size-3.5' />
     copyTooltip = t('Copied!')
   }
 
   return (
-    <div className='flex max-w-full min-w-0 items-center'>
+    <div className='flex max-w-full min-w-0 items-center gap-0.5'>
       <Popover open={popoverOpen} onOpenChange={handlePopoverOpen}>
         <PopoverTrigger
           render={
             <Button
               variant='ghost'
               size='sm'
-              className='text-muted-foreground h-7 max-w-full min-w-0 justify-start truncate px-0 font-mono text-xs hover:bg-transparent aria-expanded:bg-transparent'
+              aria-label={t('Reveal full API key')}
+              className='h-auto max-w-full min-w-0 justify-start truncate px-0 py-0 font-mono text-[13px] font-normal tracking-[-0.01em] text-[#171717] hover:bg-transparent aria-expanded:bg-transparent dark:text-foreground'
             />
           }
         >
@@ -101,7 +111,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
           className='w-auto max-w-[min(90vw,28rem)]'
           align='start'
         >
-          <div className='space-y-2'>
+          <div className='flex flex-col gap-2'>
             <p className='text-muted-foreground text-xs'>{t('Full API Key')}</p>
             {isLoading ? (
               <div className='flex items-center gap-2 py-2'>
@@ -128,9 +138,10 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
             <Button
               variant='ghost'
               size='icon'
-              className='size-7 shrink-0'
+              className='size-7 shrink-0 text-[#888888] hover:bg-transparent hover:text-[#171717] dark:text-muted-foreground dark:hover:text-foreground'
               onClick={handleCopy}
               disabled={isLoading}
+              aria-label={copyTooltip}
             />
           }
         >
@@ -139,6 +150,81 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
         <TooltipContent>{copyTooltip}</TooltipContent>
       </Tooltip>
     </div>
+  )
+}
+
+type QuotaCellProps = {
+  apiKey: ApiKey
+  className?: string
+  compact?: boolean
+}
+
+export function QuotaCell(props: QuotaCellProps) {
+  const { t } = useTranslation()
+  const apiKey = props.apiKey
+
+  if (props.compact) {
+    if (apiKey.unlimited_quota) {
+      return (
+        <span className={cn('text-[13px] text-[#666666]', props.className)}>
+          {t('Unlimited')}
+        </span>
+      )
+    }
+    return (
+      <span className={cn('text-[13px] text-[#666666] tabular-nums', props.className)}>
+        {formatQuota(apiKey.remain_quota)}
+      </span>
+    )
+  }
+
+  if (apiKey.unlimited_quota) {
+    return <UnlimitedQuotaBadge used={apiKey.used_quota} />
+  }
+
+  const used = apiKey.used_quota
+  const remaining = apiKey.remain_quota
+  const total = used + remaining
+  const percentage = total > 0 ? (remaining / total) * 100 : 0
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <div
+            data-slot='quota-cell'
+            className={cn('flex w-[150px] flex-col gap-1', props.className)}
+          />
+        }
+      >
+        <div className='flex justify-between text-xs'>
+          <span className='font-medium tabular-nums'>
+            {formatQuota(remaining)}
+          </span>
+          <span className='text-muted-foreground tabular-nums'>
+            {formatQuota(total)}
+          </span>
+        </div>
+        <Progress
+          value={percentage}
+          className={cn('h-1.5', getQuotaProgressColor(percentage))}
+        />
+      </TooltipTrigger>
+      <TooltipContent>
+        <div className='flex flex-col gap-1 text-xs'>
+          <div>
+            {t('Used:')} {formatQuota(used)}
+          </div>
+          <div>
+            {t('Remaining:')} {formatQuota(remaining)} (
+            {percentage.toFixed(1)}%)
+          </div>
+          <div>
+            {t('Total:')} {formatQuota(total)}
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 

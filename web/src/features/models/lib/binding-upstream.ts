@@ -19,13 +19,19 @@ For commercial licensing, please contact support@quantumnous.com
 export function resolveBindingUpstreamModel(
   channelModels: string[],
   catalogModelName: string,
-  current?: string
+  current?: string,
+  unavailable: string[] = []
 ): string {
-  if (current && channelModels.includes(current)) {
+  const taken = new Set(unavailable)
+  if (current && channelModels.includes(current) && !taken.has(current)) {
     return current
   }
-  if (catalogModelName && channelModels.includes(catalogModelName)) {
+  if (
+    catalogModelName &&
+    channelModels.includes(catalogModelName) &&
+    !taken.has(catalogModelName)
+  ) {
     return catalogModelName
   }
-  return channelModels[0] ?? ''
+  return channelModels.find((modelName) => !taken.has(modelName)) ?? ''
 }

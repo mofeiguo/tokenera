@@ -21,13 +21,14 @@ For commercial licensing, please contact support@quantumnous.com
 // All label/name values are i18n keys; use t(value) when displaying.
 // ============================================================================
 
+export const CHANNEL_TYPE_OPENAI = 1
 export const CHANNEL_TYPE_BIFROST = 61
 
 export const CHANNEL_TYPES = {
   0: 'Unknown',
+  1: 'OpenAI',
   17: 'Ali',
   35: 'MiniMax',
-  36: 'SunoAPI',
   45: 'VolcEngine',
   50: 'Kling',
   51: 'Jimeng',
@@ -38,7 +39,7 @@ export const CHANNEL_TYPES = {
 } as const
 
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [
-  61, 50, 51, 52, 54, 55, 17, 35, 36, 45,
+  1, 61, 50, 51, 52, 54, 55, 17, 35, 45,
 ]
 
 export const CHANNEL_TYPE_OPTIONS: { value: number; label: string }[] = (() => {
@@ -175,15 +176,6 @@ export const MULTI_KEY_CONFIRM_MESSAGES = {
 } as const
 
 // ============================================================================
-// Auto Ban Options
-// ============================================================================
-
-export const AUTO_BAN_OPTIONS = [
-  { value: 1, label: 'Enabled' },
-  { value: 0, label: 'Disabled' },
-] as const
-
-// ============================================================================
 // Error / Success Messages (i18n keys: use t(ERROR_MESSAGES.xxx) when displaying)
 // ============================================================================
 
@@ -235,11 +227,7 @@ export const DEFAULT_CHANNEL_VALUES = {
   base_url: '',
   key: '',
   models: '',
-  group: 'default',
   status: CHANNEL_STATUS.ENABLED,
-  priority: 0,
-  weight: 0,
-  auto_ban: 1,
   remark: '',
 } as const
 
@@ -248,18 +236,6 @@ export const DEFAULT_CHANNEL_VALUES = {
 // ============================================================================
 
 export const CHANNELS_TABLE_PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
-
-// ============================================================================
-// Sort Options (label values are i18n keys)
-// ============================================================================
-
-export const SORT_OPTIONS = [
-  { value: 'priority', label: 'Priority (Default)' },
-  { value: 'id', label: 'ID' },
-  { value: 'name', label: 'Name' },
-  { value: 'balance', label: 'Balance' },
-  { value: 'response_time', label: 'Response Time' },
-] as const
 
 // ============================================================================
 // Balance Display
@@ -299,8 +275,6 @@ export const FIELD_PLACEHOLDERS = {
   BASE_URL: 'Leave empty to use default',
   KEY: 'API Key (one per line for batch mode)',
   MODELS: 'Comma-separated model names, e.g., gpt-4,gpt-3.5-turbo',
-  GROUP: 'Please Select user groups that can access this channel.',
-  TEST_MODEL: 'Model to use for testing',
   TAG: 'Optional tag for grouping channels',
   REMARK: 'Optional notes about this channel',
   HEADER_OVERRIDE: '{"X-Custom-Header": "value"}',
@@ -314,13 +288,6 @@ export const FIELD_DESCRIPTIONS = {
   KEY: 'API key from the provider',
   MODELS:
     'Upstream models this channel may serve. They are not added to the models table.',
-  GROUP:
-    'User groups that can call this channel. Empty means the default group.',
-  PRIORITY:
-    'Higher priority bindings are selected first for that public model.',
-  WEIGHT: 'Model routing uses binding weights, not this channel field.',
-  TEST_MODEL: 'Model to use when testing channel connectivity',
-  AUTO_BAN: 'Automatically disable channel on repeated failures',
   STATUS_CODE_MAPPING: 'Map response status codes (JSON format)',
   TAG: 'Group channels by tag for batch operations',
   REMARK: 'Internal notes (not shown to users)',
@@ -335,9 +302,10 @@ export const FIELD_DESCRIPTIONS = {
 // Channel Type Specific Configurations
 // ============================================================================
 
-export const MODEL_FETCHABLE_TYPES = new Set([17, 45, 61])
+export const MODEL_FETCHABLE_TYPES = new Set([1, 17, 45, 61])
 
 export const TYPE_TO_KEY_PROMPT: Record<number, string> = {
+  1: 'OpenAI API Key',
   50: 'Format: AccessKey|SecretKey (or just ApiKey if upstream is New API)',
   51: 'Format: Access Key ID|Secret Access Key',
   61: 'Bifrost API Key',

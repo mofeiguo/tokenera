@@ -4,7 +4,6 @@ package model
 // 该方法用于需要最新数据的内部管理 API，
 // 因此会绕过默认的 1 分钟延迟刷新。
 func RefreshPricing() {
-	RefreshCatalogPricingCache()
 	updatePricingLock.Lock()
 	defer updatePricingLock.Unlock()
 

@@ -126,24 +126,14 @@ type Model struct {
 	Capabilities         CatalogStringList `json:"capabilities" gorm:"type:text"`
 	ContextLength        int               `json:"context_length"`
 	MaxOutputTokens      int               `json:"max_output_tokens"`
-	PricingMode          string            `json:"pricing_mode,omitempty" gorm:"type:varchar(32)"`
-	PricingSource        string            `json:"-" gorm:"type:varchar(32)"`
-	ModelPrice           *float64          `json:"model_price,omitempty"`
-	ModelRatio           *float64          `json:"model_ratio,omitempty"`
-	CompletionRatio      *float64          `json:"completion_ratio,omitempty"`
-	CacheRatio           *float64          `json:"cache_ratio,omitempty"`
-	CreateCacheRatio     *float64          `json:"create_cache_ratio,omitempty"`
-	ImageRatio           *float64          `json:"image_ratio,omitempty"`
-	AudioRatio           *float64          `json:"audio_ratio,omitempty"`
-	AudioCompletionRatio *float64          `json:"audio_completion_ratio,omitempty"`
 	Status               int               `json:"status" gorm:"default:1"`
-	SyncOfficial         int               `json:"sync_official" gorm:"default:1"`
+	SyncOfficial         int               `json:"-" gorm:"default:1"`
 	CreatedTime          int64             `json:"created_time" gorm:"bigint"`
 	UpdatedTime          int64             `json:"updated_time" gorm:"bigint"`
 	DeletedAt            gorm.DeletedAt    `json:"-" gorm:"index;uniqueIndex:uk_model_name_delete_at,priority:2"`
 
 	BoundChannels []BoundChannel `json:"bound_channels,omitempty" gorm:"-"`
-	EnableGroups  []string       `json:"enable_groups,omitempty" gorm:"-"`
+	EnableGroups  []string       `json:"-" gorm:"-"`
 	QuotaTypes    []int          `json:"quota_types,omitempty" gorm:"-"`
 	NameRule      int            `json:"name_rule" gorm:"default:0"`
 
@@ -199,7 +189,7 @@ func (mi *Model) Update() error {
 		}
 		// 使用 Select 强制更新所有字段，包括零值
 		if err := tx.Model(&Model{}).Where("id = ?", mi.Id).
-			Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "input_modalities", "output_modalities", "capabilities", "context_length", "max_output_tokens", "pricing_mode", "pricing_source", "model_price", "model_ratio", "completion_ratio", "cache_ratio", "create_cache_ratio", "image_ratio", "audio_ratio", "audio_completion_ratio", "status", "sync_official", "name_rule", "updated_time").
+			Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "input_modalities", "output_modalities", "capabilities", "context_length", "max_output_tokens", "status", "name_rule", "updated_time").
 			Updates(mi).Error; err != nil {
 			return err
 		}
@@ -275,7 +265,7 @@ func GetVendorModelCounts() (map[int64]int64, error) {
 }
 
 func GetAllModels(offset int, limit int) ([]*Model, error) {
-	models, _, err := SearchModels("", "", "", "", offset, limit)
+	models, _, err := SearchModels("", "", "", offset, limit)
 	return models, err
 }
 
@@ -388,7 +378,7 @@ func normalizeLookupValues(values []string) []string {
 	return normalized
 }
 
-func GetPreferredModelOwnerChannelTypes(modelNames []string, groups []string) (map[string]int, error) {
+func GetPreferredModelOwnerChannelTypes(modelNames []string) (map[string]int, error) {
 	result := make(map[string]int)
 	modelNames = normalizeLookupValues(modelNames)
 	if len(modelNames) == 0 {
@@ -398,12 +388,11 @@ func GetPreferredModelOwnerChannelTypes(modelNames []string, groups []string) (m
 	type row struct {
 		Model       string
 		ChannelType int
-		Groups      string
 	}
 	var rows []row
 
 	err := DB.Table("model_bindings").
-		Select("models.model_name as model, channels.type as channel_type, channels."+commonGroupCol+" as groups").
+		Select("models.model_name as model, channels.type as channel_type").
 		Joins("JOIN models ON models.id = model_bindings.model_id").
 		Joins("JOIN channels ON channels.id = model_bindings.channel_id").
 		Where("models.model_name IN ? AND model_bindings.enabled = ? AND model_bindings.deleted = ? AND channels.status = ?", modelNames, true, false, common.ChannelStatusEnabled).
@@ -415,34 +404,16 @@ func GetPreferredModelOwnerChannelTypes(modelNames []string, groups []string) (m
 		return nil, err
 	}
 
-	groups = normalizeLookupValues(groups)
-	groupSet := make(map[string]struct{}, len(groups))
-	for _, group := range groups {
-		groupSet[group] = struct{}{}
-	}
-
 	for _, row := range rows {
 		if _, ok := result[row.Model]; ok {
 			continue
-		}
-		if len(groupSet) > 0 {
-			matched := false
-			for _, group := range servingGroupsFromRaw(row.Groups) {
-				if _, ok := groupSet[group]; ok {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
 		}
 		result[row.Model] = row.ChannelType
 	}
 	return result, nil
 }
 
-func SearchModels(keyword string, vendor string, status string, syncOfficial string, offset int, limit int) ([]*Model, int64, error) {
+func SearchModels(keyword string, vendor string, status string, offset int, limit int) ([]*Model, int64, error) {
 	var models []*Model
 	db := DB.Model(&Model{})
 	if keyword != "" {
@@ -458,9 +429,6 @@ func SearchModels(keyword string, vendor string, status string, syncOfficial str
 	}
 	if statusValue, ok := parseModelStatusFilter(status); ok {
 		db = db.Where("models.status = ?", statusValue)
-	}
-	if syncValue, ok := parseModelSyncFilter(syncOfficial); ok {
-		db = db.Where("models.sync_official = ?", syncValue)
 	}
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
@@ -484,25 +452,6 @@ func parseModelStatusFilter(status string) (value int, ok bool) {
 		return 0, true
 	default:
 		n, err := strconv.Atoi(status)
-		if err != nil {
-			return 0, false
-		}
-		return n, true
-	}
-}
-
-// parseModelSyncFilter maps UI/API sync values to the models.sync_official column.
-// Returns ok=false when no sync filter should be applied.
-func parseModelSyncFilter(syncOfficial string) (value int, ok bool) {
-	switch strings.ToLower(strings.TrimSpace(syncOfficial)) {
-	case "", "all":
-		return 0, false
-	case "yes", "1":
-		return 1, true
-	case "no", "0":
-		return 0, true
-	default:
-		n, err := strconv.Atoi(syncOfficial)
 		if err != nil {
 			return 0, false
 		}

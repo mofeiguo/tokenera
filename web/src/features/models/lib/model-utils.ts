@@ -188,10 +188,3 @@ export function validateEndpointsJSON(endpoints: string): boolean {
 export function isModelEnabled(model: Model): boolean {
   return model.status === 1
 }
-
-/**
- * Check if model syncs with official
- */
-export function isModelSyncOfficial(model: Model): boolean {
-  return model.sync_official === 1
-}

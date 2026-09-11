@@ -7,9 +7,14 @@ const (
 	ContextKeyPromptTokens    ContextKey = "prompt_tokens"
 	ContextKeyEstimatedTokens ContextKey = "estimated_tokens"
 
-	ContextKeyOriginalModel    ContextKey = "original_model"
-	ContextKeyUpstreamModel    ContextKey = "upstream_model"
-	ContextKeyRequestStartTime ContextKey = "request_start_time"
+	ContextKeyOriginalModel ContextKey = "original_model"
+	ContextKeyUpstreamModel ContextKey = "upstream_model"
+	// ContextKeySelectedBindingUpstream is the upstream model from the binding
+	// that was chosen for this request. When the same channel is bound more than
+	// once, GetBindingUpstreamModel(channelId) is ambiguous, so selection must
+	// pass the chosen binding's upstream explicitly.
+	ContextKeySelectedBindingUpstream ContextKey = "selected_binding_upstream"
+	ContextKeyRequestStartTime        ContextKey = "request_start_time"
 
 	/* token related keys */
 	ContextKeyTokenUnlimited         ContextKey = "token_unlimited_quota"
@@ -32,7 +37,6 @@ const (
 	ContextKeyChannelOtherSetting      ContextKey = "channel_other_setting"
 	ContextKeyChannelHeaderOverride    ContextKey = "header_override"
 	ContextKeyChannelOrganization      ContextKey = "channel_organization"
-	ContextKeyChannelAutoBan           ContextKey = "auto_ban"
 	ContextKeyChannelStatusCodeMapping ContextKey = "status_code_mapping"
 	ContextKeyChannelIsMultiKey        ContextKey = "channel_is_multi_key"
 	ContextKeyChannelMultiKeyIndex     ContextKey = "channel_multi_key_index"

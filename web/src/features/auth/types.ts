@@ -38,7 +38,6 @@ export interface RegisterPayload {
   password: string
   email?: string
   verification_code?: string
-  aff_code?: string
   turnstile?: string
 }
 
@@ -211,4 +210,5 @@ export interface CustomOAuthProviderInfo {
 
 export interface AuthFormProps extends React.HTMLAttributes<HTMLFormElement> {
   redirectTo?: string
+  variant?: 'default' | 'zenmux'
 }

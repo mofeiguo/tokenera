@@ -136,24 +136,6 @@ func getLocalPricingSyncData() map[string]any {
 	data["image_ratio"] = ratio_setting.GetImageRatioCopy()
 	data["audio_ratio"] = ratio_setting.GetAudioRatioCopy()
 	data["audio_completion_ratio"] = ratio_setting.GetAudioCompletionRatioCopy()
-	modelNames, overlay, err := model.GetCatalogPricingSyncOverlay()
-	if err != nil {
-		common.SysError("failed to build catalog pricing sync data: " + err.Error())
-		return data
-	}
-	for field, catalogValues := range overlay {
-		values := valueMap(data[field])
-		if values == nil {
-			values = make(map[string]any)
-		}
-		for _, modelName := range modelNames {
-			delete(values, modelName)
-		}
-		for modelName, value := range catalogValues {
-			values[modelName] = value
-		}
-		data[field] = values
-	}
 	return data
 }
 
@@ -575,36 +557,10 @@ func buildDifferences(localData map[string]any, successfulChannels []struct {
 
 	confidenceMap := make(map[string]map[string]bool)
 
-	// 预处理阶段：检查pricing接口的可信度
 	for _, channel := range successfulChannels {
 		confidenceMap[channel.name] = make(map[string]bool)
-
-		modelRatios := valueMap(channel.data["model_ratio"])
-		completionRatios := valueMap(channel.data["completion_ratio"])
-
-		if len(modelRatios) > 0 && len(completionRatios) > 0 {
-			// 遍历所有模型，检查是否满足不可信条件
-			for modelName := range allModels {
-				// 默认为可信
-				confidenceMap[channel.name][modelName] = true
-
-				// 检查是否满足不可信条件：model_ratio为37.5且completion_ratio为1
-				if modelRatioVal, ok := modelRatios[modelName]; ok {
-					if completionRatioVal, ok := completionRatios[modelName]; ok {
-						// 转换为float64进行比较
-						modelRatioFloat, modelRatioOK := asFloat64(modelRatioVal)
-						completionRatioFloat, completionRatioOK := asFloat64(completionRatioVal)
-						if modelRatioOK && completionRatioOK && nearlyEqual(modelRatioFloat, 37.5) && nearlyEqual(completionRatioFloat, 1.0) {
-							confidenceMap[channel.name][modelName] = false
-						}
-					}
-				}
-			}
-		} else {
-			// 如果不是从pricing接口获取的数据，则全部标记为可信
-			for modelName := range allModels {
-				confidenceMap[channel.name][modelName] = true
-			}
+		for modelName := range allModels {
+			confidenceMap[channel.name][modelName] = true
 		}
 	}
 

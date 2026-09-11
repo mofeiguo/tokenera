@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { MESSAGE_ROLES, MESSAGE_STATUS } from '../../constants'
 import type { Message } from '../../types'
+import { hasMessageImages } from './image-utils'
 import { parseThinkTags } from './message-reasoning-utils'
 
 type MessageContentStateBase = {
@@ -60,7 +61,7 @@ function shouldShowMessageContent(
 ): boolean {
   return (
     (message.from === MESSAGE_ROLES.USER || !message.isReasoningStreaming) &&
-    versionContent.length > 0
+    (versionContent.length > 0 || hasMessageImages(message))
   )
 }
 

@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Boxes } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -24,6 +23,8 @@ import {
   SideDrawerSection,
   SideDrawerSectionHeader,
 } from '@/components/drawer-layout'
+
+import { ChannelIconModels } from '../../channel-icons'
 
 type ChannelModelsSectionProps = {
   children: ReactNode
@@ -35,9 +36,9 @@ export function ChannelModelsSection(props: ChannelModelsSectionProps) {
   return (
     <SideDrawerSection>
       <SideDrawerSectionHeader
-        title={t('Models & Groups')}
-        description={t('Published models, groups, and model remapping rules.')}
-        icon={<Boxes className='h-4 w-4' aria-hidden='true' />}
+        title={t('Models')}
+        description={t('Published models and model remapping rules.')}
+        icon={<ChannelIconModels aria-hidden='true' />}
         iconTone='chart-4'
       />
       {props.children}

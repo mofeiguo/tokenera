@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { IconGithub } from '@/assets/brand-icons'
 import { Dialog } from '@/components/dialog'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { NotificationPopover } from '@/components/notification-popover'
@@ -29,13 +30,21 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
-import { Link, useNavigate, useRouterState } from '@/lib/router'
+import { Link, useNavigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
+import { useSidebar } from '@/components/ui/sidebar'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { defaultTopNavLinks } from '../config/top-nav.config'
 import type { TopNavLink } from '../types'
-import { HeaderLogo } from './header-logo'
+import { PublicBrandMark } from './public-brand-mark'
+import { PublicHeaderMenuIcon } from './public-header-menu-icon'
+import { PublicHeaderMobileNav, PublicHeaderNav } from './public-header-nav'
+import { PublicHeaderSearch } from './public-header-search'
+import { SystemBrand } from './system-brand'
+import { PUBLIC_BRAND_NAME } from './token-era-logo'
+
+const DEFAULT_GITHUB_URL = 'https://github.com/QuantumNous/new-api'
 
 const AUTH_PROMPT_SECONDS = 5
 const MOBILE_MENU_ID = 'public-mobile-navigation'
@@ -46,6 +55,8 @@ type AuthPromptTarget = {
 }
 
 export interface PublicHeaderProps {
+  /** Public pages use full brand + mobile nav; platform spans a complete top bar. */
+  variant?: 'public' | 'platform'
   navLinks?: TopNavLink[]
   mobileLinks?: TopNavLink[]
   navContent?: React.ReactNode
@@ -58,11 +69,31 @@ export interface PublicHeaderProps {
   showNavigation?: boolean
   showAuthButtons?: boolean
   showNotifications?: boolean
+  showSearch?: boolean
+  showGithubLink?: boolean
+  githubUrl?: string
   className?: string
+}
+
+function PlatformSidebarMenuButton() {
+  const { toggleSidebar } = useSidebar()
+  const { t } = useTranslation()
+
+  return (
+    <button
+      type='button'
+      aria-label={t('Toggle sidebar')}
+      className='flex size-6 items-center justify-center border-0 bg-transparent p-0'
+      onClick={toggleSidebar}
+    >
+      <PublicHeaderMenuIcon className='text-foreground size-6' />
+    </button>
+  )
 }
 
 export function PublicHeader(props: PublicHeaderProps) {
   const {
+    variant = 'public',
     navLinks = defaultTopNavLinks,
     showLanguageSwitcher = true,
     logo: customLogo,
@@ -70,11 +101,15 @@ export function PublicHeader(props: PublicHeaderProps) {
     homeUrl = '/',
     showAuthButtons = true,
     showNotifications = true,
+    showSearch = true,
+    showGithubLink = true,
+    githubUrl = DEFAULT_GITHUB_URL,
   } = props
+
+  const isPlatform = variant === 'platform'
 
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [authPromptTarget, setAuthPromptTarget] =
     useState<AuthPromptTarget | null>(null)
@@ -83,28 +118,13 @@ export function PublicHeader(props: PublicHeaderProps) {
   const mobileMenuRef = useRef<HTMLDivElement>(null)
   const mobileTriggerRef = useRef<HTMLButtonElement>(null)
   const { auth } = useAuthStore()
-  const {
-    systemName,
-    logo: systemLogo,
-    loading,
-    logoLoaded,
-  } = useSystemConfig()
+  const { loading } = useSystemConfig()
   const dynamicLinks = useTopNavLinks()
   const notifications = useNotifications()
-  const routerState = useRouterState()
-  const pathname = routerState.location.pathname
 
   const user = auth.user
   const isAuthenticated = !!user
-  const displaySiteName = customSiteName || systemName
   const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20)
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? 'hidden' : ''
@@ -186,7 +206,7 @@ export function PublicHeader(props: PublicHeaderProps) {
         return
       }
 
-      if (link.requiresAuth) {
+      if (link.requiresAuth && !isPlatform && !isAuthenticated) {
         event.preventDefault()
         if (closeMobile) {
           setMobileOpen(false)
@@ -203,283 +223,207 @@ export function PublicHeader(props: PublicHeaderProps) {
         setMobileOpen(false)
       }
     },
-    [t]
+    [isAuthenticated, isPlatform, t]
   )
 
-  let logoContent: React.ReactNode = (
-    <HeaderLogo src={systemLogo} loading={loading} logoLoaded={logoLoaded} />
+  const brandContent = (
+    <PublicBrandMark logo={customLogo} siteName={customSiteName} />
   )
-  if (loading) {
-    logoContent = <Skeleton className='size-full rounded-lg' />
-  } else if (customLogo) {
-    logoContent = customLogo
-  }
 
   let authContent: React.ReactNode = (
-    <div className='flex items-center gap-3'>
-      <Link
-        to='/sign-in'
-        className='text-muted-foreground hover:text-foreground hidden text-sm whitespace-nowrap transition-colors sm:inline'
-      >
-        {t('Sign in')}
-      </Link>
-      <Button
-        size='sm'
-        className='h-8 px-3.5 font-medium'
-        render={<Link to='/sign-up' />}
-      >
-        {t('Get Started')}
-      </Button>
-    </div>
+    <Link
+      to='/sign-in'
+      className='flex h-[34px] min-w-[74px] items-center justify-center rounded-lg bg-black px-4 text-sm leading-none font-bold text-white transition-opacity hover:opacity-90'
+    >
+      {t('Sign in')}
+    </Link>
   )
   if (loading) {
-    authContent = <Skeleton className='h-8 w-28 rounded-md' />
+    authContent = <Skeleton className='h-[34px] w-[74px] rounded-lg' />
   } else if (isAuthenticated) {
-    authContent = (
-      <Button
-        size='sm'
-        className='h-8 px-3.5 font-medium'
-        render={<Link to='/dashboard' />}
-      >
-        {t('Go to Dashboard')}
-      </Button>
-    )
-  }
-
-  let mobileAuthHref = '/sign-up'
-  let mobileAuthLabel = t('Get Started')
-  if (isAuthenticated) {
-    mobileAuthHref = '/dashboard'
-    mobileAuthLabel = t('Go to Dashboard')
+    authContent = <ProfileDropdown variant='toolbar' />
   }
 
   return (
     <>
       <header
         className={cn(
-          'fixed inset-x-0 top-0 z-50 border-b transition-colors duration-300',
-          scrolled
-            ? 'border-border/60 bg-background/80 backdrop-blur-lg'
-            : 'border-border bg-background'
+          'z-50 w-full shrink-0 border-b border-border/80',
+          isPlatform
+            ? 'bg-background sticky top-0'
+            : 'bg-background/95 supports-[backdrop-filter]:bg-background/80 fixed inset-x-0 top-0 backdrop-blur',
+          props.className
         )}
       >
-        <nav className='mx-auto flex h-16 max-w-[1400px] items-center gap-4 px-4 sm:px-6'>
-          <Link
-            to={homeUrl}
-            className='inline-flex shrink-0 items-center gap-2 text-xl leading-none font-bold tracking-tight'
-          >
-            <span className='inline-flex size-[1em] shrink-0 items-center justify-center overflow-hidden rounded-[0.2em]'>
-              {logoContent}
-            </span>
-            <span className='whitespace-nowrap'>
-              {loading ? (
-                <Skeleton className='h-[1em] w-28' />
+        <nav className='flex h-14 w-full items-center justify-between px-4 md:px-5'>
+          <div className='relative z-20 flex flex-row items-center gap-3'>
+            <div className='flex md:hidden'>
+              {isPlatform ? (
+                <PlatformSidebarMenuButton />
               ) : (
-                displaySiteName
-              )}
-            </span>
-          </Link>
-
-          <div className='hidden min-w-0 flex-1 items-center gap-1 sm:flex'>
-            {links.map((link) => {
-              const isActive = pathname === link.href
-              const linkClassName = cn(
-                'block px-3 py-2 text-sm whitespace-nowrap transition-colors duration-150',
-                isActive
-                  ? 'text-foreground'
-                  : 'text-muted-foreground hover:text-accent-foreground',
-                link.disabled && 'pointer-events-none opacity-50'
-              )
-              if (link.external) {
-                return (
-                  <a
-                    key={`${link.href}-${link.title}`}
-                    href={link.href}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    aria-disabled={link.disabled}
-                    tabIndex={link.disabled ? -1 : undefined}
-                    onClick={(event) => handleNavLinkClick(event, link)}
-                    className={linkClassName}
-                  >
-                    {t(link.title)}
-                  </a>
-                )
-              }
-              return (
-                <Link
-                  key={`${link.href}-${link.title}`}
-                  to={link.href}
-                  aria-current={isActive ? 'page' : undefined}
-                  disabled={link.disabled}
-                  onClick={(event) => handleNavLinkClick(event, link)}
-                  className={linkClassName}
+                <button
+                  ref={mobileTriggerRef}
+                  type='button'
+                  aria-label={t('Open navigation')}
+                  aria-expanded={mobileOpen}
+                  aria-controls={MOBILE_MENU_ID}
+                  className='flex size-6 items-center justify-center border-0 bg-transparent p-0'
+                  onClick={() => setMobileOpen((value) => !value)}
                 >
-                  {t(link.title)}
-                </Link>
-              )
-            })}
-          </div>
-
-          <div className='ms-auto hidden items-center gap-3 sm:flex'>
-            {showLanguageSwitcher ? <LanguageSwitcher /> : null}
-            <ThemeSwitch />
-            {showNotifications ? (
-              <NotificationPopover
-                open={notifications.popoverOpen}
-                onOpenChange={notifications.setPopoverOpen}
-                unreadCount={notifications.unreadCount}
-                activeTab={notifications.activeTab}
-                onTabChange={notifications.setActiveTab}
-                notice={notifications.notice}
-                announcements={notifications.announcements}
-                loading={notifications.loading}
+                  <PublicHeaderMenuIcon className='text-foreground size-6' />
+                </button>
+              )}
+            </div>
+            {isPlatform ? (
+              <SystemBrand
+                variant='inline'
+                defaultName={PUBLIC_BRAND_NAME}
+                to={homeUrl}
               />
-            ) : null}
-            {showAuthButtons ? authContent : null}
+            ) : (
+              <Link to={homeUrl} className='inline-flex shrink-0 items-center'>
+                {brandContent}
+              </Link>
+            )}
           </div>
 
-          {/* Mobile: compact actions + hamburger */}
-          <div className='ms-auto flex items-center gap-2 sm:hidden'>
-            <ThemeSwitch variant='menu' />
-            {showAuthButtons && !loading && isAuthenticated && (
-              <ProfileDropdown />
-            )}
-            <Button
-              ref={mobileTriggerRef}
-              type='button'
-              variant='ghost'
-              size='icon'
-              className='size-9'
-              onClick={() => setMobileOpen((v) => !v)}
-              aria-label={t('Toggle navigation menu')}
-              aria-expanded={mobileOpen}
-              aria-controls={MOBILE_MENU_ID}
-            >
-              <div className='relative size-4'>
-                <span
-                  className={cn(
-                    'absolute inset-x-0 block h-[1.5px] origin-center rounded-full bg-current transition-all duration-300',
-                    mobileOpen ? 'top-[7px] rotate-45' : 'top-[3px]'
-                  )}
-                />
-                <span
-                  className={cn(
-                    'absolute inset-x-0 top-[7px] block h-[1.5px] rounded-full bg-current transition-all duration-300',
-                    mobileOpen ? 'scale-x-0 opacity-0' : 'opacity-100'
-                  )}
-                />
-                <span
-                  className={cn(
-                    'absolute inset-x-0 block h-[1.5px] origin-center rounded-full bg-current transition-all duration-300',
-                    mobileOpen ? 'top-[7px] -rotate-45' : 'top-[11px]'
-                  )}
+          <div className='relative z-20 mr-[18px] ml-auto flex items-center gap-4'>
+            <div className='hidden pr-9 md:flex'>
+              <PublicHeaderNav links={links} onLinkClick={handleNavLinkClick} />
+            </div>
+
+            {showSearch ? <PublicHeaderSearch /> : null}
+
+            {showGithubLink ? (
+              <a
+                href={githubUrl}
+                target='_blank'
+                rel='noopener noreferrer'
+                aria-label={t('GitHub')}
+                className='text-muted-foreground hover:text-foreground hover:bg-muted/80 dark:hover:bg-muted hidden size-8 items-center justify-center rounded-lg transition-colors md:flex'
+              >
+                <IconGithub className='size-[18px]' aria-hidden />
+              </a>
+            ) : null}
+
+            <div className='hidden md:flex'>
+              <ThemeSwitch variant='toolbar' />
+            </div>
+
+            {showLanguageSwitcher ? (
+              <div className='hidden md:flex'>
+                <LanguageSwitcher icon='globe' />
+              </div>
+            ) : null}
+
+            {showNotifications && isAuthenticated ? (
+              <div className='hidden md:flex'>
+                <NotificationPopover
+                  open={notifications.popoverOpen}
+                  onOpenChange={notifications.setPopoverOpen}
+                  unreadCount={notifications.unreadCount}
+                  activeTab={notifications.activeTab}
+                  onTabChange={notifications.setActiveTab}
+                  notice={notifications.notice}
+                  announcements={notifications.announcements}
+                  loading={notifications.loading}
                 />
               </div>
-            </Button>
+            ) : null}
+
+            <div className='hidden md:flex'>{showAuthButtons ? authContent : null}</div>
+
+            <div className='flex items-center gap-2 md:hidden'>
+              {showAuthButtons && !loading && isAuthenticated && (
+                <ProfileDropdown variant='toolbar' />
+              )}
+              {!loading && !isAuthenticated && showAuthButtons ? (
+                <Link
+                  to='/sign-in'
+                  className='flex h-[34px] min-w-[74px] items-center justify-center rounded-lg bg-black px-3 text-sm font-bold text-white'
+                >
+                  {t('Sign in')}
+                </Link>
+              ) : null}
+            </div>
           </div>
         </nav>
       </header>
 
-      {/* Mobile full-screen overlay */}
-      <div
-        ref={mobileMenuRef}
-        id={MOBILE_MENU_ID}
-        role='dialog'
-        aria-modal='true'
-        aria-label={t('Toggle navigation menu')}
-        aria-hidden={!mobileOpen}
-        inert={!mobileOpen}
-        className={cn(
-          'bg-background fixed inset-0 z-40 transition-all duration-300 sm:pointer-events-none sm:hidden',
-          mobileOpen
-            ? 'pointer-events-auto opacity-100'
-            : 'pointer-events-none opacity-0'
-        )}
-      >
-        <div className='flex h-full flex-col justify-between px-8 pt-20 pb-10'>
-          <nav className='flex flex-col gap-1'>
-            {links.map((link, i) => {
-              const isActive = pathname === link.href
-              const linkClassName = cn(
-                'flex items-center gap-3 py-3 text-base font-medium tracking-tight transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
+      {!isPlatform ? (
+        <div
+          ref={mobileMenuRef}
+          id={MOBILE_MENU_ID}
+          role='dialog'
+          aria-modal='true'
+          aria-label={t('Toggle navigation menu')}
+          aria-hidden={!mobileOpen}
+          inert={!mobileOpen}
+          className={cn(
+            'bg-background fixed inset-0 z-40 transition-all duration-300 md:pointer-events-none md:hidden',
+            mobileOpen
+              ? 'pointer-events-auto opacity-100'
+              : 'pointer-events-none opacity-0'
+          )}
+        >
+          <div className='flex h-full flex-col justify-between px-8 pt-20 pb-10'>
+            <PublicHeaderMobileNav
+              links={links}
+              onLinkClick={handleNavLinkClick}
+              menuItemClassName={cn(
                 mobileOpen
                   ? 'translate-y-0 opacity-100'
-                  : 'translate-y-4 opacity-0',
-                isActive ? 'text-foreground' : 'text-muted-foreground',
-                link.disabled && 'pointer-events-none opacity-50'
-              )
-              const transitionStyle = {
-                transitionDelay: mobileOpen ? `${100 + i * 50}ms` : '0ms',
-              }
-              if (link.external) {
-                return (
-                  <a
-                    key={`${link.href}-${link.title}`}
-                    href={link.href}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    aria-disabled={link.disabled}
-                    tabIndex={link.disabled ? -1 : undefined}
-                    onClick={(event) => handleNavLinkClick(event, link, true)}
-                    className={linkClassName}
-                    style={transitionStyle}
-                  >
-                    {t(link.title)}
-                  </a>
-                )
-              }
-              return (
-                <Link
-                  key={`${link.href}-${link.title}`}
-                  to={link.href}
-                  aria-current={isActive ? 'page' : undefined}
-                  disabled={link.disabled}
-                  onClick={(event) => handleNavLinkClick(event, link, true)}
-                  className={linkClassName}
-                  style={transitionStyle}
-                >
-                  {t(link.title)}
-                </Link>
-              )
-            })}
-          </nav>
+                  : 'translate-y-4 opacity-0'
+              )}
+            />
 
-          <div
-            className={cn(
-              'flex flex-col gap-3 transition-all duration-500',
-              mobileOpen
-                ? 'translate-y-0 opacity-100'
-                : 'translate-y-4 opacity-0'
-            )}
-            style={{ transitionDelay: mobileOpen ? '250ms' : '0ms' }}
-          >
-            <div className='border-border flex items-center justify-between border-b pb-3'>
-              <span className='text-muted-foreground text-sm'>
-                {t('Theme')}
-              </span>
-              <ThemeSwitch />
-            </div>
-            {showLanguageSwitcher && (
+            <div
+              className={cn(
+                'flex flex-col gap-3 transition-all duration-500',
+                mobileOpen
+                  ? 'translate-y-0 opacity-100'
+                  : 'translate-y-4 opacity-0'
+              )}
+              style={{ transitionDelay: mobileOpen ? '250ms' : '0ms' }}
+            >
               <div className='border-border flex items-center justify-between border-b pb-3'>
                 <span className='text-muted-foreground text-sm'>
-                  {t('Change language')}
+                  {t('Theme')}
                 </span>
-                <LanguageSwitcher />
+                <ThemeSwitch />
               </div>
-            )}
-            {showAuthButtons ? (
-              <Link
-                to={mobileAuthHref}
-                onClick={() => setMobileOpen(false)}
-                className='bg-foreground text-background inline-flex h-10 items-center justify-center rounded-lg text-sm font-medium transition-opacity hover:opacity-90 active:opacity-80'
-              >
-                {mobileAuthLabel}
-              </Link>
-            ) : null}
+              {showLanguageSwitcher && (
+                <div className='border-border flex items-center justify-between border-b pb-3'>
+                  <span className='text-muted-foreground text-sm'>
+                    {t('Change language')}
+                  </span>
+                  <LanguageSwitcher />
+                </div>
+              )}
+              {showGithubLink ? (
+                <a
+                  href={githubUrl}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='text-muted-foreground hover:text-foreground inline-flex h-10 items-center gap-2 text-sm transition-colors'
+                >
+                  <IconGithub className='size-4' aria-hidden />
+                  {t('GitHub')}
+                </a>
+              ) : null}
+              {showAuthButtons && !isAuthenticated ? (
+                <Link
+                  to='/sign-in'
+                  onClick={() => setMobileOpen(false)}
+                  className='inline-flex h-[34px] min-w-[74px] items-center justify-center rounded-lg bg-black text-sm font-bold text-white transition-opacity hover:opacity-90'
+                >
+                  {t('Sign in')}
+                </Link>
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       <Dialog
         open={!!authPromptTarget}

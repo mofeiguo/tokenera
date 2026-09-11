@@ -77,16 +77,12 @@ export interface PricingToolbarProps {
   quotaTypeFilter: string
   endpointTypeFilter: string
   vendorFilter: string
-  groupFilter: string
   tagFilter: string
   onQuotaTypeChange: (value: string) => void
   onEndpointTypeChange: (value: string) => void
   onVendorChange: (value: string) => void
-  onGroupChange: (value: string) => void
   onTagChange: (value: string) => void
   vendors: PricingVendor[]
-  groups: string[]
-  groupRatios?: Record<string, number>
   tags: string[]
   models: PricingModel[]
   hasActiveFilters: boolean
@@ -160,13 +156,6 @@ export function PricingToolbar(props: PricingToolbarProps) {
               key: 'vendor',
               label: `${t('Vendor')}: ${props.vendorFilter}`,
               clear: () => props.onVendorChange(FILTER_ALL),
-            }
-          : null,
-        props.groupFilter !== FILTER_ALL
-          ? {
-              key: 'group',
-              label: `${t('Group')}: ${props.groupFilter}`,
-              clear: () => props.onGroupChange(FILTER_ALL),
             }
           : null,
         props.tagFilter !== FILTER_ALL
@@ -363,7 +352,7 @@ export function PricingToolbar(props: PricingToolbarProps) {
           <SheetHeader className='border-border/70 border-b px-5 py-4 text-left'>
             <SheetTitle>{t('Filter')}</SheetTitle>
             <SheetDescription>
-              {t('Filter models by provider, group, type, endpoint, and tags.')}
+              {t('Filter models by provider, type, endpoint, and tags.')}
             </SheetDescription>
           </SheetHeader>
           <div className='hover-scrollbar overflow-y-auto px-4 py-4'>
@@ -371,16 +360,12 @@ export function PricingToolbar(props: PricingToolbarProps) {
               quotaTypeFilter={props.quotaTypeFilter}
               endpointTypeFilter={props.endpointTypeFilter}
               vendorFilter={props.vendorFilter}
-              groupFilter={props.groupFilter}
               tagFilter={props.tagFilter}
               onQuotaTypeChange={props.onQuotaTypeChange}
               onEndpointTypeChange={props.onEndpointTypeChange}
               onVendorChange={props.onVendorChange}
-              onGroupChange={props.onGroupChange}
               onTagChange={props.onTagChange}
               vendors={props.vendors}
-              groups={props.groups}
-              groupRatios={props.groupRatios}
               tags={props.tags}
               models={props.models}
               hasActiveFilters={props.hasActiveFilters}

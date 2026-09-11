@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Link2, Settings } from 'lucide-react'
+import { Languages, Link2, Settings } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -27,6 +27,7 @@ import { TitledCard } from '@/components/ui/titled-card'
 
 import type { UserProfile } from '../types'
 import { AccountBindingsTab } from './tabs/account-bindings-tab'
+import { LanguagePreferencesTab } from './tabs/language-preferences-tab'
 import { NotificationTab } from './tabs/notification-tab'
 
 // ============================================================================
@@ -67,30 +68,36 @@ export function ProfileSettingsCard({
   return (
     <TitledCard
       title={t('Settings')}
-      description={t('Configure your account preferences and integrations')}
-      icon={<Settings className='h-4 w-4' />}
-      iconTone='info'
       disableHoverEffect
+      titleClassName='text-[15px] font-semibold tracking-tight'
     >
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className='grid w-full grid-cols-2 items-stretch gap-1 rounded-xl p-1 group-data-horizontal/tabs:h-10'>
+        <TabsList className='grid w-full grid-cols-3 items-stretch gap-1 rounded-xl p-1 group-data-horizontal/tabs:h-10'>
           <TabsTrigger
             value='bindings'
-            className='h-full gap-2 rounded-lg px-3 py-0 leading-none'
+            className='h-full gap-1.5 rounded-lg px-2 py-0 leading-none sm:gap-2 sm:px-3'
           >
-            <Link2 className='h-4 w-4' />
+            <Link2 className='h-4 w-4 shrink-0' />
             <span className='hidden sm:inline'>{t('Account Bindings')}</span>
             <span className='sm:hidden'>{t('Bindings')}</span>
           </TabsTrigger>
           <TabsTrigger
             value='settings'
-            className='h-full gap-2 rounded-lg px-3 py-0 leading-none'
+            className='h-full gap-1.5 rounded-lg px-2 py-0 leading-none sm:gap-2 sm:px-3'
           >
-            <Settings className='h-4 w-4' />
+            <Settings className='h-4 w-4 shrink-0' />
             <span className='hidden sm:inline'>
               {t('Settings & Preferences')}
             </span>
             <span className='sm:hidden'>{t('Settings')}</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value='language'
+            className='h-full gap-1.5 rounded-lg px-2 py-0 leading-none sm:gap-2 sm:px-3'
+          >
+            <Languages className='h-4 w-4 shrink-0' />
+            <span className='hidden sm:inline'>{t('Language Preferences')}</span>
+            <span className='truncate sm:hidden'>{t('Language Preferences')}</span>
           </TabsTrigger>
         </TabsList>
 
@@ -100,6 +107,13 @@ export function ProfileSettingsCard({
 
         <TabsContent value='settings' className='mt-4 sm:mt-6'>
           <NotificationTab profile={profile} onUpdate={onProfileUpdate} />
+        </TabsContent>
+
+        <TabsContent value='language' className='mt-4 sm:mt-6'>
+          <LanguagePreferencesTab
+            profile={profile}
+            onProfileUpdate={onProfileUpdate}
+          />
         </TabsContent>
       </Tabs>
     </TitledCard>

@@ -24,7 +24,8 @@ import useDialogState from '@/hooks/use-dialog'
 
 import { fetchTokenKey, fetchTokenKeysBatch } from '../api'
 import { ERROR_MESSAGES } from '../constants'
-import { type ApiKey, type ApiKeysDialogType } from '../types'
+import { formatApiKey } from '../lib'
+import type { ApiKey, ApiKeysDialogType, CreatedApiKey } from '../types'
 
 type ApiKeysContextType = {
   open: ApiKeysDialogType | null
@@ -33,14 +34,14 @@ type ApiKeysContextType = {
   setCurrentRow: React.Dispatch<React.SetStateAction<ApiKey | null>>
   refreshTrigger: number
   triggerRefresh: () => void
-  resolvedKey: string
-  setResolvedKey: React.Dispatch<React.SetStateAction<string>>
   resolveRealKey: (id: number) => Promise<string | null>
   resolveRealKeysBatch: (ids: number[]) => Promise<Record<number, string>>
   resolvedKeys: Record<number, string>
   loadingKeys: Record<number, boolean>
   copiedKeyId: number | null
   markKeyCopied: (id: number) => void
+  createdKeys: CreatedApiKey[]
+  setCreatedKeys: React.Dispatch<React.SetStateAction<CreatedApiKey[]>>
 }
 
 const ApiKeysContext = React.createContext<ApiKeysContextType | null>(null)
@@ -50,12 +51,11 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useDialogState<ApiKeysDialogType>(null)
   const [currentRow, setCurrentRow] = useState<ApiKey | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const [resolvedKey, setResolvedKey] = useState('')
-
   const [resolvedKeys, setResolvedKeys] = useState<Record<number, string>>({})
   const [loadingKeys, setLoadingKeys] = useState<Record<number, boolean>>({})
   const pendingRequests = useRef<Record<number, Promise<string | null>>>({})
 
+  const [createdKeys, setCreatedKeys] = useState<CreatedApiKey[]>([])
   const [copiedKeyId, setCopiedKeyId] = useState<number | null>(null)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -83,7 +83,7 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
         try {
           const res = await fetchTokenKey(id)
           if (res.success && res.data?.key) {
-            const fullKey = `sk-${res.data.key}`
+            const fullKey = formatApiKey(res.data.key)
             setResolvedKeys((prev) => ({ ...prev, [id]: fullKey }))
             return fullKey
           }
@@ -126,7 +126,7 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
         if (res.success && res.data?.keys) {
           const newKeys: Record<number, string> = {}
           for (const [idStr, key] of Object.entries(res.data.keys)) {
-            newKeys[Number(idStr)] = `sk-${key}`
+            newKeys[Number(idStr)] = formatApiKey(key)
           }
           setResolvedKeys((prev) => ({ ...prev, ...newKeys }))
 
@@ -163,14 +163,14 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
         setCurrentRow,
         refreshTrigger,
         triggerRefresh,
-        resolvedKey,
-        setResolvedKey,
         resolveRealKey,
         resolveRealKeysBatch,
         resolvedKeys,
         loadingKeys,
         copiedKeyId,
         markKeyCopied,
+        createdKeys,
+        setCreatedKeys,
       }}
     >
       {children}

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
@@ -195,8 +194,8 @@ func setDashboardAuthContext(c *gin.Context, user *model.UserBase, identity serv
 	c.Set("username", user.Username)
 	c.Set("role", user.Role)
 	c.Set("id", user.Id)
-	c.Set("group", user.Group)
-	c.Set("user_group", user.Group)
+	c.Set("group", "")
+	c.Set("user_group", "")
 	c.Set("use_access_token", useAccessToken)
 	c.Set("session_id", identity.SessionID)
 	c.Set("auth_version", identity.UserAuthVersion)
@@ -444,12 +443,6 @@ func TokenAuth() func(c *gin.Context) {
 
 		userCache.WriteContext(c)
 
-		userGroup := userCache.Group
-		if userGroup == "" {
-			userGroup = "default"
-		}
-		common.SetContextKey(c, constant.ContextKeyUsingGroup, userGroup)
-
 		err = SetupContextForToken(c, token, parts...)
 		if err != nil {
 			return
@@ -475,18 +468,6 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 		c.Set("token_model_limit", token.GetModelLimitsMap())
 	} else {
 		c.Set("token_model_limit_enabled", false)
-	}
-	common.SetContextKey(c, constant.ContextKeyTokenGroup, token.Group)
-	common.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)
-	if token.AutoGroups != "" {
-		autoGroups, err := token.GetAutoGroups()
-		if err != nil {
-			common.SysError(fmt.Sprintf("failed to parse auto groups for token %d: %v", token.Id, err))
-			autoGroups = []string{}
-			common.SetContextKey(c, constant.ContextKeyTokenAutoGroups, autoGroups)
-		} else if len(autoGroups) > 0 {
-			common.SetContextKey(c, constant.ContextKeyTokenAutoGroups, autoGroups)
-		}
 	}
 	if len(parts) > 1 {
 		if model.IsAdmin(token.UserId) {

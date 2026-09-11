@@ -75,7 +75,6 @@ var auditRouteActions = map[string]string{
 	"POST /api/models/":              "model.create",
 	"PUT /api/models/":               "model.update",
 	"DELETE /api/models/:id":         "model.delete",
-	"POST /api/models/sync_upstream": "model.sync_upstream",
 
 	// 订阅（管理员）
 	"POST /api/subscription/admin/plans":    "subscription.plan_create",

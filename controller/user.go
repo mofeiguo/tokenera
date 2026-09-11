@@ -18,7 +18,6 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
-	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/QuantumNous/new-api/constant"
@@ -260,19 +259,16 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserExists)
 		return
 	}
-	affCode := user.AffCode // this code is the inviter's code, not the user's own code
-	inviterId, _ := model.GetUserIdByAffCode(affCode)
 	cleanUser := model.User{
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.Username,
-		InviterId:   inviterId,
 		Role:        common.RoleCommonUser, // 明确设置角色为普通用户
 	}
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
-	if err := cleanUser.Insert(inviterId); err != nil {
+	if err := cleanUser.Insert(); err != nil {
 		if errors.Is(err, model.ErrEmailAlreadyTaken) {
 			common.ApiErrorI18n(c, i18n.MsgUserEmailAlreadyTaken)
 			return
@@ -307,9 +303,6 @@ func Register(c *gin.Context) {
 			UnlimitedQuota:     true,
 			ModelLimitsEnabled: false,
 		}
-		if setting.DefaultUseAutoGroup {
-			token.Group = "auto"
-		}
 		if err := token.Insert(); err != nil {
 			common.ApiErrorI18n(c, i18n.MsgCreateDefaultTokenErr)
 			return
@@ -341,7 +334,6 @@ func GetAllUsers(c *gin.Context) {
 
 func SearchUsers(c *gin.Context) {
 	keyword := c.Query("keyword")
-	group := c.Query("group")
 	var role *int
 	if roleStr := c.Query("role"); roleStr != "" {
 		if parsed, err := strconv.Atoi(roleStr); err == nil {
@@ -356,7 +348,7 @@ func SearchUsers(c *gin.Context) {
 	}
 	pageInfo := common.GetPageQuery(c)
 	sortOptions := model.NewUserSortOptions(c.Query("sort_by"), c.Query("sort_order"))
-	users, total, err := model.SearchUsers(keyword, group, role, status, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), sortOptions)
+	users, total, err := model.SearchUsers(keyword, role, status, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), sortOptions)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -425,59 +417,6 @@ func GenerateAccessToken(c *gin.Context) {
 	return
 }
 
-type TransferAffQuotaRequest struct {
-	Quota int `json:"quota" binding:"required"`
-}
-
-func TransferAffQuota(c *gin.Context) {
-	if !requirePaymentCompliance(c) {
-		return
-	}
-
-	id := c.GetInt("id")
-	user, err := model.GetUserById(id, true)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	tran := TransferAffQuotaRequest{}
-	if err := c.ShouldBindJSON(&tran); err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	err = user.TransferAffQuotaToQuota(tran.Quota)
-	if err != nil {
-		common.ApiErrorI18n(c, i18n.MsgUserTransferFailed, map[string]any{"Error": err.Error()})
-		return
-	}
-	common.ApiSuccessI18n(c, i18n.MsgUserTransferSuccess, nil)
-}
-
-func GetAffCode(c *gin.Context) {
-	id := c.GetInt("id")
-	user, err := model.GetUserById(id, true)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	if user.AffCode == "" {
-		user.AffCode = common.GetRandomString(4)
-		if err := user.Update(false); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    user.AffCode,
-	})
-	return
-}
-
 func GetSelf(c *gin.Context) {
 	id := c.GetInt("id")
 	userRole := c.GetInt("role")
@@ -521,15 +460,9 @@ func buildSelfUserData(user *model.User) map[string]interface{} {
 		"oidc_id":           user.OidcId,
 		"wechat_id":         user.WeChatId,
 		"telegram_id":       user.TelegramId,
-		"group":             user.Group,
 		"quota":             user.Quota,
 		"used_quota":        user.UsedQuota,
 		"request_count":     user.RequestCount,
-		"aff_code":          user.AffCode,
-		"aff_count":         user.AffCount,
-		"aff_quota":         user.AffQuota,
-		"aff_history_quota": user.AffHistoryQuota,
-		"inviter_id":        user.InviterId,
 		"linux_do_id":       user.LinuxDOId,
 		"setting":           user.Setting,
 		"stripe_customer":   user.StripeCustomer,
@@ -574,7 +507,6 @@ func generateDefaultSidebarConfig(userRole int) string {
 	defaultConfig["chat"] = map[string]interface{}{
 		"enabled":    true,
 		"playground": true,
-		"chat":       true,
 	}
 
 	// 控制台区域 - 所有用户都可以访问
@@ -632,26 +564,82 @@ func GetUserModels(c *gin.Context) {
 	if err != nil {
 		id = c.GetInt("id")
 	}
-	user, err := model.GetUserCache(id)
-	if err != nil {
+	if _, err := model.GetUserCache(id); err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	model.GetPricing()
-	modelNames := service.GetGroupsEnabledModels(setting.GetAccessibleGroups(user.Group))
+	modelNames := model.GetEnabledModels()
+	vendorByID := make(map[int]model.PricingVendor)
+	for _, vendor := range model.GetVendors() {
+		vendorByID[vendor.ID] = vendor
+	}
+	pricingModalities := make(map[string][]string)
+	pricingOutputModalities := make(map[string][]string)
+	pricingCapabilities := make(map[string][]string)
+	modelIcons := make(map[string]string)
+	vendorNames := make(map[string]string)
+	for _, pricing := range model.GetPricing() {
+		if len(pricing.InputModalities) > 0 {
+			pricingModalities[pricing.ModelName] = pricing.InputModalities
+		}
+		if len(pricing.OutputModalities) > 0 {
+			pricingOutputModalities[pricing.ModelName] = pricing.OutputModalities
+		}
+		if len(pricing.Capabilities) > 0 {
+			pricingCapabilities[pricing.ModelName] = pricing.Capabilities
+		}
+		if pricing.Icon != "" {
+			modelIcons[pricing.ModelName] = pricing.Icon
+		}
+		if pricing.VendorID > 0 {
+			if vendor, ok := vendorByID[pricing.VendorID]; ok {
+				if vendor.Name != "" {
+					vendorNames[pricing.ModelName] = vendor.Name
+				}
+				if modelIcons[pricing.ModelName] == "" && vendor.Icon != "" {
+					modelIcons[pricing.ModelName] = vendor.Icon
+				}
+			}
+		}
+	}
 	endpointTypes := make(map[string][]constant.EndpointType, len(modelNames))
+	inputModalities := make(map[string][]string, len(modelNames))
+	outputModalities := make(map[string][]string, len(modelNames))
+	capabilities := make(map[string][]string, len(modelNames))
+	icons := make(map[string]string, len(modelNames))
+	vendors := make(map[string]string, len(modelNames))
 	for _, modelName := range modelNames {
 		supported := model.GetModelSupportEndpointTypes(modelName)
-		if len(supported) == 0 {
-			continue
+		if len(supported) > 0 {
+			endpointTypes[modelName] = supported
 		}
-		endpointTypes[modelName] = supported
+		if modalities, ok := pricingModalities[modelName]; ok {
+			inputModalities[modelName] = modalities
+		}
+		if modalities, ok := pricingOutputModalities[modelName]; ok {
+			outputModalities[modelName] = modalities
+		}
+		if caps, ok := pricingCapabilities[modelName]; ok {
+			capabilities[modelName] = caps
+		}
+		if icon, ok := modelIcons[modelName]; ok {
+			icons[modelName] = icon
+		}
+		if vendorName, ok := vendorNames[modelName]; ok {
+			vendors[modelName] = vendorName
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success":                  true,
 		"message":                  "",
 		"data":                     modelNames,
 		"supported_endpoint_types": endpointTypes,
+		"input_modalities":         inputModalities,
+		"output_modalities":        outputModalities,
+		"capabilities":             capabilities,
+		"model_icons":              icons,
+		"vendor_names":             vendors,
 	})
 }
 
@@ -1022,7 +1010,7 @@ func CreateUser(c *gin.Context) {
 	}
 	authzTouched := false
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
-		if err := cleanUser.InsertWithTx(tx, 0); err != nil {
+		if err := cleanUser.InsertWithTx(tx); err != nil {
 			return err
 		}
 		touched, err := updateAdminPermissionsForUserInTx(c, tx, cleanUser.Id, cleanUser.Role, user.AdminPermissions)
@@ -1038,7 +1026,7 @@ func CreateUser(c *gin.Context) {
 			return
 		}
 	}
-	cleanUser.FinishInsert(0)
+	cleanUser.FinishInsert()
 
 	recordManageAuditFor(c, cleanUser.Id, "user.create", map[string]interface{}{
 		"username": cleanUser.Username,
@@ -1379,18 +1367,17 @@ func TopUp(c *gin.Context) {
 }
 
 type UpdateUserSettingRequest struct {
-	QuotaWarningType                 string  `json:"notify_type"`
-	QuotaWarningThreshold            float64 `json:"quota_warning_threshold"`
-	WebhookUrl                       string  `json:"webhook_url,omitempty"`
-	WebhookSecret                    string  `json:"webhook_secret,omitempty"`
-	NotificationEmail                string  `json:"notification_email,omitempty"`
-	BarkUrl                          string  `json:"bark_url,omitempty"`
-	GotifyUrl                        string  `json:"gotify_url,omitempty"`
-	GotifyToken                      string  `json:"gotify_token,omitempty"`
-	GotifyPriority                   int     `json:"gotify_priority,omitempty"`
-	UpstreamModelUpdateNotifyEnabled *bool   `json:"upstream_model_update_notify_enabled,omitempty"`
-	AcceptUnsetModelRatioModel       bool    `json:"accept_unset_model_ratio_model"`
-	RecordIpLog                      bool    `json:"record_ip_log"`
+	QuotaWarningType           string  `json:"notify_type"`
+	QuotaWarningThreshold      float64 `json:"quota_warning_threshold"`
+	WebhookUrl                 string  `json:"webhook_url,omitempty"`
+	WebhookSecret              string  `json:"webhook_secret,omitempty"`
+	NotificationEmail          string  `json:"notification_email,omitempty"`
+	BarkUrl                    string  `json:"bark_url,omitempty"`
+	GotifyUrl                  string  `json:"gotify_url,omitempty"`
+	GotifyToken                string  `json:"gotify_token,omitempty"`
+	GotifyPriority             int     `json:"gotify_priority,omitempty"`
+	AcceptUnsetModelRatioModel bool    `json:"accept_unset_model_ratio_model"`
+	RecordIpLog                bool    `json:"record_ip_log"`
 }
 
 func UpdateUserSetting(c *gin.Context) {
@@ -1480,19 +1467,13 @@ func UpdateUserSetting(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	existingSettings := user.GetSetting()
-	upstreamModelUpdateNotifyEnabled := existingSettings.UpstreamModelUpdateNotifyEnabled
-	if user.Role >= common.RoleAdminUser && req.UpstreamModelUpdateNotifyEnabled != nil {
-		upstreamModelUpdateNotifyEnabled = *req.UpstreamModelUpdateNotifyEnabled
-	}
 
 	// 构建设置
 	settings := dto.UserSetting{
-		NotifyType:                       req.QuotaWarningType,
-		QuotaWarningThreshold:            req.QuotaWarningThreshold,
-		UpstreamModelUpdateNotifyEnabled: upstreamModelUpdateNotifyEnabled,
-		AcceptUnsetRatioModel:            req.AcceptUnsetModelRatioModel,
-		RecordIpLog:                      req.RecordIpLog,
+		NotifyType:            req.QuotaWarningType,
+		QuotaWarningThreshold: req.QuotaWarningThreshold,
+		AcceptUnsetRatioModel: req.AcceptUnsetModelRatioModel,
+		RecordIpLog:           req.RecordIpLog,
 	}
 
 	// 如果是webhook类型,添加webhook相关设置

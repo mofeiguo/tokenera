@@ -45,12 +45,6 @@ export const userSchema = z.object({
   quota: z.number(),
   used_quota: z.number(),
   request_count: z.number(),
-  group: z.string(),
-  aff_code: z.string().optional(),
-  aff_count: z.number().optional(),
-  aff_quota: z.number().optional(),
-  aff_history_quota: z.number().optional(),
-  inviter_id: z.number().optional(),
   linux_do_id: z.string().optional(),
   status: userStatusSchema,
   role: userRoleSchema,
@@ -82,7 +76,6 @@ export type UserSortBy =
   | 'id'
   | 'username'
   | 'quota'
-  | 'group'
   | 'created_at'
   | 'last_login_at'
 
@@ -108,7 +101,6 @@ export interface GetUsersResponse {
 
 export interface SearchUsersParams {
   keyword?: string
-  group?: string
   role?: string
   status?: string
   p?: number
@@ -123,7 +115,6 @@ export interface UserFormData {
   password?: string
   role?: number // Only used when creating user
   quota?: number // Only used when updating user
-  group?: string // Only used when updating user
   remark?: string // Only used when updating user
   admin_permissions?: AdminPermissionMatrix
 }

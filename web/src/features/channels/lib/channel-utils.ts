@@ -16,13 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { formatCurrencyFromUSD, formatQuotaWithCurrency } from '@/lib/currency'
+import { formatCurrencyFromUSD } from '@/lib/currency'
 import { formatTimestampToDate } from '@/lib/format'
 
 import {
-  CHANNEL_STATUS_CONFIG,
   CHANNEL_TYPES,
-  MULTI_KEY_STATUS_CONFIG,
   RESPONSE_TIME_CONFIG,
   RESPONSE_TIME_THRESHOLDS,
   TYPE_TO_KEY_PROMPT,
@@ -54,7 +52,7 @@ export function getChannelTypeIcon(type: number): string {
     58: 'NewAPI', // Advanced Custom
     59: 'Sub2API', // Sub2API
     60: 'NewAPI', // New API
-    61: 'OpenAI', // Bifrost
+    61: 'Bifrost',
     3: 'Azure', // Azure
 
     // Anthropic
@@ -99,7 +97,6 @@ export function getChannelTypeIcon(type: number): string {
     50: 'Kling', // Kling
     51: 'Jimeng', // Jimeng
     52: 'Vidu', // Vidu
-    36: 'Suno', // SunoAPI
     55: 'OpenAI', // Sora
     54: 'Doubao', // DoubaoVideo
     56: 'Replicate', // Replicate
@@ -125,26 +122,6 @@ export function getChannelTypeIcon(type: number): string {
 // ============================================================================
 // Status Utilities
 // ============================================================================
-
-/**
- * Get status badge configuration
- */
-export function getChannelStatusBadge(status: number) {
-  return (
-    CHANNEL_STATUS_CONFIG[status as keyof typeof CHANNEL_STATUS_CONFIG] ||
-    CHANNEL_STATUS_CONFIG[0]
-  )
-}
-
-/**
- * Get multi-key status badge configuration
- */
-export function getMultiKeyStatusBadge(status: number) {
-  return (
-    MULTI_KEY_STATUS_CONFIG[status as keyof typeof MULTI_KEY_STATUS_CONFIG] ||
-    MULTI_KEY_STATUS_CONFIG[1]
-  )
-}
 
 /**
  * Check if channel is enabled
@@ -231,40 +208,10 @@ export function parseModelsList(models: string): string[] {
 }
 
 /**
- * Parse comma-separated groups list.
- * Sorts with 'default' group first, then locale-sorted alphabetically.
- */
-export function parseGroupsList(groups: string): string[] {
-  if (!groups) {
-    return []
-  }
-  const list = groups
-    .split(',')
-    .map((g) => g.trim())
-    .filter((g) => g.length > 0)
-  return list.sort((a, b) => {
-    if (a === 'default') {
-      return -1
-    }
-    if (b === 'default') {
-      return 1
-    }
-    return a.localeCompare(b)
-  })
-}
-
-/**
  * Format models array back to string
  */
 export function formatModelsString(models: string[]): string {
   return models.join(',')
-}
-
-/**
- * Format groups array back to string
- */
-export function formatGroupsString(groups: string[]): string {
-  return groups.join(',')
 }
 
 // ============================================================================
@@ -481,242 +428,11 @@ export function formatTimestamp(timestamp: number): string {
 }
 
 // ============================================================================
-// Quota Formatting
-// ============================================================================
-
-/** Format quota units using the global currency display configuration. */
-export function formatQuota(quota: number): string {
-  return formatQuotaWithCurrency(quota, {
-    digitsLarge: 2,
-    digitsSmall: 4,
-    abbreviate: true,
-  })
-}
-
-// ============================================================================
-// Priority & Weight Utilities
-// ============================================================================
-
-/**
- * Get priority display value
- */
-export function getPriorityDisplay(
-  priority: number | null | undefined
-): string {
-  if (priority === null || priority === undefined) {
-    return '0'
-  }
-  return String(priority)
-}
-
-/**
- * Get weight display value
- */
-export function getWeightDisplay(weight: number | null | undefined): string {
-  if (weight === null || weight === undefined) {
-    return '0'
-  }
-  return String(weight)
-}
-
-// ============================================================================
-// Validation Utilities
-// ============================================================================
-
-/**
- * Validate channel name
- */
-export function validateChannelName(name: string): boolean {
-  return name.trim().length > 0
-}
-
-/**
- * Validate API key format
- */
-export function validateApiKey(key: string): boolean {
-  return key.trim().length > 0
-}
-
-/**
- * Validate models list
- */
-export function validateModels(models: string): boolean {
-  return parseModelsList(models).length > 0
-}
-
-/**
- * Validate groups list
- */
-export function validateGroups(groups: string): boolean {
-  return parseGroupsList(groups).length > 0
-}
-
-/**
- * Check if channel needs attention (low balance, auto-disabled, etc.)
- */
-export function channelNeedsAttention(channel: Channel): boolean {
-  // Auto-disabled
-  if (channel.status === 3) {
-    return true
-  }
-
-  // Low balance (less than $1)
-  if (channel.balance > 0 && channel.balance < 1) {
-    return true
-  }
-
-  // Multi-key channel with all keys disabled
-  if (
-    channel.channel_info?.is_multi_key &&
-    channel.channel_info.multi_key_status_list &&
-    Object.keys(channel.channel_info.multi_key_status_list).length >=
-      channel.channel_info.multi_key_size
-  ) {
-    return true
-  }
-
-  return false
-}
-
-/**
- * Get attention reason for channel
- */
-export function getAttentionReason(channel: Channel): string | null {
-  if (channel.status === 3) {
-    return 'Auto-disabled'
-  }
-  if (channel.balance > 0 && channel.balance < 1) {
-    return 'Low balance'
-  }
-  if (
-    channel.channel_info?.is_multi_key &&
-    channel.channel_info.multi_key_status_list &&
-    Object.keys(channel.channel_info.multi_key_status_list).length >=
-      channel.channel_info.multi_key_size
-  ) {
-    return 'All keys disabled'
-  }
-  return null
-}
-
-// ============================================================================
 // Tag Aggregation Utilities
 // ============================================================================
 
-/**
- * Tag row type (extends Channel with children)
- */
-export type TagRow = Channel & {
-  children: Channel[]
-}
-
-/**
- * Type guard to check whether a row is a tag aggregate row
- */
-export function isTagAggregateRow(row: Channel | TagRow): row is TagRow {
-  return Array.isArray((row as TagRow).children)
-}
-
-export function getChannelTableRowId(row: Channel | TagRow): string {
-  if (isTagAggregateRow(row)) {
-    return `tag:${row.tag || ''}`
-  }
-
+export function getChannelTableRowId(row: Channel): string {
   return `channel:${row.id}`
-}
-
-/**
- * Aggregate channels by tag for tag mode display
- * Converts flat array into tree structure grouped by tag
- */
-export function aggregateChannelsByTag(
-  channels: Channel[]
-): (Channel | TagRow)[] {
-  const tagMap = new Map<string, TagRow>()
-  const result: (Channel | TagRow)[] = []
-
-  for (const channel of channels) {
-    const tag = channel.tag || ''
-
-    if (!tagMap.has(tag)) {
-      // Create tag aggregate row
-      const tagRow = {
-        ...channel,
-        key: tag,
-        id: tag as unknown as number,
-        tag,
-        name: tag,
-        type: 0,
-        status: undefined as unknown as number,
-        group: '',
-        used_quota: 0,
-        response_time: 0,
-        priority: -1 as unknown as number | null,
-        weight: -1 as unknown as number | null,
-        balance: 0,
-        test_time: 0,
-        created_time: 0,
-        balance_updated_time: 0,
-        models: '',
-        children: [],
-      } as TagRow
-      tagMap.set(tag, tagRow)
-      result.push(tagRow)
-    }
-
-    const tagRow = tagMap.get(tag)
-    if (!tagRow) {
-      continue
-    }
-
-    // Add to children
-    tagRow.children.push(channel)
-    const childCount = tagRow.children.length
-
-    // Aggregate used_quota (sum)
-    tagRow.used_quota += channel.used_quota
-
-    // Aggregate response_time (average)
-    tagRow.response_time =
-      (tagRow.response_time * (childCount - 1) + channel.response_time) /
-      childCount
-
-    // Aggregate priority (same value or null if different)
-    if (tagRow.priority === -1) {
-      tagRow.priority = channel.priority
-    } else if (tagRow.priority !== channel.priority) {
-      tagRow.priority = null
-    }
-
-    // Aggregate weight (same value or null if different)
-    if (tagRow.weight === -1) {
-      tagRow.weight = channel.weight
-    } else if (tagRow.weight !== channel.weight) {
-      tagRow.weight = null
-    }
-
-    // Aggregate group (concatenate and deduplicate)
-    if (tagRow.group === '') {
-      tagRow.group = channel.group
-    } else {
-      const existingGroups = new Set(tagRow.group.split(',').filter(Boolean))
-      const newGroups = channel.group.split(',').filter(Boolean)
-      newGroups.forEach((g) => {
-        if (!existingGroups.has(g)) {
-          tagRow.group += `,${g}`
-        }
-      })
-    }
-
-    // Aggregate status (enabled if any child is enabled)
-    if (channel.status === 1) {
-      tagRow.status = 1
-    } else if (tagRow.status === undefined) {
-      tagRow.status = channel.status
-    }
-  }
-
-  return result
 }
 
 // ============================================================================

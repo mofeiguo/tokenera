@@ -198,18 +198,28 @@ export function MultiSelect(props: MultiSelectProps) {
     setInputValue(value)
   }
 
+  const keepPopoverOpen = React.useCallback(() => {
+    requestAnimationFrame(() => {
+      setOpen(true)
+      inputRef.current?.focus()
+    })
+  }, [])
+
   const handleToggle = (item: string) => {
     if (canCreate && item === trimmedInput) {
       addValues([item])
       setInputValue('')
+      keepPopoverOpen()
       return
     }
     if (selectedSet.has(item)) {
       props.onChange(props.selected.filter((value) => value !== item))
+      keepPopoverOpen()
       return
     }
     addValues([item])
     setInputValue('')
+    keepPopoverOpen()
   }
 
   const handleCopyChip = React.useCallback(
@@ -410,10 +420,15 @@ export function MultiSelect(props: MultiSelectProps) {
           align='start'
           sideOffset={6}
           data-slot='combobox-content'
-          className='w-[var(--radix-popover-anchor-width)] p-0'
+          className='z-[100] w-[var(--radix-popover-anchor-width)] p-0'
           onOpenAutoFocus={(event) => event.preventDefault()}
           onCloseAutoFocus={(event) => event.preventDefault()}
           onPointerDownOutside={(event) => {
+            if (chipsRef.current?.contains(event.target as Node)) {
+              event.preventDefault()
+            }
+          }}
+          onFocusOutside={(event) => {
             if (chipsRef.current?.contains(event.target as Node)) {
               event.preventDefault()
             }

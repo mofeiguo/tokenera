@@ -50,7 +50,6 @@ export interface CommonFilters {
 export interface CommonLogFilters extends CommonFilters {
   model?: string
   token?: string
-  group?: string
   username?: string
   requestId?: string
   upstreamRequestId?: string
@@ -198,6 +197,7 @@ export interface LogOtherData {
   file_search_call_count?: number
   file_search_price?: number
   tool_surcharges?: ToolSurchargeItem[]
+  audio_input_ratio?: number
   audio_input_seperate_price?: boolean
   audio_input_token_count?: number
   audio_input_price?: number
@@ -253,9 +253,9 @@ export interface TaskLog {
   id: number
   user_id: number
   username?: string
-  platform: string // suno, kling, runway, etc.
+  platform: string // kling, runway, etc.
   task_id: string
-  action: string // MUSIC, LYRICS, GENERATE, TEXT_GENERATE, etc.
+  action: string // GENERATE, TEXT_GENERATE, etc.
   channel_id: number
   submit_time: number // seconds
   finish_time?: number // seconds
@@ -358,9 +358,5 @@ export interface UserInfo {
   quota: number
   used_quota: number
   request_count: number
-  group?: string
-  aff_code?: string
-  aff_count?: number
-  aff_quota?: number
   remark?: string
 }

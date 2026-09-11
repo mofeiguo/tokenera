@@ -139,7 +139,6 @@ const MODEL_CATEGORY_RULES: readonly ModelCategoryRule[] = [
   { name: '360 AI', keywords: ['360gpt', '360zhinao'] },
   { name: 'Kling', keywords: ['kling'] },
   { name: 'Vidu', keywords: ['vidu'] },
-  { name: 'Suno', keywords: ['suno'] },
   { name: 'Jimeng', keywords: ['jimeng'] },
 ]
 

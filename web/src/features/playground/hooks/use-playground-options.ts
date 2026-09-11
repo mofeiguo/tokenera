@@ -22,21 +22,17 @@ import { toast } from 'sonner'
 
 import { useQuery } from '@/lib/query'
 
-import { getUserGroups, getUserModels } from '../api'
+import { getUserModels } from '../api'
 import {
-  getGroupFallback,
   getModelFallback,
   getOptionLoadErrorMessage,
   resolvePlaygroundEndpointType,
-  shouldClearModelForGroup,
 } from '../lib'
-import type { GroupOption, ModelOption, PlaygroundConfig } from '../types'
+import type { ModelOption, PlaygroundConfig } from '../types'
 
 type UsePlaygroundOptionsParams = {
-  currentGroup: string
   currentModel: string
   currentEndpointType: string
-  setGroups: (groups: GroupOption[]) => void
   setModels: (models: ModelOption[]) => void
   updateConfig: <K extends keyof PlaygroundConfig>(
     key: K,
@@ -45,10 +41,8 @@ type UsePlaygroundOptionsParams = {
 }
 
 export function usePlaygroundOptions({
-  currentGroup,
   currentModel,
   currentEndpointType,
-  setGroups,
   setModels,
   updateConfig,
 }: UsePlaygroundOptionsParams) {
@@ -60,18 +54,8 @@ export function usePlaygroundOptions({
     isError: isModelsError,
     isLoading: isLoadingModels,
   } = useQuery({
-    queryKey: ['playground-models', currentGroup],
-    queryFn: () => getUserModels(currentGroup),
-    enabled: currentGroup !== '',
-  })
-
-  const {
-    data: groupsData,
-    error: groupsError,
-    isError: isGroupsError,
-  } = useQuery({
-    queryKey: ['playground-groups'],
-    queryFn: getUserGroups,
+    queryKey: ['playground-models'],
+    queryFn: getUserModels,
   })
 
   useEffect(() => {
@@ -84,17 +68,6 @@ export function usePlaygroundOptions({
       )
     )
   }, [isModelsError, modelsError, t])
-
-  useEffect(() => {
-    if (!isGroupsError) return
-
-    toast.error(
-      getOptionLoadErrorMessage(
-        groupsError,
-        t('Failed to load playground groups')
-      )
-    )
-  }, [isGroupsError, groupsError, t])
 
   useEffect(() => {
     if (!modelsData) return
@@ -110,7 +83,10 @@ export function usePlaygroundOptions({
 
     if (fallback) {
       updateConfig('model', fallback)
-    } else if (shouldClearModelForGroup(modelsData, currentModel)) {
+    } else if (
+      currentModel !== '' &&
+      !modelsData.some((model) => model.value === currentModel)
+    ) {
       updateConfig('model', '')
     }
 
@@ -118,17 +94,6 @@ export function usePlaygroundOptions({
       updateConfig('endpointType', nextEndpoint)
     }
   }, [modelsData, currentModel, currentEndpointType, setModels, updateConfig])
-
-  useEffect(() => {
-    if (!groupsData) return
-
-    setGroups(groupsData)
-    const fallback = getGroupFallback(groupsData, currentGroup)
-
-    if (fallback) {
-      updateConfig('group', fallback)
-    }
-  }, [groupsData, currentGroup, setGroups, updateConfig])
 
   return {
     isLoadingModels,

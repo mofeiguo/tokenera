@@ -55,7 +55,7 @@ function getCachedMarkdown(parserId: string): MarkdownInstance {
 export const Response = memo((props: ResponseProps) => {
   const content = getMarkdownContent(props.children)
   const isFinal = props.final ?? true
-  const shouldAnimate = !isFinal
+  const shouldAnimate = !isFinal && (props.streamFade ?? true)
   const parserId = props.parserId ?? DEFAULT_PARSER_ID
   const markdown = getCachedMarkdown(parserId)
   const shouldParseMarkdown = content.length <= MAX_PARSED_MARKDOWN_CHARS

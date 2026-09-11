@@ -46,6 +46,15 @@ export interface ChannelTypeConfig {
  * Configuration for each channel type
  */
 export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
+  1: {
+    id: 1,
+    name: CHANNEL_TYPES[1],
+    icon: 'OpenAI',
+    hints: {
+      key: 'OpenAI API Key',
+      models: 'e.g., gpt-4.1, gpt-4o-mini',
+    },
+  },
   17: {
     id: 17,
     name: CHANNEL_TYPES[17],
@@ -64,15 +73,6 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       models: 'Hailuo video models',
     },
   },
-  36: {
-    id: 36,
-    name: CHANNEL_TYPES[36],
-    icon: 'suno',
-    hints: {
-      key: 'Suno API Key',
-      models: 'Suno music models',
-    },
-  },
   45: {
     id: 45,
     name: CHANNEL_TYPES[45],
@@ -85,7 +85,7 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
   61: {
     id: 61,
     name: CHANNEL_TYPES[61],
-    icon: 'OpenAI',
+    icon: 'Bifrost',
     hints: {
       baseUrl: 'Bifrost gateway base URL, without a trailing /v1',
       key: 'Bifrost API Key',

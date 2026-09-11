@@ -20,6 +20,23 @@ import type { AuthUser } from '@/stores/auth-store'
 
 const allowedRedirectProtocols = new Set(['http:', 'https:'])
 
+const AUTH_GUEST_PATH_PREFIXES = [
+  '/sign-in',
+  '/sign-up',
+  '/register',
+  '/otp',
+  '/forgot-password',
+  '/reset',
+  '/user/reset',
+] as const
+
+function isAuthGuestRedirectPath(pathname: string): boolean {
+  if (pathname === '/oauth' || pathname.startsWith('/oauth/')) return true
+  return AUTH_GUEST_PATH_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  )
+}
+
 export function getSavedLanguage(user: AuthUser): string | undefined {
   if (typeof user.language === 'string') {
     return user.language
@@ -76,5 +93,29 @@ export function sanitizeAuthRedirect(
     return null
   }
 
+  if (isAuthGuestRedirectPath(redirectURL.pathname)) {
+    return null
+  }
+
   return `${redirectURL.pathname}${redirectURL.search}${redirectURL.hash}`
+}
+
+export function buildSignInRedirectParam(
+  requestUrl: string,
+  origin: string
+): string | null {
+  const safePath = sanitizeAuthRedirect(requestUrl, origin)
+  if (!safePath) return null
+
+  if (requestUrl.startsWith('http://') || requestUrl.startsWith('https://')) {
+    return new URL(safePath, origin).href
+  }
+
+  return `${origin}${safePath}`
+}
+
+export function signInPathWithRedirect(requestUrl: string, origin: string): string {
+  const redirectParam = buildSignInRedirectParam(requestUrl, origin)
+  if (!redirectParam) return '/sign-in'
+  return `/sign-in?redirect=${encodeURIComponent(redirectParam)}`
 }

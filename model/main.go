@@ -19,33 +19,27 @@ import (
 	"gorm.io/gorm"
 )
 
-var commonGroupCol string
 var commonKeyCol string
 var commonTrueVal string
 var commonFalseVal string
 
 var logKeyCol string
-var logGroupCol string
 
 func initCol() {
 	// init common column names
 	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
-		commonGroupCol = `"group"`
 		commonKeyCol = `"key"`
 		commonTrueVal = "true"
 		commonFalseVal = "false"
 	} else {
-		commonGroupCol = "`group`"
 		commonKeyCol = "`key`"
 		commonTrueVal = "1"
 		commonFalseVal = "0"
 	}
 	switch common.LogDatabaseType() {
 	case common.DatabaseTypePostgreSQL:
-		logGroupCol = `"group"`
 		logKeyCol = `"key"`
 	default:
-		logGroupCol = "`group`"
 		logKeyCol = "`key`"
 	}
 }
@@ -255,7 +249,6 @@ func migrateDB() error {
 		return err
 	}
 	needBindingPriorityBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "priority")
-	needBindingGroupsBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "groups")
 	needBindingWeightBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "weight")
 	if err := migrateDropOutboundRewriteColumns(); err != nil {
 		return err
@@ -308,15 +301,13 @@ func migrateDB() error {
 			return err
 		}
 	}
-	if needBindingGroupsBackfill {
-		if err := BackfillModelBindingGroupsFromChannels(); err != nil {
-			return err
-		}
-	}
 	if needBindingWeightBackfill {
 		if err := BackfillModelBindingWeightsFromChannels(); err != nil {
 			return err
 		}
+	}
+	if err := migrateDropChannelRoutingColumns(); err != nil {
+		return err
 	}
 	if err := InitializeUserAuthVersions(); err != nil {
 		return err
@@ -338,7 +329,6 @@ func migrateDB() error {
 
 func migrateDBFast() error {
 	needBindingPriorityBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "priority")
-	needBindingGroupsBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "groups")
 	needBindingWeightBackfill := DB.Migrator().HasTable(&ModelBinding{}) && !DB.Migrator().HasColumn(&ModelBinding{}, "weight")
 	if err := migrateDropOutboundRewriteColumns(); err != nil {
 		return err
@@ -414,15 +404,13 @@ func migrateDBFast() error {
 			return err
 		}
 	}
-	if needBindingGroupsBackfill {
-		if err := BackfillModelBindingGroupsFromChannels(); err != nil {
-			return err
-		}
-	}
 	if needBindingWeightBackfill {
 		if err := BackfillModelBindingWeightsFromChannels(); err != nil {
 			return err
 		}
+	}
+	if err := migrateDropChannelRoutingColumns(); err != nil {
+		return err
 	}
 	if err := InitializeUserAuthVersions(); err != nil {
 		return err
@@ -499,7 +487,6 @@ CREATE TABLE IF NOT EXISTS logs (
 	is_stream UInt8 DEFAULT 0,
 	channel_id Int32 DEFAULT 0,
 	token_id Int32 DEFAULT 0,
-	`+"`group`"+` String DEFAULT '',
 	ip String DEFAULT '',
 	request_id String DEFAULT '',
 	upstream_request_id String DEFAULT '',
@@ -567,8 +554,6 @@ func ensureSubscriptionPlanTableSQLite() error {
 ` + "`creem_product_id`" + ` varchar(128) DEFAULT '',
 ` + "`waffo_pancake_product_id`" + ` varchar(128) DEFAULT '',
 ` + "`max_purchase_per_user`" + ` integer DEFAULT 0,
-` + "`upgrade_group`" + ` varchar(64) DEFAULT '',
-` + "`downgrade_group`" + ` varchar(64) DEFAULT '',
 ` + "`total_amount`" + ` bigint NOT NULL DEFAULT 0,
 ` + "`quota_reset_period`" + ` varchar(16) DEFAULT 'never',
 ` + "`quota_reset_custom_seconds`" + ` bigint DEFAULT 0,
@@ -604,8 +589,6 @@ PRIMARY KEY (` + "`id`" + `)
 		{Name: "creem_product_id", DDL: "`creem_product_id` varchar(128) DEFAULT ''"},
 		{Name: "waffo_pancake_product_id", DDL: "`waffo_pancake_product_id` varchar(128) DEFAULT ''"},
 		{Name: "max_purchase_per_user", DDL: "`max_purchase_per_user` integer DEFAULT 0"},
-		{Name: "upgrade_group", DDL: "`upgrade_group` varchar(64) DEFAULT ''"},
-		{Name: "downgrade_group", DDL: "`downgrade_group` varchar(64) DEFAULT ''"},
 		{Name: "total_amount", DDL: "`total_amount` bigint NOT NULL DEFAULT 0"},
 		{Name: "quota_reset_period", DDL: "`quota_reset_period` varchar(16) DEFAULT 'never'"},
 		{Name: "quota_reset_custom_seconds", DDL: "`quota_reset_custom_seconds` bigint DEFAULT 0"},

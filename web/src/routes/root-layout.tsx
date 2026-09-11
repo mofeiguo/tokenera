@@ -21,7 +21,6 @@ import { Outlet, redirect, type LoaderFunctionArgs } from 'react-router'
 
 import { NavigationProgress } from '@/components/navigation-progress'
 import { Toaster } from '@/components/ui/sonner'
-import { saveAffiliateCode } from '@/features/auth/lib/storage'
 import { getSetupStatus } from '@/features/setup/api'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import {
@@ -35,26 +34,9 @@ import { useQueryClient } from '@/lib/query'
 import { useNavigate } from '@/lib/router'
 import { useAuthStore } from '@/stores/auth-store'
 
-const SETUP_CHECKED_KEY = 'setup_status_checked'
-
-function getSetupStatusFromCache(): boolean {
-  try {
-    return window.localStorage.getItem(SETUP_CHECKED_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
-
-function setSetupStatusCache(value: boolean): void {
-  try {
-    if (value) window.localStorage.setItem(SETUP_CHECKED_KEY, 'true')
-    else window.localStorage.removeItem(SETUP_CHECKED_KEY)
-  } catch {
-    /* empty */
-  }
-}
-
-let setupStatusChecked = getSetupStatusFromCache()
+// In-memory only: a persisted "already checked" flag would skip the wizard
+// after the database is wiped and recreated.
+let setupStatusChecked = false
 
 export async function rootLoader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url)
@@ -82,8 +64,10 @@ export async function rootLoader({ request }: LoaderFunctionArgs) {
     if (status?.success && status.data && !status.data.status) {
       throw redirect('/setup')
     }
-    setupStatusChecked = true
-    setSetupStatusCache(true)
+    // Only skip later navigations after the server confirmed initialization.
+    if (status?.success && status.data?.status) {
+      setupStatusChecked = true
+    }
   } else {
     await authBootstrap
   }
@@ -95,11 +79,6 @@ export function RootLayout() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   useSystemConfig({ autoLoad: true })
-
-  useEffect(() => {
-    const aff = new URLSearchParams(window.location.search).get('aff')?.trim()
-    if (aff) saveAffiliateCode(aff)
-  }, [])
 
   useEffect(
     () =>

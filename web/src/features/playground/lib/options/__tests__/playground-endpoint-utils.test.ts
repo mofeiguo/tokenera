@@ -20,9 +20,12 @@ import { describe, expect, test } from 'vitest'
 
 import {
   getModelEndpointTypes,
+  getPlaygroundEndpointLabel,
   getPlaygroundEndpointTypes,
   resolvePlaygroundEndpointType,
 } from '../playground-endpoint-utils'
+
+const t = (key: string) => key
 
 describe('getPlaygroundEndpointTypes', () => {
   test('returns chat endpoints when the catalog has not advertised any', () => {
@@ -69,5 +72,20 @@ describe('resolvePlaygroundEndpointType', () => {
 describe('getModelEndpointTypes', () => {
   test('hides the selector before models have loaded', () => {
     expect(getModelEndpointTypes([], 'gpt-4o')).toEqual([])
+  })
+})
+
+describe('getPlaygroundEndpointLabel', () => {
+  test('uses ZenMux protocol names', () => {
+    expect(getPlaygroundEndpointLabel(t, 'anthropic')).toBe('Anthropic Messages')
+    expect(getPlaygroundEndpointLabel(t, 'openai')).toBe(
+      'OpenAI Chat Completions'
+    )
+    expect(getPlaygroundEndpointLabel(t, 'openai-response')).toBe(
+      'OpenAI Responses'
+    )
+    expect(getPlaygroundEndpointLabel(t, 'gemini')).toBe(
+      'Gemini Generate Content'
+    )
   })
 })

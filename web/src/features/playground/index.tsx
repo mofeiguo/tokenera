@@ -18,13 +18,19 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { PlaygroundChat } from './components/chat/playground-chat'
 import { PlaygroundInput } from './components/input/playground-input'
+import { PlaygroundToolbar } from './components/playground-toolbar'
 import {
   useChatHandler,
   usePlaygroundConversation,
   usePlaygroundOptions,
   usePlaygroundState,
 } from './hooks'
-import { resolvePlaygroundEndpointType } from './lib'
+import {
+  PLAYGROUND_CHAT_BACKGROUND,
+  PLAYGROUND_COLUMN,
+  PLAYGROUND_INPUT_AREA,
+  resolvePlaygroundEndpointType,
+} from './lib'
 
 export function Playground() {
   const {
@@ -33,10 +39,8 @@ export function Playground() {
     messages,
     isLoadingMessages,
     models,
-    groups,
     updateMessages,
     setModels,
-    setGroups,
     updateConfig,
     updateParameterEnabled,
     clearMessages,
@@ -68,25 +72,53 @@ export function Playground() {
   }
 
   const { isLoadingModels } = usePlaygroundOptions({
-    currentGroup: config.group,
     currentModel: config.model,
     currentEndpointType: config.endpointType,
-    setGroups,
     setModels,
     updateConfig,
   })
 
   return (
-    <div className='relative flex size-full min-h-0 flex-col overflow-hidden'>
-      {/* Full-width scroll container: scrolling works even over side whitespace */}
-      <div className='flex min-h-0 flex-1 flex-col overflow-hidden'>
+    <div
+      className={`relative flex size-full min-h-0 flex-col overflow-hidden ${PLAYGROUND_CHAT_BACKGROUND}`}
+    >
+      <PlaygroundToolbar
+        config={config}
+        disabled={isGenerating}
+        endpointValue={config.endpointType}
+        hasMessages={messages.length > 0}
+        isModelLoading={isLoadingModels}
+        modelValue={config.model}
+        models={models}
+        onClearMessages={handleClearMessages}
+        onConfigChange={updateConfig}
+        onEndpointChange={(value) => updateConfig('endpointType', value)}
+        onModelChange={(value) => {
+          updateConfig('model', value)
+          const selected = models.find((model) => model.value === value)
+          updateConfig(
+            'endpointType',
+            resolvePlaygroundEndpointType(
+              selected?.supportedEndpointTypes,
+              ''
+            )
+          )
+        }}
+        onParameterEnabledChange={updateParameterEnabled}
+        parameterEnabled={parameterEnabled}
+      />
+
+      <div
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden ${PLAYGROUND_CHAT_BACKGROUND}`}
+      >
         <PlaygroundChat
           messages={messages}
           isLoadingMessages={isLoadingMessages}
           onRegenerateMessage={handleRegenerateMessage}
           onEditMessage={handleEditMessage}
           onDeleteMessage={handleDeleteMessage}
-          onSelectPrompt={handleSendMessage}
+          models={models}
+          modelValue={config.model}
           isGenerating={isGenerating}
           editingKey={editingMessageKey}
           onCancelEdit={handleEditOpenChange}
@@ -95,38 +127,18 @@ export function Playground() {
         />
       </div>
 
-      {/* Input area: center content and constrain to the same container width */}
-      <div className='mx-auto w-full max-w-4xl'>
-        <PlaygroundInput
-          config={config}
-          disabled={isGenerating}
-          groups={groups}
-          groupValue={config.group}
-          isGenerating={isGenerating}
-          isModelLoading={isLoadingModels}
-          modelValue={config.model}
-          models={models}
-          onGroupChange={(value) => updateConfig('group', value)}
-          onConfigChange={updateConfig}
-          onClearMessages={handleClearMessages}
-          onModelChange={(value) => {
-            updateConfig('model', value)
-            const selected = models.find((model) => model.value === value)
-            updateConfig(
-              'endpointType',
-              resolvePlaygroundEndpointType(
-                selected?.supportedEndpointTypes,
-                ''
-              )
-            )
-          }}
-          onEndpointChange={(value) => updateConfig('endpointType', value)}
-          onParameterEnabledChange={updateParameterEnabled}
-          onStop={stopGeneration}
-          onSubmit={handleSendMessage}
-          parameterEnabled={parameterEnabled}
-          hasMessages={messages.length > 0}
-        />
+      <div className={PLAYGROUND_INPUT_AREA}>
+        <div className={PLAYGROUND_COLUMN}>
+          <PlaygroundInput
+            disabled={isGenerating}
+            isGenerating={isGenerating}
+            isModelLoading={isLoadingModels}
+            modelValue={config.model}
+            models={models}
+            onStop={stopGeneration}
+            onSubmit={handleSendMessage}
+          />
+        </div>
       </div>
     </div>
   )

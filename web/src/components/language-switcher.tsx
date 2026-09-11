@@ -20,6 +20,7 @@ import { Languages, Check } from 'lucide-react'
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { PublicHeaderGlobeIcon } from '@/components/layout/components/public-header-menu-icon'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -35,7 +36,12 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
-export function LanguageSwitcher() {
+type LanguageSwitcherProps = {
+  triggerClassName?: string
+  icon?: 'languages' | 'globe'
+}
+
+export function LanguageSwitcher(props: LanguageSwitcherProps = {}) {
   const { i18n, t } = useTranslation()
   const user = useAuthStore((s) => s.auth.user)
   const currentLanguage = normalizeInterfaceLanguage(i18n.language)
@@ -56,9 +62,22 @@ export function LanguageSwitcher() {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger
-        render={<Button variant='ghost' size='icon' className='h-9 w-9' />}
+        render={
+          <Button
+            variant='ghost'
+            size='icon'
+            className={cn(
+              'text-muted-foreground hover:text-foreground hover:bg-muted/80 dark:hover:bg-muted size-8 rounded-lg',
+              props.triggerClassName
+            )}
+          />
+        }
       >
-        <Languages className='size-[1.2rem]' />
+        {props.icon === 'globe' ? (
+          <PublicHeaderGlobeIcon className='size-[18px]' />
+        ) : (
+          <Languages className='size-[1.2rem]' />
+        )}
         <span className='sr-only'>{t('Change language')}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end'>

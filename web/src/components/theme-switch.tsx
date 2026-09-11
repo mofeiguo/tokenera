@@ -42,7 +42,7 @@ const OPTIONS: Array<{
 type ThemeSwitchProps = {
   className?: string
   size?: 'default' | 'compact'
-  variant?: 'segmented' | 'menu'
+  variant?: 'segmented' | 'menu' | 'toolbar'
 }
 
 export function ThemeSwitch(props: ThemeSwitchProps) {
@@ -50,6 +50,50 @@ export function ThemeSwitch(props: ThemeSwitchProps) {
   const { theme, resolvedTheme, setTheme } = useTheme()
   const variant = props.variant ?? 'segmented'
   const size = props.size ?? 'default'
+
+  if (variant === 'toolbar') {
+    return (
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant='ghost'
+              size='icon'
+              className={cn(
+                'text-muted-foreground hover:text-foreground hover:bg-muted/80 dark:hover:bg-muted size-8 rounded-lg',
+                props.className
+              )}
+              aria-label={t('Toggle theme')}
+            />
+          }
+        >
+          <Sun aria-hidden className='size-[18px]' />
+          <span className='sr-only'>{t('Toggle theme')}</span>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align='end' className='min-w-36'>
+          {OPTIONS.map((option) => {
+            const Icon = option.icon
+            return (
+              <DropdownMenuItem
+                key={option.value}
+                onClick={() => setTheme(option.value)}
+              >
+                <Icon aria-hidden className='size-4' />
+                <span>{t(option.label)}</span>
+                <Check
+                  aria-hidden
+                  className={cn(
+                    'ms-auto size-4',
+                    theme !== option.value && 'invisible'
+                  )}
+                />
+              </DropdownMenuItem>
+            )
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
 
   if (variant === 'menu') {
     return (

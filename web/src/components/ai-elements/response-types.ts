@@ -25,6 +25,8 @@ export type ResponseProps = {
   children?: ReactNode
   className?: string
   final?: boolean
+  /** When false, stream without per-word fade-in (ChatGPT / Cursor style). Default true. */
+  streamFade?: boolean
   /** Distinct stream-markdown-parser cache id when multiple Responses stream concurrently */
   parserId?: string
 }

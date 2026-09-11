@@ -767,7 +767,14 @@ func (info *RelayInfo) GetOriginModelName() string {
 func RewriteRequestURLPathModel(path, origin, upstream string) string {
 	origin = strings.TrimSpace(origin)
 	upstream = strings.TrimSpace(upstream)
-	if path == "" || origin == "" || upstream == "" || origin == upstream {
+	if path == "" || upstream == "" {
+		return path
+	}
+	// Channel-test / template paths use {model}; Go may also percent-encode braces.
+	path = strings.ReplaceAll(path, "{model}", upstream)
+	path = strings.ReplaceAll(path, "%7Bmodel%7D", upstream)
+	path = strings.ReplaceAll(path, "%7bmodel%7d", upstream)
+	if origin == "" || origin == upstream {
 		return path
 	}
 	return strings.Replace(path, "/models/"+origin, "/models/"+upstream, 1)
@@ -864,8 +871,7 @@ func (info *RelayInfo) ConvOptions() *convmeta.Options {
 			SupportsImagine:                       model_setting.IsGeminiModelSupportImagine,
 			SafetySetting:                         model_setting.GetGeminiSafetySetting,
 		},
-		OpenRouterDialect:      info != nil && info.GetChannelType() == constant.ChannelTypeOpenRouter,
-		PreserveThinkingSuffix: model_setting.ShouldPreserveThinkingSuffix,
+		OpenRouterDialect: info != nil && info.GetChannelType() == constant.ChannelTypeOpenRouter,
 	}
 	if info != nil {
 		info.convOptions = options

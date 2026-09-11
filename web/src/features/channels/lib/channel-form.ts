@@ -22,13 +22,11 @@ import {
   CHANNEL_TYPE_BIFROST,
   CHANNEL_STATUS,
   ERROR_MESSAGES,
-  MODEL_FETCHABLE_TYPES,
 } from '../constants'
 import type { Channel } from '../types'
 import {
   CHANNEL_TYPE_ADVANCED_CUSTOM,
   advancedCustomConfigUsesRelativeUpstreamPath,
-  hasValidAdvancedCustomModelListRoute,
   parseAdvancedCustomConfig,
   stringifyAdvancedCustomConfig,
   validateAdvancedCustomConfig,
@@ -177,11 +175,6 @@ export const channelFormSchema = z
     key: z.string(),
     openai_organization: z.string().optional(),
     models: z.string(),
-    group: z.array(z.string()).min(1, ERROR_MESSAGES.REQUIRED_GROUP),
-    priority: z.number().optional(),
-    weight: z.number().optional(),
-    test_model: z.string().optional(),
-    auto_ban: z.number().optional(),
     status: z.number(),
     status_code_mapping: z
       .string()
@@ -190,7 +183,6 @@ export const channelFormSchema = z
         isOptionalStatusCodeMapping,
         'Status code mapping must use valid HTTP status codes'
       ),
-    tag: z.string().optional(),
     remark: z
       .string()
       .max(255, 'Remark must be less than 255 characters')
@@ -227,14 +219,10 @@ export const channelFormSchema = z
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
     aws_key_type: z.enum(['ak_sk', 'api_key']).optional(), // AWS specific
     disable_task_polling_sleep: z.boolean().optional(),
-    // Upstream model update settings (stored in settings JSON)
-    upstream_model_update_check_enabled: z.boolean().optional(),
-    upstream_model_update_auto_sync_enabled: z.boolean().optional(),
-    upstream_model_update_ignored_models: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (
-      [36, 45, CHANNEL_TYPE_BIFROST].includes(data.type) &&
+      [45, CHANNEL_TYPE_BIFROST].includes(data.type) &&
       !data.base_url?.trim()
     ) {
       addRequiredIssue(
@@ -261,16 +249,6 @@ export const channelFormSchema = z
           ctx,
           'base_url',
           'Base URL is required when an advanced route uses an upstream path'
-        )
-      }
-      if (
-        data.upstream_model_update_check_enabled === true &&
-        !hasValidAdvancedCustomModelListRoute(advancedCustomConfig)
-      ) {
-        addRequiredIssue(
-          ctx,
-          'upstream_model_update_check_enabled',
-          'OpenAI Models route is required to enable upstream model checks'
         )
       }
     }
@@ -331,14 +309,8 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   key: '',
   openai_organization: '',
   models: '',
-  group: ['default'],
-  priority: 0,
-  weight: 0,
-  test_model: '',
-  auto_ban: 1,
   status: CHANNEL_STATUS.ENABLED,
   status_code_mapping: '',
-  tag: '',
   remark: '',
   setting: '',
   header_override: '',
@@ -358,9 +330,6 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   is_enterprise_account: false,
   aws_key_type: 'ak_sk',
   disable_task_polling_sleep: false,
-  upstream_model_update_check_enabled: false,
-  upstream_model_update_auto_sync_enabled: false,
-  upstream_model_update_ignored_models: '',
   advanced_custom: '',
 }
 
@@ -407,9 +376,6 @@ export function transformChannelToFormDefaults(
   let isEnterpriseAccount = false
   let awsKeyType: 'ak_sk' | 'api_key' = 'ak_sk'
   let disableTaskPollingSleep = false
-  let upstreamModelUpdateCheckEnabled = false
-  let upstreamModelUpdateAutoSyncEnabled = false
-  let upstreamModelUpdateIgnoredModels = ''
   let advancedCustom = ''
 
   if (channel.settings) {
@@ -418,15 +384,6 @@ export function transformChannelToFormDefaults(
       isEnterpriseAccount = parsed.openrouter_enterprise === true
       awsKeyType = parsed.aws_key_type || 'ak_sk'
       disableTaskPollingSleep = parsed.disable_task_polling_sleep === true
-      upstreamModelUpdateCheckEnabled =
-        parsed.upstream_model_update_check_enabled === true
-      upstreamModelUpdateAutoSyncEnabled =
-        parsed.upstream_model_update_auto_sync_enabled === true
-      upstreamModelUpdateIgnoredModels = Array.isArray(
-        parsed.upstream_model_update_ignored_models
-      )
-        ? parsed.upstream_model_update_ignored_models.join(',')
-        : ''
       if (parsed.advanced_custom) {
         advancedCustom = stringifyAdvancedCustomConfig(parsed.advanced_custom)
       }
@@ -443,14 +400,8 @@ export function transformChannelToFormDefaults(
     key: '', // Never populate key from backend for security
     openai_organization: channel.openai_organization || '',
     models: channel.models || '',
-    group: parseGroups(channel.group || 'default'),
-    priority: channel.priority || 0,
-    weight: channel.weight || 0,
-    test_model: channel.test_model || '',
-    auto_ban: channel.auto_ban ?? 1,
     status: channel.status,
     status_code_mapping: channel.status_code_mapping || '',
-    tag: channel.tag || '',
     remark: channel.remark || '',
     setting: channel.setting || '',
     header_override: channel.header_override || '',
@@ -466,9 +417,6 @@ export function transformChannelToFormDefaults(
     is_enterprise_account: isEnterpriseAccount,
     aws_key_type: awsKeyType,
     disable_task_polling_sleep: disableTaskPollingSleep,
-    upstream_model_update_check_enabled: upstreamModelUpdateCheckEnabled,
-    upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
-    upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     advanced_custom: advancedCustom,
   }
 }
@@ -532,32 +480,6 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
   settingsObj.disable_task_polling_sleep =
     formData.disable_task_polling_sleep === true
 
-  // Upstream model update settings (for model-fetchable channel types)
-  if (MODEL_FETCHABLE_TYPES.has(formData.type)) {
-    settingsObj.upstream_model_update_check_enabled =
-      formData.upstream_model_update_check_enabled === true
-    settingsObj.upstream_model_update_auto_sync_enabled =
-      settingsObj.upstream_model_update_check_enabled === true &&
-      formData.upstream_model_update_auto_sync_enabled === true
-    settingsObj.upstream_model_update_ignored_models = [
-      ...new Set(
-        String(formData.upstream_model_update_ignored_models || '')
-          .split(',')
-          .map((model) => model.trim())
-          .filter(Boolean)
-      ),
-    ]
-    if (
-      !Array.isArray(settingsObj.upstream_model_update_last_detected_models) ||
-      settingsObj.upstream_model_update_check_enabled !== true
-    ) {
-      settingsObj.upstream_model_update_last_detected_models = []
-    }
-    if (typeof settingsObj.upstream_model_update_last_check_time !== 'number') {
-      settingsObj.upstream_model_update_last_check_time = 0
-    }
-  }
-
   if (formData.type === CHANNEL_TYPE_ADVANCED_CUSTOM) {
     const advancedCustomConfig = parseAdvancedCustomConfig(
       formData.advanced_custom
@@ -596,14 +518,8 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
     key: formData.key,
     openai_organization: formData.openai_organization || null,
     models: formData.models,
-    group: formatGroups(formData.group),
-    priority: formData.priority || null,
-    weight: formData.weight || null,
-    test_model: formData.test_model || null,
-    auto_ban: formData.auto_ban ?? 1,
     status: formData.status,
     status_code_mapping: formData.status_code_mapping || null,
-    tag: formData.tag || null,
     remark: formData.remark || '',
     setting: buildSettingJSON(formData),
     header_override: formData.header_override || null,
@@ -642,13 +558,7 @@ export function transformFormDataToUpdatePayload(
     base_url: normalizeBaseUrl(formData.base_url) || null,
     openai_organization: formData.openai_organization || null,
     models: formData.models,
-    group: formatGroups(formData.group),
-    priority: formData.priority ?? 0,
-    weight: formData.weight ?? 0,
-    test_model: formData.test_model || null,
-    auto_ban: formData.auto_ban ?? 1,
     status_code_mapping: formData.status_code_mapping || null,
-    tag: formData.tag || null,
     remark: formData.remark || '',
     setting: buildSettingJSON(formData),
     header_override: formData.header_override || null,
@@ -671,8 +581,6 @@ export function transformFormDataToUpdatePayload(
   // Send explicit empty strings for nullable fields so GORM updates can clear them.
   payload.base_url = normalizeBaseUrl(formData.base_url) || ''
   payload.openai_organization = formData.openai_organization || ''
-  payload.test_model = formData.test_model || ''
-  payload.tag = formData.tag || ''
   payload.remark = formData.remark || ''
   payload.status_code_mapping = formData.status_code_mapping || ''
   payload.header_override = formData.header_override || ''
@@ -709,28 +617,10 @@ export function parseModels(models: string): string[] {
 }
 
 /**
- * Parse groups string to array
- */
-export function parseGroups(groups: string): string[] {
-  if (!groups) return []
-  return groups
-    .split(',')
-    .map((g) => g.trim())
-    .filter((g) => g.length > 0)
-}
-
-/**
  * Format models array to string
  */
 export function formatModels(models: string[]): string {
   return models.join(',')
-}
-
-/**
- * Format groups array to string
- */
-export function formatGroups(groups: string[]): string {
-  return groups.join(',')
 }
 
 export function parseModelsString(modelsStr: string): string[] {

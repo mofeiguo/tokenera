@@ -16,7 +16,8 @@ import (
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
-var group2model2channels map[string]map[string][]int // enabled channel
+var model2channels map[string][]int // enabled channel ids by catalog model
+var model2routes map[string][]modelBindingRoute
 var model2channel2priority map[string]map[int]int64
 var model2channel2weight map[string]map[int]int
 var model2channel2upstream map[string]map[int]string
@@ -25,6 +26,13 @@ var channelsIDM map[int]*Channel // all channels include disabled
 // path-aware selection avoids re-parsing JSON per request. Refreshed on full sync.
 var channel2advancedCustomConfig map[int]*dto.AdvancedCustomConfig
 var channelSyncLock sync.RWMutex
+
+type modelBindingRoute struct {
+	ChannelId int
+	Upstream  string
+	Priority  int64
+	Weight    int
+}
 
 func InitChannelCache() {
 	if !common.MemoryCacheEnabled {
@@ -43,7 +51,8 @@ func InitChannelCache() {
 			}
 		}
 	}
-	newGroup2model2channels := make(map[string]map[string][]int)
+	newModel2channels := make(map[string][]int)
+	newModel2routes := make(map[string][]modelBindingRoute)
 	newModel2channel2priority := make(map[string]map[int]int64)
 	newModel2channel2weight := make(map[string]map[int]int)
 	newModel2channel2upstream := make(map[string]map[int]string)
@@ -82,6 +91,12 @@ func InitChannelCache() {
 		if upstreamModel == "" {
 			upstreamModel = binding.ModelName
 		}
+		newModel2routes[binding.ModelName] = append(newModel2routes[binding.ModelName], modelBindingRoute{
+			ChannelId: binding.ChannelId,
+			Upstream:  upstreamModel,
+			Priority:  binding.Priority,
+			Weight:    weight,
+		})
 		currentPriority, hasPriority := newModel2channel2priority[binding.ModelName][binding.ChannelId]
 		if !hasPriority || binding.Priority > currentPriority ||
 			(binding.Priority == currentPriority && weight > newModel2channel2weight[binding.ModelName][binding.ChannelId]) {
@@ -89,37 +104,30 @@ func InitChannelCache() {
 			newModel2channel2weight[binding.ModelName][binding.ChannelId] = weight
 			newModel2channel2upstream[binding.ModelName][binding.ChannelId] = upstreamModel
 		}
-		for _, group := range servingGroupsFromRaw(channel.Group) {
-			if _, ok := newGroup2model2channels[group]; !ok {
-				newGroup2model2channels[group] = make(map[string][]int)
+		channels := newModel2channels[binding.ModelName]
+		alreadyLinked := false
+		for _, channelId := range channels {
+			if channelId == binding.ChannelId {
+				alreadyLinked = true
+				break
 			}
-			channels := newGroup2model2channels[group][binding.ModelName]
-			alreadyLinked := false
-			for _, channelId := range channels {
-				if channelId == binding.ChannelId {
-					alreadyLinked = true
-					break
-				}
-			}
-			if alreadyLinked {
-				continue
-			}
-			newGroup2model2channels[group][binding.ModelName] = append(channels, binding.ChannelId)
 		}
+		if alreadyLinked {
+			continue
+		}
+		newModel2channels[binding.ModelName] = append(channels, binding.ChannelId)
 	}
 
-	// sort by binding priority
-	for group, model2channels := range newGroup2model2channels {
-		for model, channels := range model2channels {
-			sort.Slice(channels, func(i, j int) bool {
-				return newModel2channel2priority[model][channels[i]] > newModel2channel2priority[model][channels[j]]
-			})
-			newGroup2model2channels[group][model] = channels
-		}
+	for model, channels := range newModel2channels {
+		sort.Slice(channels, func(i, j int) bool {
+			return newModel2channel2priority[model][channels[i]] > newModel2channel2priority[model][channels[j]]
+		})
+		newModel2channels[model] = channels
 	}
 
 	channelSyncLock.Lock()
-	group2model2channels = newGroup2model2channels
+	model2channels = newModel2channels
+	model2routes = newModel2routes
 	model2channel2priority = newModel2channel2priority
 	model2channel2weight = newModel2channel2weight
 	model2channel2upstream = newModel2channel2upstream
@@ -154,40 +162,6 @@ func SyncChannelCache(frequency int) {
 	}
 }
 
-func lookupBindingPriority(model string, channelId int) int64 {
-	if byChannel, ok := model2channel2priority[model]; ok {
-		if priority, exists := byChannel[channelId]; exists {
-			return priority
-		}
-	}
-	normalized := ratio_setting.FormatMatchingModelName(model)
-	if normalized != "" && normalized != model {
-		if byChannel, ok := model2channel2priority[normalized]; ok {
-			if priority, exists := byChannel[channelId]; exists {
-				return priority
-			}
-		}
-	}
-	return 0
-}
-
-func lookupBindingWeight(model string, channelId int) int {
-	if byChannel, ok := model2channel2weight[model]; ok {
-		if weight, exists := byChannel[channelId]; exists {
-			return weight
-		}
-	}
-	normalized := ratio_setting.FormatMatchingModelName(model)
-	if normalized != "" && normalized != model {
-		if byChannel, ok := model2channel2weight[normalized]; ok {
-			if weight, exists := byChannel[channelId]; exists {
-				return weight
-			}
-		}
-	}
-	return 0
-}
-
 func lookupBindingUpstreamModel(model string, channelId int) string {
 	if byChannel, ok := model2channel2upstream[model]; ok {
 		if name := strings.TrimSpace(byChannel[channelId]); name != "" {
@@ -205,106 +179,96 @@ func lookupBindingUpstreamModel(model string, channelId int) string {
 	return ""
 }
 
-func GetRandomSatisfiedChannel(group string, model string, retry int, requestPath string) (*Channel, error) {
-	// if memory cache is disabled, get channel directly from database
+func GetRandomSatisfiedChannel(model string, retry int, requestPath string) (*Channel, string, error) {
 	if !common.MemoryCacheEnabled {
-		return GetChannelFromBindings(group, model, retry, requestPath)
+		return GetChannelFromBindings(model, retry, requestPath)
 	}
 
 	channelSyncLock.RLock()
 	defer channelSyncLock.RUnlock()
 
-	// First, try to find channels with the exact model name.
-	channels := filterChannelsByRequestPathAndModel(group2model2channels[group][model], requestPath, model)
-
-	// If no channels found, try to find channels with the normalized model name.
-	if len(channels) == 0 {
+	routes := filterRoutesByRequestPathAndModel(model2routes[model], requestPath, model)
+	if len(routes) == 0 {
 		normalizedModel := ratio_setting.FormatMatchingModelName(model)
-		channels = filterChannelsByRequestPathAndModel(group2model2channels[group][normalizedModel], requestPath, model)
+		routes = filterRoutesByRequestPathAndModel(model2routes[normalizedModel], requestPath, model)
 	}
 
-	if len(channels) == 0 {
-		return nil, nil
+	if len(routes) == 0 {
+		return nil, "", nil
 	}
 
-	if len(channels) == 1 {
-		if channel, ok := channelsIDM[channels[0]]; ok {
-			return channel, nil
+	uniquePriorities := make(map[int64]struct{})
+	for _, route := range routes {
+		if _, ok := channelsIDM[route.ChannelId]; !ok {
+			return nil, "", fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", route.ChannelId)
 		}
-		return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channels[0])
+		uniquePriorities[route.Priority] = struct{}{}
 	}
-
-	uniquePriorities := make(map[int]bool)
-	for _, channelId := range channels {
-		if _, ok := channelsIDM[channelId]; !ok {
-			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelId)
-		}
-		uniquePriorities[int(lookupBindingPriority(model, channelId))] = true
-	}
-	var sortedUniquePriorities []int
+	sortedUniquePriorities := make([]int64, 0, len(uniquePriorities))
 	for priority := range uniquePriorities {
 		sortedUniquePriorities = append(sortedUniquePriorities, priority)
 	}
-	sort.Sort(sort.Reverse(sort.IntSlice(sortedUniquePriorities)))
+	sort.Slice(sortedUniquePriorities, func(i, j int) bool {
+		return sortedUniquePriorities[i] > sortedUniquePriorities[j]
+	})
 
-	if retry >= len(uniquePriorities) {
-		retry = len(uniquePriorities) - 1
+	if retry >= len(sortedUniquePriorities) {
+		retry = len(sortedUniquePriorities) - 1
 	}
-	targetPriority := int64(sortedUniquePriorities[retry])
+	targetPriority := sortedUniquePriorities[retry]
 
-	var sumWeight = 0
-	var targetChannels []*Channel
-	for _, channelId := range channels {
-		channel, ok := channelsIDM[channelId]
-		if !ok {
-			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelId)
+	sumWeight := 0
+	matched := make([]modelBindingRoute, 0, len(routes))
+	for _, route := range routes {
+		if route.Priority != targetPriority {
+			continue
 		}
-		if lookupBindingPriority(model, channelId) == targetPriority {
-			sumWeight += lookupBindingWeight(model, channelId)
-			targetChannels = append(targetChannels, channel)
-		}
+		sumWeight += route.Weight
+		matched = append(matched, route)
 	}
 
-	if len(targetChannels) == 0 {
-		return nil, errors.New(fmt.Sprintf("no channel found, group: %s, model: %s, priority: %d", group, model, targetPriority))
+	if len(matched) == 0 {
+		return nil, "", errors.New(fmt.Sprintf("no channel found, model: %s, priority: %d", model, targetPriority))
 	}
+
+	var picked modelBindingRoute
 	if sumWeight <= 0 {
-		return targetChannels[rand.Intn(len(targetChannels))], nil
-	}
-
-	randomWeight := rand.Intn(sumWeight)
-	for _, channel := range targetChannels {
-		randomWeight -= lookupBindingWeight(model, channel.Id)
-		if randomWeight < 0 {
-			return channel, nil
+		picked = matched[rand.Intn(len(matched))]
+	} else {
+		randomWeight := rand.Intn(sumWeight)
+		picked = matched[len(matched)-1]
+		for _, route := range matched {
+			randomWeight -= route.Weight
+			if randomWeight < 0 {
+				picked = route
+				break
+			}
 		}
 	}
-	return targetChannels[len(targetChannels)-1], nil
+	channel, ok := channelsIDM[picked.ChannelId]
+	if !ok {
+		return nil, "", fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", picked.ChannelId)
+	}
+	return channel, picked.Upstream, nil
 }
 
-// filterChannelsByRequestPathAndModel restricts candidates by request path and
-// model. Only Advanced Custom (type 58) channels are path-checked: they are kept
-// only when one of their configured routes matches requestPath and model. All
-// other channel types always pass. When requestPath is empty, filtering is skipped.
-// Caller must hold channelSyncLock (read lock). The cached slice is never mutated.
-func filterChannelsByRequestPathAndModel(channels []int, requestPath string, model string) []int {
-	if requestPath == "" || len(channels) == 0 {
-		return channels
+func filterRoutesByRequestPathAndModel(routes []modelBindingRoute, requestPath string, model string) []modelBindingRoute {
+	if requestPath == "" || len(routes) == 0 {
+		return routes
 	}
-	filtered := make([]int, 0, len(channels))
-	for _, channelId := range channels {
-		channel, ok := channelsIDM[channelId]
+	filtered := make([]modelBindingRoute, 0, len(routes))
+	for _, route := range routes {
+		channel, ok := channelsIDM[route.ChannelId]
 		if !ok {
-			// keep it so the downstream consistency error is raised as before
-			filtered = append(filtered, channelId)
+			filtered = append(filtered, route)
 			continue
 		}
 		if channel.Type != constant.ChannelTypeAdvancedCustom {
-			filtered = append(filtered, channelId)
+			filtered = append(filtered, route)
 			continue
 		}
-		if config := channel2advancedCustomConfig[channelId]; config != nil && config.SupportsPathForModel(requestPath, model) {
-			filtered = append(filtered, channelId)
+		if config := channel2advancedCustomConfig[route.ChannelId]; config != nil && config.SupportsPathForModel(requestPath, model) {
+			filtered = append(filtered, route)
 		}
 	}
 	return filtered
@@ -352,17 +316,22 @@ func CacheUpdateChannelStatus(id int, status int) {
 		channel.Status = status
 	}
 	if status != common.ChannelStatusEnabled {
-		// delete the channel from group2model2channels
-		for group, model2channels := range group2model2channels {
-			for model, channels := range model2channels {
-				for i, channelId := range channels {
-					if channelId == id {
-						// remove the channel from the slice
-						group2model2channels[group][model] = append(channels[:i], channels[i+1:]...)
-						break
-					}
+		for model, channels := range model2channels {
+			for i, channelId := range channels {
+				if channelId == id {
+					model2channels[model] = append(channels[:i], channels[i+1:]...)
+					break
 				}
 			}
+		}
+		for model, routes := range model2routes {
+			kept := routes[:0]
+			for _, route := range routes {
+				if route.ChannelId != id {
+					kept = append(kept, route)
+				}
+			}
+			model2routes[model] = kept
 		}
 	}
 }

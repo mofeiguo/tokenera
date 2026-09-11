@@ -1,13 +1,9 @@
 package controller
 
 import (
-	"net/http/httptest"
 	"testing"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/setting"
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,46 +49,3 @@ func TestBuildOpenAIModelFallsBackToCustomForUnknownModels(t *testing.T) {
 	require.Equal(t, "custom", modelItem.OwnedBy)
 }
 
-func TestGetModelListGroupsUsesUserGroupWhenTokenGroupIsEmpty(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
-
-	groups, err := getModelListGroups(ctx)
-	require.NoError(t, err)
-
-	require.Equal(t, "default", groups.userGroup)
-	require.Empty(t, groups.tokenGroup)
-	require.Equal(t, []string{"default"}, groups.ownerGroups)
-}
-
-func TestGetModelListGroupsIgnoresTokenGroup(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
-	common.SetContextKey(ctx, constant.ContextKeyTokenGroup, "vip")
-
-	groups, err := getModelListGroups(ctx)
-	require.NoError(t, err)
-
-	require.Equal(t, "default", groups.userGroup)
-	require.Empty(t, groups.tokenGroup)
-	require.Equal(t, []string{"default"}, groups.ownerGroups)
-}
-
-func TestGetModelListGroupsUsesInheritTable(t *testing.T) {
-	original := setting.GroupInherit2JSONString()
-	require.NoError(t, setting.UpdateGroupInheritByJSONString(`{"vip":["vip","default"]}`))
-	t.Cleanup(func() {
-		require.NoError(t, setting.UpdateGroupInheritByJSONString(original))
-	})
-
-	gin.SetMode(gin.TestMode)
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "vip")
-	common.SetContextKey(ctx, constant.ContextKeyTokenGroup, "auto")
-
-	groups, err := getModelListGroups(ctx)
-	require.NoError(t, err)
-	require.Equal(t, []string{"vip", "default"}, groups.ownerGroups)
-}

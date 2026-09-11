@@ -19,10 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 
 /** Shared surface for dashboard stats cards, chart panels, and Suspense fallbacks. */
 export const DASHBOARD_PANEL_FRAME =
-  'bg-card border-border/80 overflow-hidden rounded-xl border shadow-[var(--shadow-card)]'
+  'bg-card border-border/60 overflow-hidden rounded-2xl border shadow-[0_1px_4px_0_rgba(0,0,0,0.05)]'
 
 export const DASHBOARD_PANEL_HEADER =
-  'border-border/70 flex items-center gap-2 border-b px-3 py-2.5 sm:px-4 sm:py-3'
+  'border-border/60 flex items-center gap-2 border-b px-4 py-3 sm:px-5'
 
 export const DASHBOARD_STAT_CELL =
-  'bg-muted/30 rounded-lg border border-transparent px-2 py-1.5 sm:rounded-lg sm:px-3 sm:py-2.5'
+  'bg-muted/25 rounded-lg border border-border/50 px-2 py-1.5 sm:rounded-lg sm:px-3 sm:py-2.5'

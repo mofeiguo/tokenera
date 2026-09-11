@@ -193,7 +193,7 @@ export function GrokSettingsCard(props: Props) {
                 </FormControl>
                 <FormDescription>
                   {t(
-                    'Base amount. Actual deduction = base amount × system group rate.'
+                    'When enabled, violation requests will incur additional charges.'
                   )}
                 </FormDescription>
                 <FormMessage />

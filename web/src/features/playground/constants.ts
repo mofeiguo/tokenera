@@ -38,17 +38,11 @@ export const API_ENDPOINTS = {
   RESPONSES: '/pg/responses',
   MESSAGES: '/pg/messages',
   USER_MODELS: '/api/user/models',
-  USER_GROUPS: '/api/user/self/groups',
 } as const
-
-// Default group — uses 'default' as the safe fallback; auto-group is
-// only selected when the backend confirms it is available for the user.
-export const DEFAULT_GROUP = 'default' as const
 
 // Default configuration
 export const DEFAULT_CONFIG: PlaygroundConfig = {
   model: 'gpt-4o',
-  group: DEFAULT_GROUP,
   endpointType: 'openai',
   temperature: 0.7,
   top_p: 1,
@@ -67,6 +61,10 @@ export const DEFAULT_PARAMETER_ENABLED: ParameterEnabled = {
   presence_penalty: true,
   seed: false,
 }
+
+export const PLAYGROUND_IMAGE_ACCEPT = 'image/*'
+export const PLAYGROUND_MAX_IMAGES = 8
+export const PLAYGROUND_MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 // Storage keys
 export const STORAGE_KEYS = {

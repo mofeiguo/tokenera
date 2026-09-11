@@ -124,10 +124,6 @@ export const LOG_TYPE_FILTERS = [
  * Must match backend constants in constant/task.go
  */
 export const TASK_ACTIONS = {
-  // Suno (uppercase)
-  MUSIC: 'MUSIC', // 生成音乐
-  LYRICS: 'LYRICS', // 生成歌词
-
   // Video generation (camelCase)
   GENERATE: 'generate', // 图生视频
   TEXT_GENERATE: 'textGenerate', // 文生视频
@@ -153,7 +149,6 @@ export const TASK_STATUS = {
  * Task platforms
  */
 export const TASK_PLATFORMS = {
-  SUNO: 'suno',
   KLING: 'kling',
   RUNWAY: 'runway',
   LUMA: 'luma',
@@ -176,8 +171,6 @@ export interface StatusMapping {
  * Task action type mappings
  */
 export const TASK_ACTION_MAPPINGS: Record<string, StatusMapping> = {
-  [TASK_ACTIONS.MUSIC]: { label: 'Generate Music', variant: 'neutral' },
-  [TASK_ACTIONS.LYRICS]: { label: 'Generate Lyrics', variant: 'pink' },
   [TASK_ACTIONS.GENERATE]: { label: 'Image to Video', variant: 'blue' },
   [TASK_ACTIONS.TEXT_GENERATE]: { label: 'Text to Video', variant: 'blue' },
   [TASK_ACTIONS.FIRST_TAIL_GENERATE]: {
@@ -211,7 +204,6 @@ export const TASK_STATUS_MAPPINGS: Record<string, StatusMapping> = {
  * Task platform mappings
  */
 export const TASK_PLATFORM_MAPPINGS: Record<string, StatusMapping> = {
-  [TASK_PLATFORMS.SUNO]: { label: 'suno', variant: 'green' },
   [TASK_PLATFORMS.KLING]: { label: 'kling', variant: 'blue' },
   [TASK_PLATFORMS.RUNWAY]: { label: 'runway', variant: 'violet' },
   [TASK_PLATFORMS.LUMA]: { label: 'luma', variant: 'orange' },

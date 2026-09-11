@@ -61,7 +61,6 @@ export const STATIC_I18N_KEYS = [
   'Integrations',
   'Models',
   'Routing Reliability',
-  'Maintenance',
 
   // System info
   'online',
@@ -467,10 +466,8 @@ export const STATIC_I18N_KEYS = [
 
   // Sidebar modules
   'Chat Area',
-  'Playground and chat functions',
   'Playground',
   'AI model testing environment',
-  'Chat session management',
   'No content to copy',
   'Please wait for the current generation to complete',
   'An unknown error occurred',
@@ -533,27 +530,11 @@ export const STATIC_I18N_KEYS = [
   'Violation deduction amount',
   'Base amount. Actual deduction = base amount × system group rate.',
 
-  // Chat2Link
-  'No available Web chat links',
-  'No enabled tokens available',
-  'Redirecting to chat page...',
-
-  // Channel upstream updates
-  'No processable upstream model updates for this channel',
-  'Upstream model updates applied: {{added}} added, {{removed}} removed, {{ignored}} ignored this time, {{totalIgnored}} total ignored models',
-  'Batch processing failed',
-  'Batch upstream model updates applied: {{channels}} channels, {{added}} added, {{removed}} removed, {{fails}} failed',
-  'Detection failed',
-  'Detection complete: {{add}} to add, {{remove}} to remove',
-  'Batch detection failed',
-  'Batch detection complete: {{channels}} channels, {{add}} to add, {{remove}} to remove, {{fails}} failed',
-
   // Advanced Custom model discovery
   'Only one OpenAI Models route is allowed',
   'OpenAI Models route does not support client model rules',
   'OpenAI Models route must use native forwarding',
   'OpenAI Models upstream path must not contain {model}',
-  'OpenAI Models route is required to enable upstream model checks',
 
   // Dashboard flow stages (labels/descriptions passed to t at runtime)
   'User',

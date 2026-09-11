@@ -25,7 +25,11 @@ import {
 } from 'react-router'
 
 import { AuthenticatedLayout } from '@/components/layout'
-import { sanitizeAuthRedirect } from '@/features/auth/lib/auth-redirect'
+import {
+  buildSignInRedirectParam,
+  sanitizeAuthRedirect,
+  signInPathWithRedirect,
+} from '@/features/auth/lib/auth-redirect'
 import { bootstrapAuthentication } from '@/lib/auth-session'
 import { getFreshModuleAccess, isSidebarModuleEnabled } from '@/lib/nav-modules'
 import { ROLE } from '@/lib/roles'
@@ -33,7 +37,15 @@ import { serializeSearch } from '@/lib/router'
 import { useAuthStore } from '@/stores/auth-store'
 
 function signInRedirect(requestUrl: string) {
-  return redirect(`/sign-in${serializeSearch({ redirect: requestUrl })}`)
+  let origin: string
+  try {
+    origin = new URL(requestUrl).origin
+  } catch {
+    return redirect('/sign-in')
+  }
+  const redirectParam = buildSignInRedirectParam(requestUrl, origin)
+  if (!redirectParam) return redirect('/sign-in')
+  return redirect(`/sign-in${serializeSearch({ redirect: redirectParam })}`)
 }
 
 /**
@@ -49,8 +61,15 @@ async function ensureAuthReady() {
 export function RequireAuth() {
   const auth = useAuthStore((state) => state.auth)
   if (!auth.user || !auth.accessToken) {
-    const redirectTo = encodeURIComponent(window.location.href)
-    return <Navigate to={`/sign-in?redirect=${redirectTo}`} replace />
+    return (
+      <Navigate
+        to={signInPathWithRedirect(
+          window.location.href,
+          window.location.origin
+        )}
+        replace
+      />
+    )
   }
   return <AuthenticatedLayout />
 }
@@ -61,7 +80,7 @@ export function RequireGuest({ children }: { children: ReactNode }) {
     const params = new URLSearchParams(window.location.search)
     const target =
       sanitizeAuthRedirect(params.get('redirect'), window.location.origin) ??
-      '/dashboard'
+      '/analytics/usage'
     return <Navigate to={target} replace />
   }
   return children
@@ -119,7 +138,7 @@ export async function moduleAccessLoader(
 
 export function playgroundLoader() {
   if (!isSidebarModuleEnabled('chat', 'playground')) {
-    throw redirect('/dashboard')
+    throw redirect('/analytics/usage')
   }
   return null
 }

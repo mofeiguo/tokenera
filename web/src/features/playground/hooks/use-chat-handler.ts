@@ -44,7 +44,6 @@ interface UseChatHandlerOptions {
 }
 
 const KNOWN_ERROR_MESSAGES = new Set<string>(Object.values(ERROR_MESSAGES))
-const STREAM_UPDATE_FLUSH_MS = 50
 
 type PendingStreamChunks = {
   generation: number
@@ -85,7 +84,7 @@ export function useChatHandler({
 
   const discardPendingStreamUpdates = useCallback((generation: number) => {
     if (streamFlushTimerRef.current !== null) {
-      window.clearTimeout(streamFlushTimerRef.current)
+      window.cancelAnimationFrame(streamFlushTimerRef.current)
       streamFlushTimerRef.current = null
     }
     pendingStreamChunksRef.current = {
@@ -99,7 +98,7 @@ export function useChatHandler({
     (generation: number) => {
       if (generation !== requestGenerationRef.current) return
       if (streamFlushTimerRef.current !== null) {
-        window.clearTimeout(streamFlushTimerRef.current)
+        window.cancelAnimationFrame(streamFlushTimerRef.current)
         streamFlushTimerRef.current = null
       }
 
@@ -149,9 +148,10 @@ export function useChatHandler({
         return
       }
 
-      streamFlushTimerRef.current = window.setTimeout(() => {
+      streamFlushTimerRef.current = window.requestAnimationFrame(() => {
+        streamFlushTimerRef.current = null
         flushStreamUpdates(generation)
-      }, STREAM_UPDATE_FLUSH_MS)
+      })
     },
     [flushStreamUpdates]
   )
@@ -160,7 +160,7 @@ export function useChatHandler({
     () => () => {
       requestGenerationRef.current += 1
       if (streamFlushTimerRef.current !== null) {
-        window.clearTimeout(streamFlushTimerRef.current)
+        window.cancelAnimationFrame(streamFlushTimerRef.current)
       }
       abortControllerRef.current?.abort()
       abortControllerRef.current = null

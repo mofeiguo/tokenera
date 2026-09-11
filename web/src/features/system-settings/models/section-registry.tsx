@@ -25,16 +25,6 @@ import { GlobalSettingsCard } from './global-settings-card'
 import { GrokSettingsCard } from './grok-settings-card'
 import { RoutingReliabilitySection } from './routing-reliability-section'
 
-function formatJsonForEditor(value: string, fallback: string) {
-  const raw = (value ?? '').toString().trim()
-  if (!raw) return fallback
-  try {
-    return JSON.stringify(JSON.parse(raw), null, 2)
-  } catch {
-    return fallback
-  }
-}
-
 const MODELS_SECTIONS = [
   {
     id: 'global',
@@ -42,12 +32,6 @@ const MODELS_SECTIONS = [
     build: (settings: ModelSettings) => (
       <GlobalSettingsCard
         defaultValues={{
-          global: {
-            thinking_model_blacklist: formatJsonForEditor(
-              settings['global.thinking_model_blacklist'],
-              '[]'
-            ),
-          },
           general_setting: {
             ping_interval_enabled:
               settings['general_setting.ping_interval_enabled'],

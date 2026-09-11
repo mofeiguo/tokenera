@@ -18,7 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, test } from 'vitest'
 
-import type { Message, ParameterEnabled, PlaygroundConfig } from '../../../types'
+import type {
+  Message,
+  ParameterEnabled,
+  PlaygroundConfig,
+} from '../../../types'
 import { buildPlaygroundRequest } from '../payload-builder'
 
 const parameterEnabled: ParameterEnabled = {
@@ -43,7 +47,6 @@ function config(
 ): PlaygroundConfig {
   return {
     model: 'gpt-4o',
-    group: 'default',
     endpointType,
     temperature: 0.7,
     top_p: 1,
@@ -79,9 +82,7 @@ describe('buildPlaygroundRequest', () => {
     )
 
     expect(request.url).toBe('/pg/responses')
-    expect(request.payload.input).toEqual([
-      { role: 'user', content: 'hello' },
-    ])
+    expect(request.payload.input).toEqual([{ role: 'user', content: 'hello' }])
     expect(request.payload.messages).toBeUndefined()
   })
 
@@ -106,11 +107,104 @@ describe('buildPlaygroundRequest', () => {
       parameterEnabled
     )
 
-    expect(request.url).toBe(
-      '/pg/models/gpt-4o:streamGenerateContent'
-    )
+    expect(request.url).toBe('/pg/models/gpt-4o:streamGenerateContent')
     expect(request.payload.contents).toEqual([
       { role: 'user', parts: [{ text: 'hello' }] },
+    ])
+  })
+
+  test('sends attached images as base64 across playground endpoints', () => {
+    const imageMessages: Message[] = [
+      {
+        key: 'u1',
+        from: 'user',
+        versions: [{ id: 'v1', content: 'describe this' }],
+        images: [
+          {
+            url: 'data:image/png;base64,aGVsbG8=',
+            mediaType: 'image/png',
+            filename: 'dot.png',
+          },
+        ],
+      },
+    ]
+
+    const openai = buildPlaygroundRequest(
+      imageMessages,
+      config('openai'),
+      parameterEnabled
+    )
+    expect(openai.payload.messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'describe this' },
+          {
+            type: 'image_url',
+            image_url: { url: 'data:image/png;base64,aGVsbG8=' },
+          },
+        ],
+      },
+    ])
+
+    const responses = buildPlaygroundRequest(
+      imageMessages,
+      config('openai-response'),
+      parameterEnabled
+    )
+    expect(responses.payload.input).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'describe this' },
+          {
+            type: 'input_image',
+            image_url: 'data:image/png;base64,aGVsbG8=',
+          },
+        ],
+      },
+    ])
+
+    const anthropic = buildPlaygroundRequest(
+      imageMessages,
+      config('anthropic'),
+      parameterEnabled
+    )
+    expect(anthropic.payload.messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'describe this' },
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: 'image/png',
+              data: 'aGVsbG8=',
+            },
+          },
+        ],
+      },
+    ])
+
+    const gemini = buildPlaygroundRequest(
+      imageMessages,
+      config('gemini'),
+      parameterEnabled
+    )
+    expect(gemini.payload.contents).toEqual([
+      {
+        role: 'user',
+        parts: [
+          { text: 'describe this' },
+          {
+            inlineData: {
+              mimeType: 'image/png',
+              data: 'aGVsbG8=',
+            },
+          },
+        ],
+      },
     ])
   })
 })

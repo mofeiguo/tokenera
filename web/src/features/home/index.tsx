@@ -29,6 +29,11 @@ import { useAuthStore } from '@/stores/auth-store'
 import { CTA, Features, Hero, HowItWorks } from './components'
 import { useHomePageContent } from './hooks'
 
+const HOME_HEADER_PROPS = {
+  showSearch: false,
+  showGithubLink: false,
+} as const
+
 export function Home() {
   const { i18n, t } = useTranslation()
   const { resolvedTheme } = useTheme()
@@ -60,7 +65,7 @@ export function Home() {
 
   if (!isLoaded) {
     return (
-      <PublicLayout showMainContainer={false}>
+      <PublicLayout showMainContainer={false} headerProps={HOME_HEADER_PROPS}>
         <div className='flex min-h-screen items-center justify-center'>
           <div className='text-muted-foreground'>{t('Loading...')}</div>
         </div>
@@ -71,7 +76,7 @@ export function Home() {
   if (content) {
     if (isUrl) {
       return (
-        <PublicLayout showMainContainer={false}>
+        <PublicLayout showMainContainer={false} headerProps={HOME_HEADER_PROPS}>
           {/*
             allow-top-navigation-by-user-activation: the custom home page URL is
             admin-configured (trusted); this lets its target="_top" nav/menu links
@@ -96,7 +101,7 @@ export function Home() {
 
     if (contentIsHtml) {
       return (
-        <PublicLayout showMainContainer={false}>
+        <PublicLayout showMainContainer={false} headerProps={HOME_HEADER_PROPS}>
           <RichContent
             mode='html'
             htmlVariant='isolated'
@@ -108,7 +113,7 @@ export function Home() {
     }
 
     return (
-      <PublicLayout>
+      <PublicLayout headerProps={HOME_HEADER_PROPS}>
         <div className='mx-auto max-w-6xl px-4 py-8'>
           <RichContent
             mode='markdown'
@@ -121,7 +126,7 @@ export function Home() {
   }
 
   return (
-    <PublicLayout showMainContainer={false}>
+    <PublicLayout showMainContainer={false} headerProps={HOME_HEADER_PROPS}>
       {/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V5 */}
       {/* Hallmark · genre: modern-minimal · macrostructure: Workbench · enrichment: product demo */}
       <div className='bg-background relative isolate overflow-x-clip'>

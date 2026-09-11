@@ -148,7 +148,6 @@ export const FILTER_SECTIONS = {
   PRICING_TYPE: 'pricingType',
   ENDPOINT_TYPE: 'endpointType',
   VENDOR: 'vendor',
-  GROUP: 'group',
   TAG: 'tag',
 } as const
 
@@ -160,9 +159,6 @@ export const MAX_FILTER_ITEMS = 5
 
 /** Sidebar width */
 export const SIDEBAR_WIDTH = 'w-64'
-
-/** Excluded groups */
-export const EXCLUDED_GROUPS = ['', 'auto']
 
 /** Quota type values */
 export const QUOTA_TYPE_VALUES = {

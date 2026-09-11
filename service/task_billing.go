@@ -55,7 +55,6 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		Quota:     info.PriceData.Quota,
 		Content:   logContent,
 		TokenId:   info.TokenId,
-		Group:     info.UsingGroup,
 		Other:     other,
 	})
 	model.UpdateUserUsedQuotaAndRequestCount(info.UserId, info.PriceData.Quota)
@@ -185,7 +184,6 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) bool 
 		ModelName: taskModelName(task),
 		Quota:     quota,
 		TokenId:   task.PrivateData.TokenId,
-		Group:     task.Group,
 		Other:     other,
 	})
 
@@ -265,7 +263,6 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		ModelName: taskModelName(task),
 		Quota:     logQuota,
 		TokenId:   task.PrivateData.TokenId,
-		Group:     task.Group,
 		Other:     other,
 		NodeName:  task.PrivateData.NodeName,
 	})
@@ -289,20 +286,8 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 		return
 	}
 
-	// 获取用户和组的倍率信息
-	group := task.Group
-	if group == "" {
-		user, err := model.GetUserById(task.UserId, false)
-		if err == nil {
-			group = user.Group
-		}
-	}
-	if group == "" {
-		return
-	}
-
-	groupRatio := ratio_setting.GetGroupRatio(group)
-	userGroupRatio, hasUserGroupRatio := ratio_setting.GetGroupGroupRatio(group, group)
+	groupRatio := ratio_setting.GetGroupRatio("")
+	userGroupRatio, hasUserGroupRatio := ratio_setting.GetGroupGroupRatio("", "")
 
 	var finalGroupRatio float64
 	if hasUserGroupRatio {

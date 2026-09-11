@@ -13,13 +13,9 @@ type TaskError struct {
 	Error      error  `json:"-"`
 }
 
-type TaskData interface {
-	SunoDataResponse | []SunoDataResponse | string | any
-}
-
 const TaskSuccessCode = "success"
 
-type TaskResponse[T TaskData] struct {
+type TaskResponse[T any] struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 	Data    T      `json:"data"`
@@ -36,7 +32,7 @@ type TaskDto struct {
 	TaskID     string          `json:"task_id"`
 	Platform   string          `json:"platform"`
 	UserId     int             `json:"user_id"`
-	Group      string          `json:"group"`
+	Group      string          `json:"-"`
 	ChannelId  int             `json:"channel_id"`
 	Quota      int             `json:"quota"`
 	Action     string          `json:"action"`

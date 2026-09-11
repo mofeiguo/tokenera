@@ -42,7 +42,6 @@ type FilterState = {
   intent?: ModelIntent
   sort?: string
   vendor?: string
-  group?: string
   quotaType?: string
   endpointType?: string
   tag?: string
@@ -80,8 +79,6 @@ export function useFilters(models: PricingModel[]) {
     typeof search.sort === 'string' ? search.sort : SORT_OPTIONS.NAME
   const vendorFilter =
     typeof search.vendor === 'string' ? search.vendor : FILTER_ALL
-  const groupFilter =
-    typeof search.group === 'string' ? search.group : FILTER_ALL
   const quotaTypeFilter =
     typeof search.quotaType === 'string' ? search.quotaType : QUOTA_TYPES.ALL
   const endpointTypeFilter =
@@ -126,10 +123,6 @@ export function useFilters(models: PricingModel[]) {
   )
   const setVendorFilter = useCallback(
     (v: string) => updateFilters({ vendor: v === FILTER_ALL ? undefined : v }),
-    [updateFilters]
-  )
-  const setGroupFilter = useCallback(
-    (v: string) => updateFilters({ group: v === FILTER_ALL ? undefined : v }),
     [updateFilters]
   )
   const setQuotaTypeFilter = useCallback(
@@ -182,7 +175,6 @@ export function useFilters(models: PricingModel[]) {
       search: debouncedSearchInput,
       intent: modelIntent,
       vendor: vendorFilter,
-      group: groupFilter,
       quotaType: quotaTypeFilter,
       endpointType: endpointTypeFilter,
       tag: tagFilter,
@@ -194,7 +186,6 @@ export function useFilters(models: PricingModel[]) {
     debouncedSearchInput,
     modelIntent,
     vendorFilter,
-    groupFilter,
     quotaTypeFilter,
     endpointTypeFilter,
     tagFilter,
@@ -205,7 +196,6 @@ export function useFilters(models: PricingModel[]) {
   const hasActiveFilters = useMemo(
     () =>
       vendorFilter !== FILTER_ALL ||
-      groupFilter !== FILTER_ALL ||
       quotaTypeFilter !== QUOTA_TYPES.ALL ||
       endpointTypeFilter !== ENDPOINT_TYPES.ALL ||
       tagFilter !== FILTER_ALL ||
@@ -213,7 +203,6 @@ export function useFilters(models: PricingModel[]) {
       modelIntent !== MODEL_INTENTS.ALL,
     [
       vendorFilter,
-      groupFilter,
       quotaTypeFilter,
       endpointTypeFilter,
       tagFilter,
@@ -225,14 +214,12 @@ export function useFilters(models: PricingModel[]) {
   const activeFilterCount = useMemo(
     () =>
       (vendorFilter !== FILTER_ALL ? 1 : 0) +
-      (groupFilter !== FILTER_ALL ? 1 : 0) +
       (quotaTypeFilter !== QUOTA_TYPES.ALL ? 1 : 0) +
       (endpointTypeFilter !== ENDPOINT_TYPES.ALL ? 1 : 0) +
       (tagFilter !== FILTER_ALL ? 1 : 0) +
       (capabilityFilter !== CAPABILITY_FILTERS.ALL ? 1 : 0),
     [
       vendorFilter,
-      groupFilter,
       quotaTypeFilter,
       endpointTypeFilter,
       tagFilter,
@@ -243,7 +230,6 @@ export function useFilters(models: PricingModel[]) {
   const clearFilters = useCallback(() => {
     updateFilters({
       vendor: undefined,
-      group: undefined,
       quotaType: undefined,
       endpointType: undefined,
       tag: undefined,
@@ -255,7 +241,6 @@ export function useFilters(models: PricingModel[]) {
   const clearAdvancedFilters = useCallback(() => {
     updateFilters({
       vendor: undefined,
-      group: undefined,
       quotaType: undefined,
       endpointType: undefined,
       tag: undefined,
@@ -272,7 +257,6 @@ export function useFilters(models: PricingModel[]) {
     modelIntent,
     sortBy,
     vendorFilter,
-    groupFilter,
     quotaTypeFilter,
     endpointTypeFilter,
     tagFilter,
@@ -284,7 +268,6 @@ export function useFilters(models: PricingModel[]) {
     setModelIntent,
     setSortBy,
     setVendorFilter,
-    setGroupFilter,
     setQuotaTypeFilter,
     setEndpointTypeFilter,
     setTagFilter,

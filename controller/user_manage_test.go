@@ -66,7 +66,7 @@ func TestManageUserDisableAdvancesAuthVersionOnceAndRevokesSession(t *testing.T)
 	now := time.Now().Unix()
 	user := model.User{
 		Username: "managed-disable-user", Password: "password", Role: common.RoleCommonUser,
-		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+		Status: common.UserStatusEnabled, AuthVersion: 1,
 	}
 	require.NoError(t, db.Create(&user).Error)
 	require.NoError(t, db.Create(&model.UserSession{
@@ -98,7 +98,7 @@ func TestManageUserDemoteAdvancesAuthVersionAndRevokesSessionsOnce(t *testing.T)
 	now := time.Now().Unix()
 	user := model.User{
 		Username: "managed-demote-user", Password: "password", Role: common.RoleAdminUser,
-		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+		Status: common.UserStatusEnabled, AuthVersion: 1,
 	}
 	require.NoError(t, db.Create(&user).Error)
 	for _, sid := range []string{"managed-demote-session-one", "managed-demote-session-two"} {
@@ -138,7 +138,7 @@ func TestManageUserDeleteReturnsImmediatelyAndUnknownActionFails(t *testing.T) {
 	db := setupManageUserTestDB(t)
 	deleted := model.User{
 		Username: "managed-delete-user", Password: "password", Role: common.RoleCommonUser,
-		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, AffCode: "delete-aff",
+		Status: common.UserStatusEnabled, AuthVersion: 1, AffCode: "delete-aff",
 	}
 	require.NoError(t, db.Create(&deleted).Error)
 
@@ -150,7 +150,7 @@ func TestManageUserDeleteReturnsImmediatelyAndUnknownActionFails(t *testing.T) {
 
 	unchanged := model.User{
 		Username: "managed-unknown-user", Password: "password", Role: common.RoleCommonUser,
-		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, AffCode: "unknown-aff",
+		Status: common.UserStatusEnabled, AuthVersion: 1, AffCode: "unknown-aff",
 	}
 	require.NoError(t, db.Create(&unchanged).Error)
 	recorder = performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"unknown"}`, unchanged.Id))

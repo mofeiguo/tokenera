@@ -17,9 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { ColumnDef } from '@tanstack/react-table'
-import { Music } from 'lucide-react'
 /* eslint-disable react-refresh/only-export-components */
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
@@ -31,10 +30,6 @@ import { cn } from '@/lib/utils'
 import { TASK_ACTIONS, TASK_STATUS } from '../../constants'
 import { taskActionMapper, taskStatusMapper } from '../../lib/mappers'
 import type { TaskLog } from '../../types'
-import {
-  AudioPreviewDialog,
-  type AudioClip,
-} from '../dialogs/audio-preview-dialog'
 import { FailReasonDialog } from '../dialogs/fail-reason-dialog'
 import { useUsageLogsContext } from '../usage-logs-provider'
 import {
@@ -42,53 +37,6 @@ import {
   createChannelColumn,
   createProgressColumn,
 } from './column-helpers'
-
-function parseTaskData(data: unknown): unknown[] {
-  if (Array.isArray(data)) return data
-  if (typeof data === 'string') {
-    try {
-      const parsed = JSON.parse(data)
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
-    }
-  }
-  return []
-}
-
-function AudioPreviewCell({ log }: { log: TaskLog }) {
-  const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const clips = useMemo(() => {
-    const data = parseTaskData(log.data)
-    return data.filter(
-      (c) =>
-        c && typeof c === 'object' && (c as Record<string, unknown>).audio_url
-    )
-  }, [log.data])
-
-  if (clips.length === 0) return null
-
-  return (
-    <>
-      <button
-        type='button'
-        className='group flex items-center gap-1 text-left text-xs'
-        onClick={() => setOpen(true)}
-      >
-        <Music className='text-muted-foreground size-3' />
-        <span className='text-foreground leading-snug group-hover:underline'>
-          {t('Click to preview audio')}
-        </span>
-      </button>
-      <AudioPreviewDialog
-        open={open}
-        onOpenChange={setOpen}
-        clips={clips as AudioClip[]}
-      />
-    </>
-  )
-}
 
 export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
   const { t } = useTranslation()
@@ -221,22 +169,6 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
         const failReason = row.getValue('fail_reason') as string
         const status = log.status
         const [dialogOpen, setDialogOpen] = useState(false)
-
-        const isSunoSuccess =
-          log.platform === 'suno' && status === TASK_STATUS.SUCCESS
-        if (isSunoSuccess) {
-          const data = parseTaskData(log.data)
-          if (
-            data.some(
-              (c) =>
-                c &&
-                typeof c === 'object' &&
-                (c as Record<string, unknown>).audio_url
-            )
-          ) {
-            return <AudioPreviewCell log={log} />
-          }
-        }
 
         const isVideoTask =
           log.action === TASK_ACTIONS.GENERATE ||

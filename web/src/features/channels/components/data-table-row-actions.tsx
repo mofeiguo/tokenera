@@ -17,21 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { Row } from '@tanstack/react-table'
-import {
-  MoreHorizontal,
-  Pencil,
-  PlugZap,
-  Gauge,
-  DollarSign,
-  Download,
-  Copy,
-  Power,
-  PowerOff,
-  Key,
-  Trash2,
-  RefreshCw,
-  Loader2,
-} from 'lucide-react'
 import { useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -50,25 +35,39 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Spinner } from '@/components/ui/spinner'
 import {
   ADMIN_PERMISSION_ACTIONS,
   ADMIN_PERMISSION_RESOURCES,
   hasPermission,
 } from '@/lib/admin-permissions'
 import { useQueryClient } from '@/lib/query'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { MODEL_FETCHABLE_TYPES } from '../constants'
 import {
-  channelsQueryKeys,
   handleDeleteChannel,
-  handleTestChannel,
   handleToggleChannelStatus,
   isChannelEnabled,
   isMultiKeyChannel,
+  CHANNEL_ACTION_DISABLE,
+  CHANNEL_ACTION_ENABLE,
+  CHANNEL_ACTION_NEUTRAL,
+  CHANNEL_ACTION_TEST,
 } from '../lib'
-import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
 import type { Channel } from '../types'
+import {
+  ChannelIconBalance,
+  ChannelIconCopy,
+  ChannelIconDelete,
+  ChannelIconDownload,
+  ChannelIconEdit,
+  ChannelIconKey,
+  ChannelIconMore,
+  ChannelIconPowerOff,
+  ChannelIconPowerOn,
+  ChannelIconTest,
+} from './channel-icons'
 import { ChannelRowActionsLayoutContext } from './channel-row-actions-context'
 import { useChannels } from './channels-provider'
 
@@ -80,11 +79,10 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { t } = useTranslation()
   const layout = useContext(ChannelRowActionsLayoutContext)
   const channel = row.original
-  const { setOpen, setCurrentRow, upstream } = useChannels()
+  const { setOpen, setCurrentRow } = useChannels()
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((s) => s.auth.user)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-  const [isTesting, setIsTesting] = useState(false)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
 
   const isEnabled = isChannelEnabled(channel)
@@ -103,18 +101,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const handleTest = () => {
     setCurrentRow(channel)
     setOpen('test-channel')
-  }
-
-  const handleDirectTest = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation()
-    setIsTesting(true)
-    try {
-      await handleTestChannel(channel.id, { channelName: channel.name }, () => {
-        queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-      })
-    } finally {
-      setIsTesting(false)
-    }
   }
 
   const handleQueryBalance = () => {
@@ -137,10 +123,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     setOpen('multi-key-manage')
   }
 
-  const handleToggleStatus = async (
-    e?: React.MouseEvent<HTMLButtonElement>
-  ) => {
-    e?.stopPropagation()
+  const handleToggleStatus = async () => {
     setIsTogglingStatus(true)
     try {
       await handleToggleChannelStatus(channel.id, channel.status, queryClient)
@@ -149,12 +132,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     }
   }
 
-  let statusIcon = <Power className='size-4' />
-  if (isTogglingStatus) {
-    statusIcon = <Loader2 className='size-4 animate-spin' />
-  } else if (isEnabled) {
-    statusIcon = <PowerOff className='size-4' />
-  }
+  const toggleLabel = isEnabled ? t('Disable') : t('Enable')
 
   return (
     <div className='-ml-1.5 flex items-center gap-1'>
@@ -165,6 +143,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
               <Button
                 variant='ghost'
                 size='icon-sm'
+                className={CHANNEL_ACTION_NEUTRAL}
                 onClick={(e) => {
                   e.stopPropagation()
                   handleEdit()
@@ -173,7 +152,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
               />
             }
           >
-            <Pencil className='size-4' />
+            <ChannelIconEdit />
           </TooltipTrigger>
           <TooltipContent>{t('Edit')}</TooltipContent>
         </Tooltip>
@@ -185,41 +164,19 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             <Button
               variant='ghost'
               size='icon-sm'
-              onClick={handleDirectTest}
-              disabled={isTesting}
+              className={CHANNEL_ACTION_TEST}
+              onClick={(e) => {
+                e.stopPropagation()
+                handleTest()
+              }}
               aria-label={t('Test Connection')}
             />
           }
         >
-          {isTesting ? (
-            <Loader2 className='size-4 animate-spin' />
-          ) : (
-            <Gauge className='size-4' />
-          )}
+          <ChannelIconTest />
         </TooltipTrigger>
         <TooltipContent>{t('Test Connection')}</TooltipContent>
       </Tooltip>
-
-      {layout === 'card' && (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant='ghost'
-                size='icon-sm'
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleTest()
-                }}
-                aria-label={t('Test Channel Connection')}
-              />
-            }
-          >
-            <PlugZap className='size-4' />
-          </TooltipTrigger>
-          <TooltipContent>{t('Test Channel Connection')}</TooltipContent>
-        </Tooltip>
-      )}
 
       <Tooltip>
         <TooltipTrigger
@@ -227,22 +184,27 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             <Button
               variant='ghost'
               size='icon-sm'
-              onClick={handleToggleStatus}
+              onClick={(e) => {
+                e.stopPropagation()
+                void handleToggleStatus()
+              }}
               disabled={isTogglingStatus}
-              aria-label={isEnabled ? t('Disable') : t('Enable')}
+              aria-label={toggleLabel}
               className={
-                isEnabled
-                  ? 'text-destructive hover:text-destructive'
-                  : 'text-success hover:text-success'
+                isEnabled ? CHANNEL_ACTION_DISABLE : CHANNEL_ACTION_ENABLE
               }
             />
           }
         >
-          {statusIcon}
+          {isTogglingStatus ? (
+            <Spinner className='size-4' />
+          ) : isEnabled ? (
+            <ChannelIconPowerOff />
+          ) : (
+            <ChannelIconPowerOn />
+          )}
         </TooltipTrigger>
-        <TooltipContent>
-          {isEnabled ? t('Disable') : t('Enable')}
-        </TooltipContent>
+        <TooltipContent>{toggleLabel}</TooltipContent>
       </Tooltip>
 
       <DropdownMenu>
@@ -250,84 +212,49 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           render={
             <Button
               variant='ghost'
-              className='data-popup-open:bg-muted flex h-8 w-8 p-0'
+              className={cn(
+                'data-popup-open:bg-muted flex size-8 p-0',
+                CHANNEL_ACTION_NEUTRAL
+              )}
+              aria-label={t('Open menu')}
             />
           }
         >
-          <MoreHorizontal className='h-4 w-4' />
-          <span className='sr-only'>{t('Open menu')}</span>
+          <ChannelIconMore />
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='w-48'>
           {layout === 'card' && (
             <DropdownMenuItem onClick={handleEdit}>
               {t('Edit')}
               <DropdownMenuShortcut>
-                <Pencil size={16} />
+                <ChannelIconEdit className='size-4' />
               </DropdownMenuShortcut>
             </DropdownMenuItem>
           )}
 
-          {/* Test Connection */}
-          <DropdownMenuItem onClick={handleTest}>
-            {t('Test Connection')}
-            <DropdownMenuShortcut>
-              <PlugZap size={16} />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
-
-          {/* Query Balance */}
           <DropdownMenuItem onClick={handleQueryBalance}>
             {t('Query Balance')}
             <DropdownMenuShortcut>
-              <DollarSign size={16} />
+              <ChannelIconBalance className='size-4' />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          {/* Fetch Models */}
           <DropdownMenuItem onClick={handleFetchModels}>
             {t('Fetch Models')}
             <DropdownMenuShortcut>
-              <Download size={16} />
+              <ChannelIconDownload className='size-4' />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          {/* Detect Upstream Updates (only for fetchable channel types) */}
-          {MODEL_FETCHABLE_TYPES.has(channel.type) && (
-            <DropdownMenuItem
-              onClick={() => {
-                const meta = parseUpstreamUpdateMeta(channel.settings)
-                if (
-                  meta.pendingAddModels.length > 0 ||
-                  meta.pendingRemoveModels.length > 0
-                ) {
-                  upstream.openModal(
-                    channel,
-                    meta.pendingAddModels,
-                    meta.pendingRemoveModels,
-                    meta.pendingAddModels.length > 0 ? 'add' : 'remove'
-                  )
-                } else {
-                  upstream.detectChannelUpdates(channel)
-                }
-              }}
-            >
-              {t('Upstream Updates')}
-              <DropdownMenuShortcut>
-                <RefreshCw size={16} />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
-          )}
-
           <DropdownMenuSeparator />
 
-          {/* Copy Channel */}
           <DropdownMenuItem
             disabled={!canEditSensitive}
             onClick={canEditSensitive ? handleCopy : undefined}
           >
             {t('Copy Channel')}
             <DropdownMenuShortcut>
-              <Copy size={16} />
+              <ChannelIconCopy className='size-4' />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
           {!canEditSensitive && (
@@ -336,19 +263,17 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuItem>
           )}
 
-          {/* Manage Keys (only for multi-key channels) */}
           {isMultiKey && (
             <DropdownMenuItem onClick={handleManageKeys}>
               {t('Manage Keys')}
               <DropdownMenuShortcut>
-                <Key size={16} />
+                <ChannelIconKey className='size-4' />
               </DropdownMenuShortcut>
             </DropdownMenuItem>
           )}
 
           <DropdownMenuSeparator />
 
-          {/* Delete */}
           <DropdownMenuItem
             disabled={!canEditSensitive}
             onSelect={(e) => {
@@ -360,7 +285,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           >
             {t('Delete')}
             <DropdownMenuShortcut>
-              <Trash2 size={16} />
+              <ChannelIconDelete className='size-4' />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
         </DropdownMenuContent>

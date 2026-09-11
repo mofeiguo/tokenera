@@ -24,7 +24,7 @@ const { I18nextProvider, initReactI18next } = await import('react-i18next')
 const { QueryClient, QueryClientProvider } = await import('@/lib/query')
 const { api } = await import('@/lib/api')
 const { ApiKeysProvider } = await import('../api-keys-provider')
-const { ApiKeysMutateDrawer } = await import('../api-keys-mutate-drawer')
+const { ApiKeysMutateDialog } = await import('../api-keys-mutate-dialog')
 
 const i18n = createInstance()
 await i18n.use(initReactI18next).init({
@@ -50,27 +50,9 @@ function installApiFixtures(createdPayloads: Array<Record<string, unknown>>) {
   apiClient.get = async (url) => {
     switch (url) {
       case '/api/status':
-        return { data: { data: { default_use_auto_group: true } } }
+        return { data: { data: {} } }
       case '/api/user/models':
         return { data: { success: true, data: [] } }
-      case '/api/user/self/groups':
-        return {
-          data: {
-            success: true,
-            data: {
-              auto: { desc: 'Automatic routing', ratio: 'auto' },
-              default: { desc: 'Standard access', ratio: 1 },
-              vip: { desc: 'Priority access', ratio: 2 },
-            },
-          },
-        }
-      case '/api/token/auto-groups':
-        return {
-          data: {
-            success: true,
-            data: { groups: ['vip', 'default'], max_count: 3 },
-          },
-        }
       default:
         throw new Error(`Unexpected GET ${url}`)
     }
@@ -79,7 +61,12 @@ function installApiFixtures(createdPayloads: Array<Record<string, unknown>>) {
     expect(url).toBe('/api/token/')
     expect(data && typeof data === 'object').toBeTruthy()
     createdPayloads.push(data as Record<string, unknown>)
-    return { data: { success: true, data: {} } }
+    return {
+      data: {
+        success: true,
+        data: { id: createdPayloads.length + 1, name: 'batch', key: 'createdkey' },
+      },
+    }
   }
 }
 
@@ -90,32 +77,12 @@ async function renderCreateDrawer(): Promise<void> {
   const freshAt = Date.now() + 60_000
   queryClient.setQueryData(
     ['status'],
-    { default_use_auto_group: true },
+    {},
     { updatedAt: freshAt }
   )
   queryClient.setQueryData(
     ['user-models'],
     { success: true, data: [] },
-    { updatedAt: freshAt }
-  )
-  queryClient.setQueryData(
-    ['user-groups'],
-    {
-      success: true,
-      data: {
-        auto: { desc: 'Automatic routing', ratio: 'auto' },
-        default: { desc: 'Standard access', ratio: 1 },
-        vip: { desc: 'Priority access', ratio: 2 },
-      },
-    },
-    { updatedAt: freshAt }
-  )
-  queryClient.setQueryData(
-    ['token-auto-groups'],
-    {
-      success: true,
-      data: { groups: ['vip', 'default'], max_count: 3 },
-    },
     { updatedAt: freshAt }
   )
   renderedDrawer = { queryClient }
@@ -124,14 +91,14 @@ async function renderCreateDrawer(): Promise<void> {
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
         <ApiKeysProvider>
-          <ApiKeysMutateDrawer open onOpenChange={() => undefined} />
+          <ApiKeysMutateDialog open onOpenChange={() => undefined} />
         </ApiKeysProvider>
       </I18nextProvider>
     </QueryClientProvider>
   )
   await waitFor(
     () => {
-      const saveButton = findButton('Save changes', false)
+      const saveButton = findButton('Create API Key', false)
       expect(saveButton).toBeEnabled()
     },
     { timeout: 1500 }
@@ -186,26 +153,28 @@ afterEach(() => {
   }
 })
 
-describe('API keys mutate drawer', () => {
-  test('hides group controls and can still create a key', async () => {
+describe('API keys mutate dialog', () => {
+  test('can create a key from the dialog', async () => {
     const createdPayloads: Array<Record<string, unknown>> = []
     installApiFixtures(createdPayloads)
     await renderCreateDrawer()
 
-    expect(
-      [...document.querySelectorAll('label')].some(
-        (label) => label.textContent?.trim() === 'Group'
-      )
-    ).toBe(false)
-    expect(
-      [...document.querySelectorAll('label')].some(
-        (label) => label.textContent?.trim() === 'Auto group order'
-      )
-    ).toBe(false)
-
     changeInput(getControlByLabel('Name'), 'batch')
-    fireEvent.click(findButton('Save changes', true))
+    fireEvent.click(findButton('Create API Key', true))
     await waitFor(() => expect(createdPayloads).toHaveLength(1))
     expect(createdPayloads[0]?.name).toBe('batch')
+    expect(createdPayloads[0]?.expired_time).toBe(-1)
+  })
+
+  test('uses expiry presets instead of a date-time picker', async () => {
+    installApiFixtures([])
+    await renderCreateDrawer()
+
+    expect(findButton('Never', true)).toBeInTheDocument()
+    expect(findButton('1 Hour', true)).toBeInTheDocument()
+    expect(findButton('1 Day', true)).toBeInTheDocument()
+    expect(findButton('1 Month', true)).toBeInTheDocument()
+    expect(document.querySelector('input[type="date"]')).toBeNull()
+    expect(document.querySelector('input[type="time"]')).toBeNull()
   })
 })

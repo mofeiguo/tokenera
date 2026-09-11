@@ -20,7 +20,12 @@ import { describe, expect, test } from 'vitest'
 
 import type { AuthUser } from '@/stores/auth-store'
 
-import { getSavedLanguage, sanitizeAuthRedirect } from './auth-redirect'
+import {
+  buildSignInRedirectParam,
+  getSavedLanguage,
+  sanitizeAuthRedirect,
+  signInPathWithRedirect,
+} from './auth-redirect'
 
 const origin = 'https://dashboard.example.com'
 
@@ -52,6 +57,41 @@ describe('authentication redirect validation', () => {
     for (const target of unsafeTargets) {
       expect(sanitizeAuthRedirect(target, origin)).toBe(null)
     }
+  })
+
+  test('rejects auth guest routes so login does not loop back to sign-in', () => {
+    const guestTargets = [
+      '/sign-in',
+      '/sign-in?redirect=%2Fdashboard',
+      'https://dashboard.example.com/sign-in',
+      '/sign-up',
+      '/otp',
+      '/forgot-password',
+      '/oauth/github',
+    ]
+
+    for (const target of guestTargets) {
+      expect(sanitizeAuthRedirect(target, origin)).toBe(null)
+    }
+  })
+
+  test('buildSignInRedirectParam omits unsafe targets', () => {
+    expect(
+      buildSignInRedirectParam('https://dashboard.example.com/sign-in', origin)
+    ).toBe(null)
+    expect(
+      buildSignInRedirectParam('https://dashboard.example.com/dashboard', origin)
+    ).toBe('https://dashboard.example.com/dashboard')
+  })
+
+  test('signInPathWithRedirect drops guest redirect loops', () => {
+    const localOrigin = 'http://localhost:3007'
+    expect(
+      signInPathWithRedirect(`${localOrigin}/sign-in`, localOrigin)
+    ).toBe('/sign-in')
+    expect(
+      signInPathWithRedirect(`${localOrigin}/dashboard`, localOrigin)
+    ).toBe('/sign-in?redirect=http%3A%2F%2Flocalhost%3A3007%2Fdashboard')
   })
 
   test('rejects invalid or non-HTTP application origins', () => {

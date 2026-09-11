@@ -115,11 +115,10 @@ func InitOptionMap() {
 	common.OptionMap["WaffoPancakeMinTopUp"] = strconv.Itoa(setting.WaffoPancakeMinTopUp)
 	common.OptionMap["WaffoPancakeStoreID"] = setting.WaffoPancakeStoreID
 	common.OptionMap["WaffoPancakeProductID"] = setting.WaffoPancakeProductID
-	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
-	common.OptionMap["Chats"] = setting.Chats2JsonString()
-	common.OptionMap["AutoGroups"] = setting.AutoGroups2JsonString()
-	common.OptionMap["DefaultUseAutoGroup"] = strconv.FormatBool(setting.DefaultUseAutoGroup)
-	common.OptionMap["MaxTokenAutoGroups"] = strconv.Itoa(setting.GetMaxTokenAutoGroups())
+	common.OptionMap["TopupGroupRatio"] = "{}"
+	common.OptionMap["AutoGroups"] = "[]"
+	common.OptionMap["DefaultUseAutoGroup"] = "false"
+	common.OptionMap["MaxTokenAutoGroups"] = "0"
 	common.OptionMap["PayMethods"] = operation_setting.PayMethods2JsonString()
 	common.OptionMap["GitHubClientId"] = ""
 	common.OptionMap["GitHubClientSecret"] = ""
@@ -131,8 +130,6 @@ func InitOptionMap() {
 	common.OptionMap["TurnstileSiteKey"] = ""
 	common.OptionMap["TurnstileSecretKey"] = ""
 	common.OptionMap["QuotaForNewUser"] = strconv.Itoa(common.QuotaForNewUser)
-	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
-	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
 	common.OptionMap["QuotaRemindThreshold"] = strconv.Itoa(common.QuotaRemindThreshold)
 	common.OptionMap["PreConsumedQuota"] = strconv.Itoa(common.PreConsumedQuota)
 	common.OptionMap["ModelRequestRateLimitCount"] = strconv.Itoa(setting.ModelRequestRateLimitCount)
@@ -143,10 +140,10 @@ func InitOptionMap() {
 	common.OptionMap["ModelPrice"] = ratio_setting.ModelPrice2JSONString()
 	common.OptionMap["CacheRatio"] = ratio_setting.CacheRatio2JSONString()
 	common.OptionMap["CreateCacheRatio"] = ratio_setting.CreateCacheRatio2JSONString()
-	common.OptionMap["GroupRatio"] = ratio_setting.GroupRatio2JSONString()
-	common.OptionMap["GroupGroupRatio"] = ratio_setting.GroupGroupRatio2JSONString()
-	common.OptionMap["UserUsableGroups"] = setting.UserUsableGroups2JSONString()
-	common.OptionMap["GroupInherit"] = setting.GroupInherit2JSONString()
+	common.OptionMap["GroupRatio"] = "{}"
+	common.OptionMap["GroupGroupRatio"] = "{}"
+	common.OptionMap["UserUsableGroups"] = "{}"
+	common.OptionMap["GroupInherit"] = "{}"
 	common.OptionMap["CompletionRatio"] = ratio_setting.CompletionRatio2JSONString()
 	common.OptionMap["ImageRatio"] = ratio_setting.ImageRatio2JSONString()
 	common.OptionMap["AudioRatio"] = ratio_setting.AudioRatio2JSONString()
@@ -207,24 +204,12 @@ func validateOptionValue(key string, value string) error {
 	if key == operation_setting.ChannelTestConcurrencyOptionKey {
 		return operation_setting.ValidateChannelTestConcurrency(value)
 	}
-	if key == "MaxTokenAutoGroups" {
-		return setting.ValidateMaxTokenAutoGroups(value)
-	}
 	return nil
 }
 
 func UpdateOption(key string, value string) error {
 	if err := validateOptionValue(key, value); err != nil {
 		return err
-	}
-	syncCatalogPricing := isLegacyPricingOption(key)
-	var catalogPricingBefore map[string]ResolvedModelPricing
-	if syncCatalogPricing {
-		var err error
-		catalogPricingBefore, err = captureLegacyCatalogPricing()
-		if err != nil {
-			return err
-		}
 	}
 	// Save to database first
 	option := Option{
@@ -238,13 +223,7 @@ func UpdateOption(key string, value string) error {
 	// otherwise it will execute Update (with all fields).
 	DB.Save(&option)
 	// Update OptionMap
-	if err := updateOptionMap(key, value); err != nil {
-		return err
-	}
-	if syncCatalogPricing {
-		return syncChangedCatalogPricingFromSettings(catalogPricingBefore)
-	}
-	return nil
+	return updateOptionMap(key, value)
 }
 
 // UpdateOptionsBulk persists multiple key/value pairs in a single database
@@ -252,24 +231,35 @@ func UpdateOption(key string, value string) error {
 // any DB write fails the whole transaction rolls back and no in-memory state
 // is touched — safe for callers that must commit a set of related options
 // atomically (e.g. payment gateway binding).
+var allModelPricingOptionKeys = []string{
+	"ModelRatio",
+	"ModelPrice",
+	"CompletionRatio",
+	"CacheRatio",
+	"CreateCacheRatio",
+	"ImageRatio",
+	"AudioRatio",
+	"AudioCompletionRatio",
+	"billing_setting.billing_mode",
+	"billing_setting.billing_expr",
+	operation_setting.ToolPriceOptionKey,
+}
+
+// ClearAllModelPricingOptions resets every global model-pricing option to {}.
+func ClearAllModelPricingOptions() error {
+	values := make(map[string]string, len(allModelPricingOptionKeys))
+	for _, key := range allModelPricingOptionKeys {
+		values[key] = "{}"
+	}
+	return UpdateOptionsBulk(values)
+}
+
 func UpdateOptionsBulk(values map[string]string) error {
 	if len(values) == 0 {
 		return nil
 	}
 	for key, value := range values {
 		if err := validateOptionValue(key, value); err != nil {
-			return err
-		}
-	}
-	syncCatalogPricing := false
-	for key := range values {
-		syncCatalogPricing = syncCatalogPricing || isLegacyPricingOption(key)
-	}
-	var catalogPricingBefore map[string]ResolvedModelPricing
-	if syncCatalogPricing {
-		var err error
-		catalogPricingBefore, err = captureLegacyCatalogPricing()
-		if err != nil {
 			return err
 		}
 	}
@@ -294,20 +284,7 @@ func UpdateOptionsBulk(values map[string]string) error {
 			return err
 		}
 	}
-	if syncCatalogPricing {
-		return syncChangedCatalogPricingFromSettings(catalogPricingBefore)
-	}
 	return nil
-}
-
-func isLegacyPricingOption(key string) bool {
-	switch key {
-	case "ModelPrice", "ModelRatio", "CompletionRatio", "CacheRatio", "CreateCacheRatio",
-		"ImageRatio", "AudioRatio", "AudioCompletionRatio":
-		return true
-	default:
-		return false
-	}
 }
 
 func updateOptionMap(key string, value string) (err error) {
@@ -412,7 +389,6 @@ func updateOptionMap(key string, value string) (err error) {
 		case "WorkerAllowHttpImageRequestEnabled":
 			system_setting.WorkerAllowHttpImageRequestEnabled = boolValue
 		case "DefaultUseAutoGroup":
-			setting.DefaultUseAutoGroup = boolValue
 		case "ExposeRatioEnabled":
 			ratio_setting.SetExposeRatioEnabled(boolValue)
 		}
@@ -439,12 +415,8 @@ func updateOptionMap(key string, value string) (err error) {
 		system_setting.WorkerValidKey = value
 	case "PayAddress":
 		operation_setting.PayAddress = value
-	case "Chats":
-		err = setting.UpdateChatsByJsonString(value)
 	case "AutoGroups":
-		err = setting.UpdateAutoGroupsByJsonString(value)
 	case "MaxTokenAutoGroups":
-		err = setting.UpdateMaxTokenAutoGroups(value)
 	case "CustomCallbackAddress":
 		operation_setting.CustomCallbackAddress = value
 	case "EpayId":
@@ -522,7 +494,6 @@ func updateOptionMap(key string, value string) (err error) {
 	case "WaffoPancakeMinTopUp":
 		setting.WaffoPancakeMinTopUp, _ = strconv.Atoi(value)
 	case "TopupGroupRatio":
-		err = common.UpdateTopupGroupRatioByJSONString(value)
 	case "GitHubClientId":
 		common.GitHubClientId = value
 	case "GitHubClientSecret":
@@ -555,10 +526,6 @@ func updateOptionMap(key string, value string) (err error) {
 		common.TurnstileSecretKey = value
 	case "QuotaForNewUser":
 		common.QuotaForNewUser, _ = strconv.Atoi(value)
-	case "QuotaForInviter":
-		common.QuotaForInviter, _ = strconv.Atoi(value)
-	case "QuotaForInvitee":
-		common.QuotaForInvitee, _ = strconv.Atoi(value)
 	case "QuotaRemindThreshold":
 		common.QuotaRemindThreshold, _ = strconv.Atoi(value)
 	case "PreConsumedQuota":
@@ -580,13 +547,9 @@ func updateOptionMap(key string, value string) (err error) {
 	case "ModelRatio":
 		err = ratio_setting.UpdateModelRatioByJSONString(value)
 	case "GroupRatio":
-		err = ratio_setting.UpdateGroupRatioByJSONString(value)
 	case "GroupGroupRatio":
-		err = ratio_setting.UpdateGroupGroupRatioByJSONString(value)
 	case "UserUsableGroups":
-		err = setting.UpdateUserUsableGroupsByJSONString(value)
 	case "GroupInherit":
-		err = setting.UpdateGroupInheritByJSONString(value)
 	case "CompletionRatio":
 		err = ratio_setting.UpdateCompletionRatioByJSONString(value)
 	case "ModelPrice":
@@ -633,6 +596,10 @@ func updateOptionMap(key string, value string) (err error) {
 		case "ModelRatio", "ModelPrice", "CompletionRatio", "CacheRatio", "CreateCacheRatio",
 			"ImageRatio", "AudioRatio", "AudioCompletionRatio":
 			InvalidatePricingCache()
+		default:
+			if strings.HasPrefix(key, "billing_setting.") {
+				InvalidatePricingCache()
+			}
 		}
 	}
 	return err

@@ -23,16 +23,19 @@ import {
 } from 'react-router'
 
 import { About } from '@/features/about'
+import { Analytics } from '@/features/analytics'
+import { ANALYTICS_HOME_URL } from '@/features/analytics/nav'
+import {
+  ANALYTICS_DEFAULT_SECTION,
+  ANALYTICS_SECTION_IDS,
+} from '@/features/analytics/section-registry'
 import { ForgotPassword } from '@/features/auth/forgot-password'
 import { Otp } from '@/features/auth/otp'
 import { SignIn } from '@/features/auth/sign-in'
 import { SignUp } from '@/features/auth/sign-up'
 import { Channels } from '@/features/channels'
 import { Dashboard } from '@/features/dashboard'
-import {
-  DASHBOARD_DEFAULT_SECTION,
-  DASHBOARD_SECTION_IDS,
-} from '@/features/dashboard/section-registry'
+import { DASHBOARD_SECTION_IDS } from '@/features/dashboard/section-registry'
 import { ForbiddenError } from '@/features/errors/forbidden'
 import { GeneralError } from '@/features/errors/general-error'
 import { MaintenanceError } from '@/features/errors/maintenance-error'
@@ -107,8 +110,6 @@ import {
   requireSuperAdmin,
   SuperAdminLayout,
 } from '@/routes/guards'
-import { ChatPage } from '@/routes/pages/chat-page'
-import { Chat2LinkPage } from '@/routes/pages/chat2link-page'
 import { OAuthProviderPage } from '@/routes/pages/oauth-provider-page'
 import { PlaygroundPage } from '@/routes/pages/playground-page'
 import { ResetPasswordPage } from '@/routes/pages/reset-password-page'
@@ -143,13 +144,6 @@ function usageLogsLoader({ params, request }: LoaderFunctionArgs) {
   if (params.section !== 'common' && url.searchParams.has('type')) {
     url.searchParams.delete('type')
     throw redirect(`${url.pathname}${url.search}`)
-  }
-  return null
-}
-
-function chatLoader({ params }: LoaderFunctionArgs) {
-  if (!Number.isInteger(Number(params.chatId))) {
-    throw redirect('/dashboard')
   }
   return null
 }
@@ -221,15 +215,35 @@ export const appRouter = createBrowserRouter([
         Component: RequireAuth,
         children: [
           {
+            path: 'analytics',
+            loader: settingsIndex(`/analytics/${ANALYTICS_DEFAULT_SECTION}`),
+          },
+          {
+            path: 'analytics/:section',
+            loader: requireSection(
+              ANALYTICS_SECTION_IDS,
+              `/analytics/${ANALYTICS_DEFAULT_SECTION}`
+            ),
+            Component: Analytics,
+          },
+          {
             path: 'dashboard',
-            loader: settingsIndex(`/dashboard/${DASHBOARD_DEFAULT_SECTION}`),
+            loader: settingsIndex(ANALYTICS_HOME_URL),
           },
           {
             path: 'dashboard/:section',
-            loader: requireSection(
-              DASHBOARD_SECTION_IDS,
-              `/dashboard/${DASHBOARD_DEFAULT_SECTION}`
-            ),
+            loader: (args) => {
+              if (
+                args.params.section === 'models' ||
+                args.params.section === 'overview'
+              ) {
+                throw redirect(ANALYTICS_HOME_URL)
+              }
+              return requireSection(
+                DASHBOARD_SECTION_IDS,
+                ANALYTICS_HOME_URL
+              )(args)
+            },
             Component: Dashboard,
           },
           { path: 'channels', loader: adminLoader, Component: Channels },
@@ -270,6 +284,21 @@ export const appRouter = createBrowserRouter([
             Component: PlaygroundPage,
           },
           {
+            path: 'studio/chat',
+            loader: playgroundLoader,
+            Component: PlaygroundPage,
+          },
+          {
+            path: 'studio/image',
+            loader: playgroundLoader,
+            Component: PlaygroundPage,
+          },
+          {
+            path: 'studio/video',
+            loader: playgroundLoader,
+            Component: PlaygroundPage,
+          },
+          {
             path: 'subscriptions',
             loader: adminLoader,
             Component: Subscriptions,
@@ -284,8 +313,6 @@ export const appRouter = createBrowserRouter([
             loader: superAdminLoader,
             Component: SystemInfo,
           },
-          { path: 'chat/:chatId', loader: chatLoader, Component: ChatPage },
-          { path: 'chat2link', Component: Chat2LinkPage },
           { path: 'errors/:error', Component: RouteErrorPage },
           {
             path: 'system-settings',

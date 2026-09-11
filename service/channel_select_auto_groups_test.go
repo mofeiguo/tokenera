@@ -9,8 +9,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -18,16 +16,12 @@ import (
 	"gorm.io/gorm"
 )
 
-func setupChannelSelectAutoGroupsTest(t *testing.T) *gorm.DB {
+func setupChannelSelectSinglePoolTest(t *testing.T) *gorm.DB {
 	t.Helper()
 
 	originalDB := model.DB
 	originalMemoryCacheEnabled := common.MemoryCacheEnabled
 	originalRetryTimes := common.RetryTimes
-	originalAutoGroups := setting.AutoGroups2JsonString()
-	originalUsableGroups := setting.UserUsableGroups2JSONString()
-	originalGroupRatios := ratio_setting.GroupRatio2JSONString()
-	originalMaxTokenAutoGroups := setting.GetMaxTokenAutoGroups()
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
@@ -37,20 +31,10 @@ func setupChannelSelectAutoGroupsTest(t *testing.T) *gorm.DB {
 	common.MemoryCacheEnabled = true
 	common.RetryTimes = 0
 
-	require.NoError(t, setting.UpdateAutoGroupsByJsonString(`[]`))
-	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default","vip":"VIP"}`))
-	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"vip":2}`))
-	require.NoError(t, setting.UpdateMaxTokenAutoGroups("2"))
-
 	t.Cleanup(func() {
 		model.DB = originalDB
 		common.MemoryCacheEnabled = originalMemoryCacheEnabled
 		common.RetryTimes = originalRetryTimes
-		require.NoError(t, setting.UpdateAutoGroupsByJsonString(originalAutoGroups))
-		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
-		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(originalGroupRatios))
-		require.NoError(t, setting.UpdateMaxTokenAutoGroups(fmt.Sprintf("%d", originalMaxTokenAutoGroups)))
-
 		if originalMemoryCacheEnabled && originalDB != nil &&
 			originalDB.Migrator().HasTable(&model.Channel{}) {
 			model.InitChannelCache()
@@ -64,20 +48,15 @@ func setupChannelSelectAutoGroupsTest(t *testing.T) *gorm.DB {
 	return db
 }
 
-func createChannelSelectAutoGroupsChannel(t *testing.T, db *gorm.DB, id int, group, modelName string) {
+func createSinglePoolChannel(t *testing.T, db *gorm.DB, id int, group, modelName string) {
 	t.Helper()
-	priority := int64(0)
-	weight := uint(100)
 	require.NoError(t, db.Create(&model.Channel{
-		Id:       id,
-		Type:     constant.ChannelTypeOpenAI,
-		Key:      fmt.Sprintf("key-%d", id),
-		Status:   common.ChannelStatusEnabled,
-		Name:     fmt.Sprintf("channel-%d", id),
-		Weight:   &weight,
-		Models:   modelName,
-		Group:    group,
-		Priority: &priority,
+		Id:     id,
+		Type:   constant.ChannelTypeOpenAI,
+		Key:    fmt.Sprintf("key-%d", id),
+		Status: common.ChannelStatusEnabled,
+		Name:   fmt.Sprintf("channel-%d", id),
+		Models: modelName,
 	}).Error)
 	var catalogModel model.Model
 	require.NoError(t, db.FirstOrCreate(&catalogModel, model.Model{
@@ -89,76 +68,13 @@ func createChannelSelectAutoGroupsChannel(t *testing.T, db *gorm.DB, id int, gro
 		ModelId:   catalogModel.Id,
 		ChannelId: id,
 		Enabled:   true,
-		GroupsRaw: group,
 	}).Error)
 }
 
-func TestCacheGetRandomSatisfiedChannelPrefersIdentityThenInherit(t *testing.T) {
-	db := setupChannelSelectAutoGroupsTest(t)
-	originalInherit := setting.GroupInherit2JSONString()
-	require.NoError(t, setting.UpdateGroupInheritByJSONString(`{"vip":["vip","default"]}`))
-	t.Cleanup(func() {
-		require.NoError(t, setting.UpdateGroupInheritByJSONString(originalInherit))
-	})
-	const modelName = "inherit-groups-runtime-model"
-	createChannelSelectAutoGroupsChannel(t, db, 2101, "vip", modelName)
-	createChannelSelectAutoGroupsChannel(t, db, 2102, "default", modelName)
-	model.InitChannelCache()
-
-	gin.SetMode(gin.TestMode)
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "vip")
-	common.SetContextKey(ctx, constant.ContextKeyTokenGroup, "auto")
-
-	retry := 0
-	param := &RetryParam{
-		Ctx:         ctx,
-		TokenGroup:  "auto",
-		ModelName:   modelName,
-		RequestPath: "/v1/chat/completions",
-		Retry:       &retry,
-	}
-
-	first, selectedGroup, err := CacheGetRandomSatisfiedChannel(param)
-	require.NoError(t, err)
-	require.NotNil(t, first)
-	assert.Equal(t, 2101, first.Id)
-	assert.Equal(t, "vip", selectedGroup)
-}
-
-func TestCacheGetRandomSatisfiedChannelFallsBackToInheritedGroup(t *testing.T) {
-	db := setupChannelSelectAutoGroupsTest(t)
-	originalInherit := setting.GroupInherit2JSONString()
-	require.NoError(t, setting.UpdateGroupInheritByJSONString(`{"vip":["vip","default"]}`))
-	t.Cleanup(func() {
-		require.NoError(t, setting.UpdateGroupInheritByJSONString(originalInherit))
-	})
-	const modelName = "inherit-default-only-model"
-	createChannelSelectAutoGroupsChannel(t, db, 2202, "default", modelName)
-	model.InitChannelCache()
-
-	gin.SetMode(gin.TestMode)
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "vip")
-
-	retry := 0
-	channel, selectedGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
-		Ctx:         ctx,
-		TokenGroup:  "vip",
-		ModelName:   modelName,
-		RequestPath: "/v1/chat/completions",
-		Retry:       &retry,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, channel)
-	assert.Equal(t, 2202, channel.Id)
-	assert.Equal(t, "default", selectedGroup)
-}
-
-func TestCacheGetRandomSatisfiedChannelIgnoresTokenGroup(t *testing.T) {
-	db := setupChannelSelectAutoGroupsTest(t)
-	const modelName = "inherit-ignores-token-group"
-	createChannelSelectAutoGroupsChannel(t, db, 2301, "vip", modelName)
+func TestCacheGetRandomSatisfiedChannelSelectsAnyEnabledBinding(t *testing.T) {
+	db := setupChannelSelectSinglePoolTest(t)
+	const modelName = "single-pool-vip-channel"
+	createSinglePoolChannel(t, db, 2101, "vip", modelName)
 	model.InitChannelCache()
 
 	gin.SetMode(gin.TestMode)
@@ -166,13 +82,37 @@ func TestCacheGetRandomSatisfiedChannelIgnoresTokenGroup(t *testing.T) {
 	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
 
 	retry := 0
-	channel, _, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+	channel, selectedGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
 		Ctx:         ctx,
-		TokenGroup:  "vip",
 		ModelName:   modelName,
 		RequestPath: "/v1/chat/completions",
 		Retry:       &retry,
 	})
 	require.NoError(t, err)
-	assert.Nil(t, channel)
+	require.NotNil(t, channel)
+	assert.Equal(t, 2101, channel.Id)
+	assert.Equal(t, modelName, selectedGroup)
+}
+
+func TestCacheGetRandomSatisfiedChannelIgnoresTokenAndUserGroup(t *testing.T) {
+	db := setupChannelSelectSinglePoolTest(t)
+	const modelName = "single-pool-ignores-group"
+	createSinglePoolChannel(t, db, 2301, "vip", modelName)
+	model.InitChannelCache()
+
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
+
+	retry := 0
+	channel, selectedGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:         ctx,
+		ModelName:   modelName,
+		RequestPath: "/v1/chat/completions",
+		Retry:       &retry,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Equal(t, 2301, channel.Id)
+	assert.Equal(t, modelName, selectedGroup)
 }

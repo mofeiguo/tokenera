@@ -23,7 +23,16 @@ import { XIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { hasAsChild, mergeRenderChild } from '@/components/ui/compose-as-child'
+import { isPortaledOverlayTarget } from '@/lib/dom-utils'
 import { cn } from '@/lib/utils'
+
+function preventPortaledOverlayDismiss(
+  event: Event & { preventDefault: () => void }
+) {
+  if (isPortaledOverlayTarget(event.target)) {
+    event.preventDefault()
+  }
+}
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot='sheet' {...props} />
@@ -94,6 +103,9 @@ function SheetContent({
   children,
   side = 'right',
   showCloseButton = true,
+  onInteractOutside,
+  onPointerDownOutside,
+  onFocusOutside,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: 'top' | 'right' | 'bottom' | 'left'
@@ -105,6 +117,18 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot='sheet-content'
         data-side={side}
+        onInteractOutside={(event) => {
+          preventPortaledOverlayDismiss(event)
+          onInteractOutside?.(event)
+        }}
+        onPointerDownOutside={(event) => {
+          preventPortaledOverlayDismiss(event)
+          onPointerDownOutside?.(event)
+        }}
+        onFocusOutside={(event) => {
+          preventPortaledOverlayDismiss(event)
+          onFocusOutside?.(event)
+        }}
         className={cn(
           'bg-background text-foreground data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 overflow-hidden shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500',
           side === 'right' &&

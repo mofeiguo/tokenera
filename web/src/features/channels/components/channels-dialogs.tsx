@@ -20,15 +20,12 @@ import { useChannels } from './channels-provider'
 import { BalanceQueryDialog } from './dialogs/balance-query-dialog'
 import { ChannelTestDialog } from './dialogs/channel-test-dialog'
 import { CopyChannelDialog } from './dialogs/copy-channel-dialog'
-import { EditTagDialog } from './dialogs/edit-tag-dialog'
 import { FetchModelsDialog } from './dialogs/fetch-models-dialog'
 import { MultiKeyManageDialog } from './dialogs/multi-key-manage-dialog'
-import { TagBatchEditDialog } from './dialogs/tag-batch-edit-dialog'
-import { UpstreamUpdateDialog } from './dialogs/upstream-update-dialog'
 import { ChannelMutateDrawer } from './drawers/channel-mutate-drawer'
 
 export function ChannelsDialogs() {
-  const { open, setOpen, currentRow, upstream } = useChannels()
+  const { open, setOpen, currentRow } = useChannels()
 
   return (
     <>
@@ -67,29 +64,6 @@ export function ChannelsDialogs() {
       <MultiKeyManageDialog
         open={open === 'multi-key-manage'}
         onOpenChange={(v) => !v && setOpen(null)}
-      />
-
-      {/* Tag Batch Edit Dialog */}
-      <TagBatchEditDialog
-        open={open === 'tag-batch-edit'}
-        onOpenChange={(v) => !v && setOpen(null)}
-      />
-
-      {/* Edit Tag Dialog */}
-      <EditTagDialog
-        open={open === 'edit-tag'}
-        onOpenChange={(v) => !v && setOpen(null)}
-      />
-
-      {/* Upstream Model Update Dialog */}
-      <UpstreamUpdateDialog
-        open={upstream.showModal}
-        addModels={upstream.addModels}
-        removeModels={upstream.removeModels}
-        preferredTab={upstream.preferredTab}
-        confirmLoading={upstream.applyLoading}
-        onConfirm={upstream.applyUpdates}
-        onCancel={upstream.closeModal}
       />
     </>
   )

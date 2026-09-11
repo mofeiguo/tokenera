@@ -26,7 +26,6 @@ export const MAX_LOADED_MESSAGE_CHARS = 40_000
 
 export const playgroundConfigSchema = z.object({
   model: z.string().optional(),
-  group: z.string().optional(),
   endpointType: z
     .enum(['openai', 'openai-response', 'anthropic', 'gemini'])
     .optional(),
@@ -82,6 +81,15 @@ const messageSchema = z.object({
   startedAt: z.number().optional(),
   completedAt: z.number().optional(),
   durationMs: z.number().optional(),
+  images: z
+    .array(
+      z.object({
+        url: z.string(),
+        mediaType: z.string(),
+        filename: z.string().optional(),
+      })
+    )
+    .optional(),
   sources: z.array(sourceSchema).optional(),
   reasoning: reasoningSchema.optional(),
   isReasoningStreaming: z.boolean().optional(),

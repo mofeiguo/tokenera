@@ -18,23 +18,18 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { ColumnDef } from '@tanstack/react-table'
 import {
-  ChevronDown,
-  ChevronRight,
   ListOrdered,
   Shuffle,
 } from 'lucide-react'
-import { useState, useMemo, useContext, useEffect } from 'react'
+import { useState, useMemo, useContext } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import { ConfirmDialog } from '@/components/confirm-dialog'
 import { BadgeListCell } from '@/components/data-table'
-import { GroupBadge } from '@/components/group-badge'
 import { ProviderBadge } from '@/components/provider-badge'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
 import { TruncatedText } from '@/components/truncated-text'
-import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Tooltip,
@@ -54,7 +49,7 @@ import { useQueryClient } from '@/lib/query'
 import { truncateText } from '@/lib/utils'
 
 import { getCodexUsage, updateChannelBalance } from '../api'
-import { CHANNEL_STATUS_CONFIG, MODEL_FETCHABLE_TYPES } from '../constants'
+import { CHANNEL_STATUS_CONFIG } from '../constants'
 import {
   formatRelativeTime,
   formatResponseTime,
@@ -64,179 +59,17 @@ import {
   getResponseTimeConfig,
   isMultiKeyChannel,
   parseModelsList,
-  parseGroupsList,
   channelsQueryKeys,
-  handleUpdateChannelField,
-  handleUpdateTagField,
-  createChannelFieldUpdateScheduler,
-  isTagAggregateRow,
-  type TagRow,
 } from '../lib'
-import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
 import type { Channel } from '../types'
 import { ChannelRowActionsLayoutContext } from './channel-row-actions-context'
 import { useChannels } from './channels-provider'
 import { DataTableRowActions } from './data-table-row-actions'
-import { DataTableTagRowActions } from './data-table-tag-row-actions'
 import { BalanceQueryDialog } from './dialogs/balance-query-dialog'
 import {
   CodexUsageDialog,
   type CodexUsageDialogData,
 } from './dialogs/codex-usage-dialog'
-import { NumericSpinnerInput } from './numeric-spinner-input'
-
-/**
- * Upstream update tags (+N / -N) shown on channel name for model-fetchable channels
- */
-function UpstreamUpdateTags({ channel }: { channel: Channel }) {
-  const { upstream, setCurrentRow } = useChannels()
-  if (!MODEL_FETCHABLE_TYPES.has(channel.type)) {
-    return null
-  }
-
-  const meta = parseUpstreamUpdateMeta(channel.settings)
-  if (!meta.enabled) {
-    return null
-  }
-
-  const addCount = meta.pendingAddModels.length
-  const removeCount = meta.pendingRemoveModels.length
-  if (addCount === 0 && removeCount === 0) {
-    return null
-  }
-
-  return (
-    <div className='flex items-center gap-0.5'>
-      {addCount > 0 && (
-        <StatusBadge
-          label={`+${addCount}`}
-          variant='success'
-          size='sm'
-          copyable={false}
-          className='cursor-pointer'
-          onClick={(e: React.MouseEvent) => {
-            e.stopPropagation()
-            setCurrentRow(channel)
-            upstream.openModal(
-              channel,
-              meta.pendingAddModels,
-              meta.pendingRemoveModels,
-              'add'
-            )
-          }}
-        />
-      )}
-      {removeCount > 0 && (
-        <StatusBadge
-          label={`-${removeCount}`}
-          variant='danger'
-          size='sm'
-          copyable={false}
-          className='cursor-pointer'
-          onClick={(e: React.MouseEvent) => {
-            e.stopPropagation()
-            setCurrentRow(channel)
-            upstream.openModal(
-              channel,
-              meta.pendingAddModels,
-              meta.pendingRemoveModels,
-              'remove'
-            )
-          }}
-        />
-      )}
-    </div>
-  )
-}
-
-function ChannelFieldCell({
-  channelId,
-  value,
-  field,
-  min,
-}: {
-  channelId: number
-  value: number | null | undefined
-  field: 'priority' | 'weight'
-  min: number
-}) {
-  const queryClient = useQueryClient()
-  const fieldUpdateScheduler = useMemo(
-    () =>
-      createChannelFieldUpdateScheduler((nextValue) => {
-        void handleUpdateChannelField(channelId, field, nextValue, queryClient)
-      }),
-    [channelId, field, queryClient]
-  )
-
-  useEffect(() => () => fieldUpdateScheduler.flush(), [fieldUpdateScheduler])
-
-  return (
-    <NumericSpinnerInput
-      value={value ?? 0}
-      onChange={fieldUpdateScheduler.schedule}
-      onCommit={fieldUpdateScheduler.flush}
-      min={min}
-    />
-  )
-}
-
-/**
- * Weight cell component with inline editing
- */
-function WeightCell({ channel }: { channel: Channel }) {
-  if (isTagAggregateRow(channel)) {
-    return <TagWeightCell channel={channel} />
-  }
-
-  return (
-    <ChannelFieldCell
-      channelId={channel.id}
-      value={channel.weight}
-      field='weight'
-      min={0}
-    />
-  )
-}
-
-function TagWeightCell({ channel }: { channel: TagRow }) {
-  const { t } = useTranslation()
-  const queryClient = useQueryClient()
-  const weight = channel.weight
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [pendingValue, setPendingValue] = useState<number | null>(null)
-  const tag = channel.tag || ''
-  const channelCount = channel.children?.length || 0
-
-  return (
-    <>
-      <NumericSpinnerInput
-        value={weight ?? 0}
-        onChange={(value) => {
-          setPendingValue(value)
-          setConfirmOpen(true)
-        }}
-        min={0}
-      />
-      <ConfirmDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title={t('Confirm Batch Update')}
-        desc={t(
-          'This will update the weight to {{value}} for all {{count}} channel(s) with tag "{{tag}}". Continue?',
-          { value: pendingValue, count: channelCount, tag }
-        )}
-        confirmText={t('Update')}
-        handleConfirm={() => {
-          if (pendingValue !== null) {
-            handleUpdateTagField(tag, 'weight', pendingValue, queryClient)
-          }
-          setConfirmOpen(false)
-        }}
-      />
-    </>
-  )
-}
 
 /**
  * Inline balance/used values longer than this switch to locale-aware compact
@@ -253,7 +86,6 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const queryClient = useQueryClient()
   const layout = useContext(ChannelRowActionsLayoutContext)
   const { sensitiveVisible, setCurrentRow } = useChannels()
-  const isTagRow = isTagAggregateRow(channel)
   const balance = channel.balance || 0
   const usedQuota = channel.used_quota || 0
   const [isUpdating, setIsUpdating] = useState(false)
@@ -311,35 +143,6 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const remainingLabel = `${t('Remaining:')} ${remainingFull}`
   const maskedUsedLabel = `${t('Used:')} ${SENSITIVE_MASK}`
   const maskedRemainingLabel = `${t('Remaining:')} ${SENSITIVE_MASK}`
-
-  // Tag row: only show cumulative used quota
-  if (isTagRow) {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <StatusBadge
-                label={
-                  sensitiveVisible
-                    ? `${t('Used:')} ${usedDisplay}`
-                    : maskedUsedLabel
-                }
-                variant='neutral'
-                size='sm'
-                copyable={false}
-                showDot={false}
-                className='-ml-1.5 cursor-help'
-              />
-            }
-          />
-          <TooltipContent>
-            <p>{sensitiveVisible ? usedLabel : maskedUsedLabel}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    )
-  }
 
   // Regular channel row: show used and remaining with click to update
   const variant = getBalanceVariant(balance)
@@ -536,22 +339,13 @@ export function useChannelsColumns(
                   aria-label={t('Select all')}
                 />
               ),
-              cell: ({ row }) => {
-                const isTagRow = isTagAggregateRow(row.original)
-
-                // Don't show checkbox for tag rows
-                if (isTagRow) {
-                  return null
-                }
-
-                return (
-                  <Checkbox
-                    checked={row.getIsSelected()}
-                    onCheckedChange={(value) => row.toggleSelected(!!value)}
-                    aria-label={t('Select row')}
-                  />
-                )
-              },
+              cell: ({ row }) => (
+                <Checkbox
+                  checked={row.getIsSelected()}
+                  onCheckedChange={(value) => row.toggleSelected(!!value)}
+                  aria-label={t('Select row')}
+                />
+              ),
               enableSorting: false,
               enableHiding: false,
               enableResizing: false,
@@ -577,41 +371,8 @@ export function useChannelsColumns(
         header: t('Name'),
         meta: { mobileTitle: true },
         cell: ({ row }) => {
-          const isTagRow = isTagAggregateRow(row.original)
           const name = row.getValue('name') as string
           const channel = row.original
-
-          // Tag row with expand/collapse
-          if (isTagRow) {
-            const tag = (row.original as TagRow).tag || name
-            const childrenCount = (row.original as TagRow).children?.length || 0
-
-            return (
-              <div className='flex items-center gap-2'>
-                <Button
-                  variant='ghost'
-                  size='sm'
-                  className='h-6 w-6 p-0'
-                  onClick={row.getToggleExpandedHandler()}
-                >
-                  {row.getIsExpanded() ? (
-                    <ChevronDown className='h-4 w-4' />
-                  ) : (
-                    <ChevronRight className='h-4 w-4' />
-                  )}
-                </Button>
-                <div className='flex items-center gap-1.5'>
-                  <span className='font-semibold'>Tag：{tag}</span>
-                  <StatusBadge
-                    label={`${childrenCount} channels`}
-                    variant='blue'
-                    size='sm'
-                    copyable={false}
-                  />
-                </div>
-              </div>
-            )
-          }
 
           return (
             <div className='flex max-w-full min-w-0 items-center gap-2'>
@@ -622,7 +383,6 @@ export function useChannelsColumns(
                     className='font-medium'
                     maxWidth='max-w-full'
                   />
-                  <UpstreamUpdateTags channel={channel} />
                 </div>
                 {channel.remark && (
                   <TooltipProvider delay={200}>
@@ -653,20 +413,6 @@ export function useChannelsColumns(
         accessorKey: 'type',
         header: t('Type'),
         cell: ({ row }) => {
-          const isTagRow = isTagAggregateRow(row.original)
-
-          if (isTagRow) {
-            return (
-              <StatusBadge
-                label={t('Tag Aggregate')}
-                variant='blue'
-                size='sm'
-                copyable={false}
-                className='-ml-1.5'
-              />
-            )
-          }
-
           const type = row.getValue('type') as number
           const typeNameKey = getChannelTypeLabel(type)
           const typeName = t(typeNameKey)
@@ -738,37 +484,8 @@ export function useChannelsColumns(
         header: t('Status'),
         meta: { mobileBadge: true },
         cell: ({ row }) => {
-          const isTagRow = isTagAggregateRow(row.original)
           const status = row.getValue('status') as number
           const channel = row.original as Channel
-
-          // Tag row: show aggregated status
-          if (isTagRow) {
-            const childrenCount = (row.original as TagRow).children?.length || 0
-            const hasEnabled = status === 1
-
-            if (hasEnabled) {
-              return (
-                <StatusBadge
-                  label={`Active (${childrenCount})`}
-                  variant='success'
-                  size='sm'
-                  copyable={false}
-                  className='-ml-1.5'
-                />
-              )
-            } else {
-              return (
-                <StatusBadge
-                  label={`Inactive (${childrenCount})`}
-                  variant='neutral'
-                  size='sm'
-                  copyable={false}
-                  className='-ml-1.5'
-                />
-              )
-            }
-          }
 
           // Regular channel row
           const config =
@@ -889,73 +606,6 @@ export function useChannelsColumns(
         enableSorting: false,
       },
 
-      // Group column
-      {
-        accessorKey: 'group',
-        header: t('Groups'),
-        meta: { mobileHidden: true },
-        cell: ({ row }) => {
-          const group = row.getValue('group') as string
-          const groupArray = parseGroupsList(group)
-          return (
-            <BadgeListCell
-              items={groupArray.map((g) => (
-                <GroupBadge
-                  key={g}
-                  group={g}
-                  label={sensitiveVisible ? undefined : SENSITIVE_MASK}
-                  size='sm'
-                />
-              ))}
-            />
-          )
-        },
-        filterFn: (row, id, value) => {
-          if (!value || value.length === 0 || value.includes('all')) {
-            return true
-          }
-          const group = row.getValue(id) as string
-          const groupArray = parseGroupsList(group)
-          return groupArray.some((g) => value.includes(g))
-        },
-        size: 150,
-        enableSorting: false,
-      },
-
-      // Tag column
-      {
-        accessorKey: 'tag',
-        header: t('Tag'),
-        meta: { mobileHidden: true },
-        cell: ({ row }) => {
-          const tag = row.getValue('tag') as string | null
-          if (!tag) {
-            return <span className='text-muted-foreground text-xs'>-</span>
-          }
-
-          return (
-            <StatusBadge
-              label={tag}
-              autoColor={tag}
-              size='sm'
-              className='-ml-1.5'
-            />
-          )
-        },
-        size: 120,
-        enableSorting: false,
-      },
-
-      // Weight column
-      {
-        accessorKey: 'weight',
-        header: t('Weight'),
-        meta: { mobileHidden: true },
-        cell: ({ row }) => <WeightCell channel={row.original} />,
-        size: 90,
-        enableSorting: false,
-      },
-
       // Balance column (Used/Remaining)
       {
         accessorKey: 'balance',
@@ -1032,21 +682,7 @@ export function useChannelsColumns(
       {
         id: 'actions',
         header: () => t('Actions'),
-        cell: ({ row }) => {
-          // Check if this is a tag row (has children)
-          const isTagRow = isTagAggregateRow(row.original)
-
-          if (isTagRow) {
-            return (
-              <DataTableTagRowActions
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                row={row as any}
-              />
-            )
-          }
-
-          return <DataTableRowActions row={row} />
-        },
+        cell: ({ row }) => <DataTableRowActions row={row} />,
         enableSorting: false,
         enableHiding: false,
         meta: { pinned: 'right' as const },

@@ -25,7 +25,6 @@ import {
 } from './section-registry.tsx'
 
 const defaultModelSettings: ModelSettings = {
-  'global.thinking_model_blacklist': '[]',
   'general_setting.ping_interval_enabled': false,
   'general_setting.ping_interval_seconds': 60,
   'gemini.safety_settings': '',
@@ -53,15 +52,6 @@ const defaultModelSettings: ModelSettings = {
   'billing_setting.billing_mode': '{}',
   'billing_setting.billing_expr': '{}',
   'tool_price_setting.prices': '{}',
-  TopupGroupRatio: '',
-  GroupRatio: '',
-  UserUsableGroups: '',
-  GroupInherit: '',
-  GroupGroupRatio: '',
-  AutoGroups: '',
-  MaxTokenAutoGroups: 5,
-  DefaultUseAutoGroup: false,
-  'group_ratio_setting.group_special_usable_group': '{}',
   RetryTimes: 0,
   ChannelDisableThreshold: '',
   AutomaticDisableChannelEnabled: false,

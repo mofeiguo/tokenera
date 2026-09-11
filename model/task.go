@@ -52,7 +52,6 @@ type Task struct {
 	TaskID     string                `json:"task_id" gorm:"type:varchar(191);index"` // 第三方id，不一定有/ song id\ Task id
 	Platform   constant.TaskPlatform `json:"platform" gorm:"type:varchar(30);index"` // 平台
 	UserId     int                   `json:"user_id" gorm:"index"`
-	Group      string                `json:"group" gorm:"type:varchar(50)"` // 修正计费用
 	ChannelId  int                   `json:"channel_id" gorm:"index"`
 	Quota      int                   `json:"quota"`
 	Action     string                `json:"action" gorm:"type:varchar(40);index"` // 任务类型, song, lyrics, description-mode
@@ -197,7 +196,6 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 	t := &Task{
 		TaskID:      taskID,
 		UserId:      relayInfo.UserId,
-		Group:       relayInfo.UsingGroup,
 		SubmitTime:  time.Now().Unix(),
 		Status:      TaskStatusNotStart,
 		Progress:    "0%",
@@ -315,7 +313,7 @@ func GetAllUnFinishSyncTasks(limit int) []*Task {
 	return tasks
 }
 
-// HasUnfinishedSyncTasks reports whether at least one async (Suno/video) task is
+// HasUnfinishedSyncTasks reports whether at least one async (video) task is
 // still in progress. It is a cheap existence check (LIMIT 1) used to decide
 // whether the async_task_poll system task needs to run; when no task is pending
 // the scheduler skips creating a row entirely.
@@ -343,20 +341,6 @@ func GetByTaskId(userId int, taskId string) (*Task, bool, error) {
 		return nil, false, err
 	}
 	return task, exist, err
-}
-
-func GetByTaskIds(userId int, taskIds []any) ([]*Task, error) {
-	if len(taskIds) == 0 {
-		return nil, nil
-	}
-	var task []*Task
-	var err error
-	err = DB.Where("user_id = ? and task_id in (?)", userId, taskIds).
-		Find(&task).Error
-	if err != nil {
-		return nil, err
-	}
-	return task, nil
 }
 
 func (Task *Task) Insert() error {

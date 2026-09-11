@@ -115,18 +115,20 @@ export function ModelChannelBindingsEditor({
       {bindings.length > 0 ? (
         <p className='text-muted-foreground text-xs'>
           {t(
-            'Priority is tried first (higher first). Weight splits traffic among bindings with the same priority.'
+            'Priority is tried first (higher first). Weight splits traffic among bindings with the same priority. The same channel can be bound more than once when the channel models differ.'
           )}
         </p>
       ) : null}
 
       {bindings.map((binding, index) => {
-        const selectedChannelIds = new Set(
-          bindings
-            .filter((_, bindingIndex) => bindingIndex !== index)
-            .map((item) => item.channel_id)
-            .filter((channelId) => channelId > 0)
-        )
+        const usedUpstreamModels = bindings
+          .filter(
+            (item, bindingIndex) =>
+              bindingIndex !== index &&
+              item.channel_id === binding.channel_id &&
+              Boolean(item.upstream_model)
+          )
+          .map((item) => item.upstream_model as string)
 
         return (
           <div
@@ -160,11 +162,7 @@ export function ModelChannelBindingsEditor({
                   </SelectTrigger>
                   <SelectContent>
                     {channelSelectItems.map((channel) => (
-                      <SelectItem
-                        key={channel.value}
-                        value={channel.value}
-                        disabled={selectedChannelIds.has(Number(channel.value))}
-                      >
+                      <SelectItem key={channel.value} value={channel.value}>
                         {channel.label}
                       </SelectItem>
                     ))}
@@ -254,6 +252,7 @@ export function ModelChannelBindingsEditor({
               channelId={binding.channel_id}
               catalogModelName={catalogModelName}
               value={binding.upstream_model}
+              unavailableModels={usedUpstreamModels}
               disabled={disabled}
               onChange={(upstreamModel) =>
                 updateBinding(index, { upstream_model: upstreamModel })
@@ -291,12 +290,14 @@ function ChannelBindingModelSelect({
   channelId,
   catalogModelName,
   value,
+  unavailableModels = [],
   disabled,
   onChange,
 }: {
   channelId: number
   catalogModelName: string
   value?: string
+  unavailableModels?: string[]
   disabled?: boolean
   onChange: (upstreamModel: string) => void
 }) {
@@ -308,6 +309,7 @@ function ChannelBindingModelSelect({
   })
   const models = parseModelsList(data?.data?.models ?? '')
   const modelsKey = models.join(',')
+  const unavailableKey = unavailableModels.join(',')
   const items = models.map((modelName) => ({
     value: modelName,
     label: modelName,
@@ -318,18 +320,20 @@ function ChannelBindingModelSelect({
       return
     }
     const channelModels = modelsKey.split(',')
-    if (value && channelModels.includes(value)) {
+    const unavailable = unavailableKey === '' ? [] : unavailableKey.split(',')
+    if (value && channelModels.includes(value) && !unavailable.includes(value)) {
       return
     }
     const next = resolveBindingUpstreamModel(
       channelModels,
       catalogModelName,
-      value
+      value,
+      unavailable
     )
     if (next && next !== value) {
       onChange(next)
     }
-  }, [catalogModelName, channelId, modelsKey, onChange, value])
+  }, [catalogModelName, channelId, modelsKey, unavailableKey, onChange, value])
 
   return (
     <div className='space-y-1'>
@@ -351,7 +355,11 @@ function ChannelBindingModelSelect({
         </SelectTrigger>
         <SelectContent>
           {items.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
+            <SelectItem
+              key={item.value}
+              value={item.value}
+              disabled={unavailableModels.includes(item.value)}
+            >
               {item.label}
             </SelectItem>
           ))}

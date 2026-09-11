@@ -20,6 +20,18 @@ import type { CSSProperties } from 'react'
 
 export type UserAvatarStyle = Pick<CSSProperties, 'backgroundColor' | 'color'>
 
+/** Soft, ZenMux-inspired avatar backgrounds (stable per username). */
+const USER_AVATAR_PALETTE = [
+  'hsl(168, 52%, 40%)', // teal
+  'hsl(191, 55%, 42%)', // cyan
+  'hsl(205, 58%, 46%)', // steel blue
+  'hsl(224, 50%, 54%)', // indigo
+  'hsl(259, 46%, 56%)', // violet
+  'hsl(340, 48%, 52%)', // rose
+  'hsl(24, 58%, 50%)', // coral
+  'hsl(152, 42%, 40%)', // sage
+] as const
+
 function hashString(value: string): number {
   let hash = 0
   for (let i = 0; i < value.length; i++) {
@@ -29,13 +41,12 @@ function hashString(value: string): number {
 }
 
 export function getUserAvatarStyle(name: string): UserAvatarStyle {
-  const hash = hashString(name)
-  const hue = hash % 360
-  const saturation = 54 + (hash % 8)
-  const lightness = 52 + ((hash >> 4) % 8)
+  const hash = hashString(name.trim().toLowerCase() || '?')
+  const backgroundColor =
+    USER_AVATAR_PALETTE[hash % USER_AVATAR_PALETTE.length]
 
   return {
-    backgroundColor: `hsl(${hue} ${saturation}% ${lightness}%)`,
+    backgroundColor,
     color: 'white',
   }
 }

@@ -43,8 +43,6 @@ export interface UserProfile {
   role: number
   /** Email address */
   email?: string
-  /** User group */
-  group: string
   /** Current quota balance */
   quota: number
   /** Total used quota */
@@ -55,16 +53,6 @@ export interface UserProfile {
   status: number
   /** Access token (system token) */
   access_token?: string
-  /** Affiliate code */
-  aff_code?: string
-  /** Number of successful affiliate invites */
-  aff_count: number
-  /** Affiliate quota (pending rewards) */
-  aff_quota: number
-  /** Total affiliate quota earned (historical) */
-  aff_history_quota: number
-  /** Invite user ID */
-  invite_user_id?: number
   /** Account creation timestamp */
   created_time: number
   /** User settings (JSON string) */
@@ -114,8 +102,6 @@ export interface UserSettings {
   accept_unset_model_ratio_model?: boolean
   /** Record IP log */
   record_ip_log?: boolean
-  /** Receive upstream model update notifications (admin only) */
-  upstream_model_update_notify_enabled?: boolean
   /** Preferred interface/API response language */
   language?: string
 }
@@ -144,7 +130,6 @@ export interface UpdateUserSettingsRequest {
   gotify_priority?: number
   accept_unset_model_ratio_model?: boolean
   record_ip_log?: boolean
-  upstream_model_update_notify_enabled?: boolean
 }
 
 /**

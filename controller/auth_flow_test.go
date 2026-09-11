@@ -67,35 +67,6 @@ func setupAuthFlowControllerTest(t *testing.T) *authFlowTestOAuthProvider {
 	return provider
 }
 
-func TestGenerateOAuthCodeCarriesAffiliateInLoginFlow(t *testing.T) {
-	setupAuthFlowControllerTest(t)
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/state", strings.NewReader(`{"provider":"auth-flow-test","intent":"login","aff":"invite-code"}`))
-	c.Request.Header.Set("Content-Type", "application/json")
-
-	GenerateOAuthCode(c)
-
-	require.Equal(t, http.StatusOK, recorder.Code)
-	var response struct {
-		Success bool `json:"success"`
-		Data    struct {
-			FlowToken string `json:"flow_token"`
-		} `json:"data"`
-	}
-	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
-	require.True(t, response.Success)
-	flow, err := model.GetAuthFlow(response.Data.FlowToken, model.AuthFlowMatch{
-		Purpose: model.AuthFlowPurposeOAuth, Provider: "auth-flow-test", Intent: model.AuthFlowIntentLogin,
-	})
-	require.NoError(t, err)
-	var payload oauthFlowPayload
-	require.NoError(t, common.UnmarshalJsonStr(flow.Payload, &payload))
-	assert.Equal(t, "invite-code", payload.AffiliateCode)
-	assert.Zero(t, flow.UserId)
-	assert.Empty(t, flow.SessionId)
-}
-
 func TestGenerateOAuthCodeBindsFlowToAuthenticatedSession(t *testing.T) {
 	setupAuthFlowControllerTest(t)
 	recorder := httptest.NewRecorder()

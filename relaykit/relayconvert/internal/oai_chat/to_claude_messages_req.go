@@ -163,9 +163,7 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 			claudeRequest.TopP = nil
 			claudeRequest.Temperature = kitutil.GetPointer[float64](1.0)
 		}
-		if !opts.ShouldPreserveThinkingSuffix(textRequest.Model) {
-			claudeRequest.Model = trimmedModel
-		}
+		claudeRequest.Model = trimmedModel
 	}
 
 	if textRequest.ReasoningEffort != "" {

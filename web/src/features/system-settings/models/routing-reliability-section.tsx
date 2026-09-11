@@ -63,11 +63,7 @@ const numericString = z.string().refine((value) => {
   return !Number.isNaN(Number(trimmed)) && Number(trimmed) >= 0
 }, 'Enter a non-negative number or leave empty')
 
-const channelTestModes = [
-  'scheduled_all',
-  'auto_ban_only',
-  'passive_recovery',
-] as const
+const channelTestModes = ['scheduled_all', 'passive_recovery'] as const
 type ChannelTestMode = (typeof channelTestModes)[number]
 const MAX_CHANNEL_TEST_CONCURRENCY = 32
 
@@ -169,7 +165,7 @@ type NormalizedRoutingReliabilityValues = {
 }
 
 function normalizeChannelTestMode(value?: string): ChannelTestMode {
-  if (value === 'auto_ban_only' || value === 'passive_recovery') {
+  if (value === 'passive_recovery') {
     return value
   }
   return 'scheduled_all'
@@ -283,11 +279,6 @@ export function RoutingReliabilitySection({
   const channelTestMode = form.watch('monitor_setting.channel_test_mode')
   let channelTestModeDescription: string
   switch (channelTestMode) {
-    case 'auto_ban_only':
-      channelTestModeDescription = t(
-        'Periodically checks only channels with auto-disable enabled, excluding manually disabled channels.'
-      )
-      break
     case 'passive_recovery':
       channelTestModeDescription = t(
         'Does not check healthy channels. It only rechecks auto-disabled channels and restores them after they recover.'
@@ -442,12 +433,6 @@ export function RoutingReliabilitySection({
                           label: t('Actively check all channels'),
                         },
                         {
-                          value: 'auto_ban_only',
-                          label: t(
-                            'Actively check auto-disable-enabled channels'
-                          ),
-                        },
-                        {
                           value: 'passive_recovery',
                           label: t('Check channels awaiting recovery only'),
                         },
@@ -464,9 +449,6 @@ export function RoutingReliabilitySection({
                         <SelectGroup>
                           <SelectItem value='scheduled_all'>
                             {t('Actively check all channels')}
-                          </SelectItem>
-                          <SelectItem value='auto_ban_only'>
-                            {t('Actively check auto-disable-enabled channels')}
                           </SelectItem>
                           <SelectItem value='passive_recovery'>
                             {t('Check channels awaiting recovery only')}

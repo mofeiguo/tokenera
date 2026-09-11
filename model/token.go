@@ -26,34 +26,7 @@ type Token struct {
 	ModelLimits        string         `json:"model_limits" gorm:"type:text"`
 	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
 	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
-	Group              string         `json:"group" gorm:"default:''"`
-	CrossGroupRetry    bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
-	AutoGroups         string         `json:"-" gorm:"type:text"`
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
-}
-
-func (token *Token) GetAutoGroups() ([]string, error) {
-	if token.AutoGroups == "" {
-		return nil, nil
-	}
-	var groups []string
-	if err := common.UnmarshalJsonStr(token.AutoGroups, &groups); err != nil {
-		return nil, err
-	}
-	return groups, nil
-}
-
-func (token *Token) SetAutoGroups(groups []string) error {
-	if len(groups) == 0 {
-		token.AutoGroups = ""
-		return nil
-	}
-	data, err := common.Marshal(groups)
-	if err != nil {
-		return err
-	}
-	token.AutoGroups = string(data)
-	return nil
 }
 
 func (token *Token) Clean() {
@@ -103,10 +76,17 @@ func (token *Token) GetIpLimits() []string {
 	return ipLimits
 }
 
-func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
+func applyUserTokenStatusFilter(query *gorm.DB, status int) *gorm.DB {
+	if status > 0 {
+		return query.Where("status = ?", status)
+	}
+	return query
+}
+
+func GetAllUserTokens(userId int, startIdx int, num int, status int) ([]*Token, error) {
 	var tokens []*Token
-	var err error
-	err = DB.Where("user_id = ?", userId).Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
+	query := applyUserTokenStatusFilter(DB.Where("user_id = ?", userId), status)
+	err := query.Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
 	return tokens, err
 }
 
@@ -156,7 +136,7 @@ func validateLikePattern(input string) error {
 
 const searchHardLimit = 100
 
-func SearchUserTokens(userId int, keyword string, token string, offset int, limit int) (tokens []*Token, total int64, err error) {
+func SearchUserTokens(userId int, keyword string, token string, status int, offset int, limit int) (tokens []*Token, total int64, err error) {
 	// model 层强制截断
 	if limit <= 0 || limit > searchHardLimit {
 		limit = searchHardLimit
@@ -183,7 +163,10 @@ func SearchUserTokens(userId int, keyword string, token string, offset int, limi
 		}
 	}
 
-	baseQuery := DB.Model(&Token{}).Where("user_id = ?", userId)
+	baseQuery := applyUserTokenStatusFilter(
+		DB.Model(&Token{}).Where("user_id = ?", userId),
+		status,
+	)
 
 	// 非空才加 LIKE 条件，空则跳过（不过滤该字段）
 	if keyword != "" {
@@ -313,7 +296,7 @@ func (token *Token) Update() (err error) {
 		common.SysLog("failed to invalidate token cache before update: " + cacheErr.Error())
 	}
 	return DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
-		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry", "auto_groups").Updates(token).Error
+		"model_limits_enabled", "model_limits", "allow_ips").Updates(token).Error
 }
 
 func (token *Token) SelectUpdate() (err error) {
@@ -436,8 +419,14 @@ func decreaseTokenQuota(id int, quota int) (err error) {
 
 // CountUserTokens returns total number of tokens for the given user, used for pagination
 func CountUserTokens(userId int) (int64, error) {
+	return CountUserTokensWithStatus(userId, 0)
+}
+
+// CountUserTokensWithStatus counts a user's tokens, optionally filtered by status.
+func CountUserTokensWithStatus(userId int, status int) (int64, error) {
 	var total int64
-	err := DB.Model(&Token{}).Where("user_id = ?", userId).Count(&total).Error
+	query := applyUserTokenStatusFilter(DB.Model(&Token{}).Where("user_id = ?", userId), status)
+	err := query.Count(&total).Error
 	return total, err
 }
 

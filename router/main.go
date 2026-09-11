@@ -17,6 +17,14 @@ func SetRouter(router *gin.Engine, assets WebAssets) {
 	SetDashboardRouter(router)
 	SetRelayRouter(router)
 	SetVideoRouter(router)
+	frontendDevURL := strings.TrimSpace(os.Getenv("FRONTEND_DEV_URL"))
+	if frontendDevURL != "" {
+		if err := SetDevWebProxy(router, frontendDevURL); err != nil {
+			common.FatalLog("failed to enable frontend development proxy: " + err.Error())
+		}
+		common.SysLog("frontend development proxy enabled, embedded web disabled: " + frontendDevURL)
+		return
+	}
 	frontendBaseUrl := os.Getenv("FRONTEND_BASE_URL")
 	if common.IsMasterNode && frontendBaseUrl != "" {
 		frontendBaseUrl = ""

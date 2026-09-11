@@ -16,16 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  CameraIcon,
-  FileIcon,
-  ImageIcon,
-  ScreenShareIcon,
-  type LucideIcon,
-} from 'lucide-react'
+import { FileIcon, ImageIcon, type LucideIcon } from 'lucide-react'
 
 type AttachmentAction = {
-  action: string
+  action: 'upload-photo' | 'upload-file'
   icon: LucideIcon
   label: string
 }
@@ -36,22 +30,9 @@ type InputToolNotice = {
 }
 
 export const ATTACHMENT_ACTIONS = [
-  { action: 'upload-file', icon: FileIcon, label: 'Upload file' },
-  { action: 'upload-photo', icon: ImageIcon, label: 'Upload photo' },
-  {
-    action: 'take-screenshot',
-    icon: ScreenShareIcon,
-    label: 'Take screenshot',
-  },
-  { action: 'take-photo', icon: CameraIcon, label: 'Take photo' },
+  { action: 'upload-photo', icon: ImageIcon, label: 'Image' },
+  { action: 'upload-file', icon: FileIcon, label: 'File' },
 ] satisfies AttachmentAction[]
-
-export function getAttachmentActionNotice(action: string): InputToolNotice {
-  return {
-    description: action,
-    title: 'Feature in development',
-  }
-}
 
 export function getSearchActionNotice(): InputToolNotice {
   return {

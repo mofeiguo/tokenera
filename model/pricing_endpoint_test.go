@@ -17,6 +17,7 @@ func resetPricingEndpointTestTables(t *testing.T) {
 	originalMemoryCacheEnabled := common.MemoryCacheEnabled
 	common.MemoryCacheEnabled = true
 	require.NoError(t, DB.AutoMigrate(&Channel{}, &Model{}, &ModelBinding{}, &Vendor{}))
+	require.NoError(t, EnsureModelBindingIndexes())
 	for _, table := range []string{"model_bindings", "channels", "models", "vendors"} {
 		require.NoError(t, DB.Exec("DELETE FROM "+table).Error)
 	}
@@ -40,7 +41,6 @@ func insertPricingEndpointChannel(t *testing.T, channelID int, channelType int, 
 		Key:    fmt.Sprintf("key-%d", channelID),
 		Status: common.ChannelStatusEnabled,
 		Name:   fmt.Sprintf("channel-%d", channelID),
-		Group:  "default",
 	}
 	if settings.AdvancedCustom != nil {
 		channel.SetOtherSettings(settings)
@@ -60,7 +60,6 @@ func insertPricingEndpointBinding(t *testing.T, channelID int, modelName string)
 		ModelId:   catalogModel.Id,
 		ChannelId: channelID,
 		Enabled:   true,
-		GroupsRaw: "default",
 	}).Error)
 }
 
@@ -223,7 +222,6 @@ func TestChannelInsertDoesNotCreateCatalogModels(t *testing.T) {
 		Key:    "key-205",
 		Status: common.ChannelStatusEnabled,
 		Name:   "channel-205",
-		Group:  "default",
 		Models: "missing-catalog-model",
 	}
 
@@ -234,7 +232,7 @@ func TestChannelInsertDoesNotCreateCatalogModels(t *testing.T) {
 	assert.Zero(t, count)
 }
 
-func TestPricingDisplayUsesCurrentBillingRatioImmediately(t *testing.T) {
+func TestPricingDisplayUsesGlobalBillingRatioImmediately(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	originalRatios, err := common.Marshal(ratio_setting.GetModelRatioCopy())
 	require.NoError(t, err)
@@ -254,14 +252,6 @@ func TestPricingDisplayUsesCurrentBillingRatioImmediately(t *testing.T) {
 
 	insertPricingEndpointChannel(t, 206, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointBinding(t, 206, "sku-price-model")
-	customRatio := 7.0
-	require.NoError(t, DB.Create(&Model{
-		ModelName:   "independent-row-price",
-		Status:      1,
-		NameRule:    NameRuleExact,
-		PricingMode: ModelPricingModePerToken,
-		ModelRatio:  &customRatio,
-	}).Error)
 	InitChannelCache()
 	require.Len(t, GetPricing(), 1)
 
@@ -269,42 +259,35 @@ func TestPricingDisplayUsesCurrentBillingRatioImmediately(t *testing.T) {
 
 	pricing := GetPricing()
 	require.Len(t, pricing, 1)
-	var catalogModel Model
-	require.NoError(t, DB.Where("model_name = ?", "sku-price-model").First(&catalogModel).Error)
-	assert.Equal(t, ModelPricingModePerToken, catalogModel.PricingMode)
-	require.NotNil(t, catalogModel.ModelRatio)
-	assert.Equal(t, 4.0, *catalogModel.ModelRatio)
-	var independentModel Model
-	require.NoError(t, DB.Where("model_name = ?", "independent-row-price").First(&independentModel).Error)
-	assert.Equal(t, ModelPricingModePerToken, independentModel.PricingMode)
-	require.NotNil(t, independentModel.ModelRatio)
-	assert.Equal(t, 7.0, *independentModel.ModelRatio)
 	billingRatio, _, _ := ratio_setting.GetModelRatio("sku-price-model")
 	assert.Equal(t, billingRatio, pricing[0].ModelRatio)
 	assert.Equal(t, 4.0, pricing[0].ModelRatio)
 
-	catalogModel.PricingMode = ""
-	require.NoError(t, catalogModel.NormalizePricing())
-	require.NoError(t, catalogModel.Update())
-	RefreshCatalogPricingCache()
-	assert.False(t, ResolveModelPricing("sku-price-model").Configured)
+	resolved := ResolveModelPricing("sku-price-model")
+	assert.True(t, resolved.Configured)
+	assert.Equal(t, ModelPricingModePerToken, resolved.Mode)
+	assert.Equal(t, 4.0, resolved.ModelRatio)
 }
 
-func TestCatalogPricingOverridesLegacyOptionForDisplayAndBilling(t *testing.T) {
+func TestGlobalPricingUsedForDisplayAndBilling(t *testing.T) {
 	resetPricingEndpointTestTables(t)
+	require.NoError(t, DB.AutoMigrate(&Option{}))
+	common.OptionMapRWMutex.Lock()
+	if common.OptionMap == nil {
+		common.OptionMap = make(map[string]string)
+	}
+	common.OptionMapRWMutex.Unlock()
+
 	insertPricingEndpointChannel(t, 207, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	insertPricingEndpointBinding(t, 207, "catalog-priced-model")
-	require.NoError(t, DB.Model(&Model{}).Where("model_name = ?", "catalog-priced-model").Updates(map[string]any{
-		"pricing_mode":     ModelPricingModePerToken,
-		"model_ratio":      3.5,
-		"completion_ratio": 2.0,
-		"cache_ratio":      0.25,
-	}).Error)
+	insertPricingEndpointBinding(t, 207, "global-priced-model")
+	require.NoError(t, UpdateOption("ModelRatio", `{"global-priced-model":3.5}`))
+	require.NoError(t, UpdateOption("CompletionRatio", `{"global-priced-model":2}`))
+	require.NoError(t, UpdateOption("CacheRatio", `{"global-priced-model":0.25}`))
 
 	InitChannelCache()
-	RefreshCatalogPricingCache()
+	InvalidatePricingCache()
 
-	resolved := ResolveModelPricing("catalog-priced-model")
+	resolved := ResolveModelPricing("global-priced-model")
 	assert.True(t, resolved.Configured)
 	assert.Equal(t, ModelPricingModePerToken, resolved.Mode)
 	assert.Equal(t, 3.5, resolved.ModelRatio)
@@ -362,59 +345,6 @@ func TestNormalizeCatalogMetadataRejectsNegativeTokenLimits(t *testing.T) {
 	assert.Contains(t, err.Error(), "max_output_tokens")
 }
 
-func TestNormalizePricingRejectsNegativeCatalogPrice(t *testing.T) {
-	negative := -0.01
-	catalogModel := &Model{
-		PricingMode: ModelPricingModePerRequest,
-		ModelPrice:  &negative,
-	}
-
-	err := catalogModel.NormalizePricing()
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "model_price")
-}
-
-func TestCatalogPricingSyncOverlayIncludesExplicitUnpricedModels(t *testing.T) {
-	resetPricingEndpointTestTables(t)
-	modelRatio := 2.5
-	completionRatio := 3.0
-	priced := &Model{
-		ModelName:       "sync-priced-model",
-		Status:          1,
-		NameRule:        NameRuleExact,
-		PricingMode:     ModelPricingModePerToken,
-		ModelRatio:      &modelRatio,
-		CompletionRatio: &completionRatio,
-	}
-	require.NoError(t, priced.NormalizePricing())
-	require.NoError(t, priced.Insert())
-	unpriced := &Model{
-		ModelName: "sync-unpriced-model",
-		Status:    1,
-		NameRule:  NameRuleExact,
-	}
-	require.NoError(t, unpriced.NormalizePricing())
-	require.NoError(t, unpriced.Insert())
-
-	modelNames, overlay, err := GetCatalogPricingSyncOverlay()
-
-	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"sync-priced-model", "sync-unpriced-model"}, modelNames)
-	assert.Equal(t, 2.5, overlay["model_ratio"]["sync-priced-model"])
-	assert.Equal(t, 3.0, overlay["completion_ratio"]["sync-priced-model"])
-	_, hasUnpricedRatio := overlay["model_ratio"]["sync-unpriced-model"]
-	assert.False(t, hasUnpricedRatio)
-
-	optionValues, err := GetEffectivePricingOptionValues()
-	require.NoError(t, err)
-	var effectiveRatios map[string]float64
-	require.NoError(t, common.UnmarshalJsonStr(optionValues["ModelRatio"], &effectiveRatios))
-	assert.Equal(t, 2.5, effectiveRatios["sync-priced-model"])
-	_, hasUnpricedRatio = effectiveRatios["sync-unpriced-model"]
-	assert.False(t, hasUnpricedRatio)
-}
-
 func TestRenamingCatalogModelUpdatesChannelBindings(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 208, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
@@ -469,20 +399,18 @@ func TestExplicitModelBindingsDriveChannelSelection(t *testing.T) {
 		{ChannelId: 211, Enabled: true, Priority: 10},
 	}))
 
-	selected, err := GetRandomSatisfiedChannel("default", "public-sku", 0, "/v1/chat/completions")
+	selected, _, err := GetRandomSatisfiedChannel("public-sku", 0, "/v1/chat/completions")
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 	assert.Equal(t, 211, selected.Id)
 }
 
-func TestBindingPriorityIgnoresChannelPriority(t *testing.T) {
+func TestBindingPrioritySelectsHighestBinding(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 230, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointChannel(t, 231, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 230).Update("models", "priority-sku").Error)
 	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 231).Update("models", "priority-sku").Error)
-	highChannelPriority := int64(99)
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 230).Update("priority", highChannelPriority).Error)
 
 	catalogModel := &Model{
 		ModelName: "priority-sku",
@@ -495,24 +423,18 @@ func TestBindingPriorityIgnoresChannelPriority(t *testing.T) {
 		{ChannelId: 231, Enabled: true, Priority: 5},
 	}))
 
-	selected, err := GetRandomSatisfiedChannel("default", "priority-sku", 0, "/v1/chat/completions")
+	selected, _, err := GetRandomSatisfiedChannel("priority-sku", 0, "/v1/chat/completions")
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 	assert.Equal(t, 231, selected.Id)
 }
 
-func TestBindingWeightIgnoresChannelWeight(t *testing.T) {
+func TestBindingWeightSplitsSamePriority(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 250, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointChannel(t, 251, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 250).Updates(map[string]any{
-		"models": "weight-sku",
-		"weight": 999,
-	}).Error)
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 251).Updates(map[string]any{
-		"models": "weight-sku",
-		"weight": 0,
-	}).Error)
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 250).Update("models", "weight-sku").Error)
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 251).Update("models", "weight-sku").Error)
 
 	catalogModel := &Model{
 		ModelName: "weight-sku",
@@ -525,7 +447,7 @@ func TestBindingWeightIgnoresChannelWeight(t *testing.T) {
 		{ChannelId: 251, Enabled: true, Priority: 1, Weight: 10},
 	}))
 
-	selected, err := GetRandomSatisfiedChannel("default", "weight-sku", 0, "/v1/chat/completions")
+	selected, _, err := GetRandomSatisfiedChannel("weight-sku", 0, "/v1/chat/completions")
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 	assert.Equal(t, 251, selected.Id)
@@ -549,107 +471,13 @@ func TestBindingPriorityBeatsWeight(t *testing.T) {
 		{ChannelId: 261, Enabled: true, Priority: 10, Weight: 0},
 	}))
 
-	selected, err := GetRandomSatisfiedChannel("default", "priority-beats-weight-sku", 0, "/v1/chat/completions")
+	selected, _, err := GetRandomSatisfiedChannel("priority-beats-weight-sku", 0, "/v1/chat/completions")
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 	assert.Equal(t, 261, selected.Id)
 }
 
-func TestChannelGroupFiltersBindingSelection(t *testing.T) {
-	resetPricingEndpointTestTables(t)
-	insertPricingEndpointChannel(t, 270, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	insertPricingEndpointChannel(t, 271, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 270).Updates(map[string]any{
-		"models": "group-filter-sku",
-		"group":  "vip",
-	}).Error)
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 271).Updates(map[string]any{
-		"models": "group-filter-sku",
-		"group":  "default",
-	}).Error)
-
-	catalogModel := &Model{
-		ModelName: "group-filter-sku",
-		Status:    1,
-		NameRule:  NameRuleExact,
-	}
-	require.NoError(t, catalogModel.Insert())
-	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 270, Enabled: true, Priority: 1},
-		{ChannelId: 271, Enabled: true, Priority: 1},
-	}))
-
-	selected, err := GetRandomSatisfiedChannel("default", "group-filter-sku", 0, "/v1/chat/completions")
-	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Equal(t, 271, selected.Id)
-
-	selected, err = GetRandomSatisfiedChannel("vip", "group-filter-sku", 0, "/v1/chat/completions")
-	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Equal(t, 270, selected.Id)
-}
-
-func TestEmptyChannelGroupServesDefault(t *testing.T) {
-	resetPricingEndpointTestTables(t)
-	insertPricingEndpointChannel(t, 280, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 280).Updates(map[string]any{
-		"models": "empty-group-sku",
-		"group":  "",
-	}).Error)
-
-	catalogModel := &Model{
-		ModelName: "empty-group-sku",
-		Status:    1,
-		NameRule:  NameRuleExact,
-	}
-	require.NoError(t, catalogModel.Insert())
-	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 280, Enabled: true},
-	}))
-
-	selected, err := GetRandomSatisfiedChannel("default", "empty-group-sku", 0, "/v1/chat/completions")
-	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Equal(t, 280, selected.Id)
-
-	selected, err = GetRandomSatisfiedChannel("vip", "empty-group-sku", 0, "/v1/chat/completions")
-	require.NoError(t, err)
-	assert.Nil(t, selected)
-}
-
-func TestBindingGroupsAreIgnoredForChannelSelection(t *testing.T) {
-	resetPricingEndpointTestTables(t)
-	insertPricingEndpointChannel(t, 290, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 290).Updates(map[string]any{
-		"models": "ignore-binding-group-sku",
-		"group":  "default",
-	}).Error)
-
-	catalogModel := &Model{
-		ModelName: "ignore-binding-group-sku",
-		Status:    1,
-		NameRule:  NameRuleExact,
-	}
-	require.NoError(t, catalogModel.Insert())
-	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
-		{ChannelId: 290, Enabled: true},
-	}))
-	require.NoError(t, DB.Model(&ModelBinding{}).
-		Where("model_id = ? AND channel_id = ?", catalogModel.Id, 290).
-		Update("groups", "vip").Error)
-
-	selected, err := GetRandomSatisfiedChannel("default", "ignore-binding-group-sku", 0, "/v1/chat/completions")
-	require.NoError(t, err)
-	require.NotNil(t, selected)
-	assert.Equal(t, 290, selected.Id)
-
-	selected, err = GetRandomSatisfiedChannel("vip", "ignore-binding-group-sku", 0, "/v1/chat/completions")
-	require.NoError(t, err)
-	assert.Nil(t, selected)
-}
-
-func TestReplaceModelBindingsRejectsDuplicateChannel(t *testing.T) {
+func TestReplaceModelBindingsAllowsSameChannelDifferentUpstream(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 220, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 220).Update("models", "multi-upstream-sku").Error)
@@ -666,6 +494,21 @@ func TestReplaceModelBindingsRejectsDuplicateChannel(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bound more than once")
+
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 220).Update("models", "sku-a,sku-b").Error)
+	require.NoError(t, ReplaceModelBindings(catalogModel.Id, []ModelBindingInput{
+		{ChannelId: 220, Enabled: true, Priority: 1, UpstreamModel: "sku-a"},
+		{ChannelId: 220, Enabled: true, Priority: 10, UpstreamModel: "sku-b"},
+	}))
+	bindings, err := GetModelBindings(catalogModel.Id)
+	require.NoError(t, err)
+	require.Len(t, bindings, 2)
+
+	selected, upstream, err := GetRandomSatisfiedChannel("multi-upstream-sku", 0, "/v1/chat/completions")
+	require.NoError(t, err)
+	require.NotNil(t, selected)
+	assert.Equal(t, 220, selected.Id)
+	assert.Equal(t, "sku-b", upstream)
 }
 
 func TestReplaceModelBindingsRejectsModelOutsideChannelModels(t *testing.T) {

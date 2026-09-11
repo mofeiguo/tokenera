@@ -85,13 +85,14 @@ import {
 } from '@/components/ui/tooltip'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { useQueryClient } from '@/lib/query'
+import { useQuery, useQueryClient } from '@/lib/query'
 
-import { updateChannel } from '../../api'
+import { updateChannel, getChannel } from '../../api'
 import {
   channelsQueryKeys,
   formatResponseTime,
   handleTestChannel,
+  parseModelsList,
 } from '../../lib'
 import type {
   Channel,
@@ -364,6 +365,12 @@ function ChannelTestDialogContent({
     [t]
   )
 
+  const { data: channelDetail, isLoading: isChannelModelsLoading } = useQuery({
+    queryKey: channelsQueryKeys.detail(currentChannelId),
+    queryFn: () => getChannel(currentChannelId),
+    enabled: open && currentChannelId > 0,
+  })
+
   const dismissBatchProgressToast = useCallback(() => {
     if (batchProgressToastIdRef.current === null) return
 
@@ -437,16 +444,13 @@ function ChannelTestDialogContent({
     []
   )
 
-  const modelsValue = currentRow.models
-  const defaultTestModel = currentRow.test_model?.trim()
+  const modelsValue =
+    channelDetail?.data?.models ?? currentRow.models
 
-  const baseModels = useMemo(() => {
-    if (!modelsValue) return []
-    return modelsValue
-      .split(',')
-      .map((model) => model.trim())
-      .filter(Boolean)
-  }, [modelsValue])
+  const baseModels = useMemo(
+    () => parseModelsList(modelsValue || ''),
+    [modelsValue]
+  )
 
   const models = useMemo(
     () => baseModels.filter((model) => !removedModels.has(model)),
@@ -800,6 +804,9 @@ function ChannelTestDialogContent({
         toast.success(
           t('Deleted {{count}} failed models', { count: failed.length })
         )
+        void queryClient.invalidateQueries({
+          queryKey: channelsQueryKeys.detail(currentRow.id),
+        })
         refreshChannelLists()
         setIsDeleteFailedDialogOpen(false)
       } else {
@@ -814,7 +821,7 @@ function ChannelTestDialogContent({
     } finally {
       setIsDeletingFailed(false)
     }
-  }, [currentRow.id, models, refreshChannelLists, t, testResults])
+  }, [currentRow.id, models, queryClient, refreshChannelLists, t, testResults])
 
   const handleClose = useCallback(() => {
     resetState()
@@ -868,21 +875,12 @@ function ChannelTestDialogContent({
         header: t('Model'),
         cell: ({ row }) => {
           const model = row.original.model
-          const isDefault = defaultTestModel === model
 
           return (
             <div className='flex w-max items-center gap-2 whitespace-nowrap'>
               <span className='font-medium whitespace-nowrap' title={model}>
                 {model}
               </span>
-              {isDefault && (
-                <StatusBadge
-                  label={t('Default')}
-                  variant='info'
-                  size='sm'
-                  copyable={false}
-                />
-              )}
             </div>
           )
         },
@@ -949,7 +947,6 @@ function ChannelTestDialogContent({
       },
     ],
     [
-      defaultTestModel,
       isBatchTesting,
       t,
       testResults,
@@ -1075,7 +1072,11 @@ function ChannelTestDialogContent({
                       <Button
                         size='sm'
                         onClick={() => handleBatchTest(filteredModels)}
-                        disabled={isAnyTesting || filteredModels.length === 0}
+                        disabled={
+                          isAnyTesting ||
+                          isChannelModelsLoading ||
+                          filteredModels.length === 0
+                        }
                       >
                         {testAllButtonLabel}
                       </Button>
@@ -1147,9 +1148,11 @@ function ChannelTestDialogContent({
                   getTestTableColumnClass(columnId)
                 }
                 emptyContent={
-                  models.length
-                    ? t('No models matched your search.')
-                    : t('This channel has no configured models.')
+                  isChannelModelsLoading
+                    ? t('Loading models...')
+                    : models.length
+                      ? t('No models matched your search.')
+                      : t('This channel has no configured models.')
                 }
                 emptyCellClassName='text-muted-foreground h-16 text-center text-sm'
               />

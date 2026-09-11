@@ -169,7 +169,7 @@ export function OAuthProviderPage() {
       }
     }
 
-    const safeNavigate = (target: unknown, fallback = '/dashboard') => {
+    const safeNavigate = (target: unknown, fallback = '/analytics/usage') => {
       const href =
         sanitizeAuthRedirect(target, window.location.origin) ?? fallback
       void navigate({ href, replace: true })

@@ -28,9 +28,11 @@ For commercial licensing, please contact support@quantumnous.com
 import * as LobeIcons from '@lobehub/icons'
 import type React from 'react'
 
+import { IconBifrost } from '@/assets/custom/icon-bifrost'
 import { IconSub2api } from '@/assets/custom/icon-sub2api'
 
 const CUSTOM_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
+  Bifrost: IconBifrost,
   Sub2API: IconSub2api,
 }
 

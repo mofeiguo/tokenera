@@ -213,13 +213,18 @@ export function createRefreshRunner(
     kind: 'transient_error',
     error: new AuthRefreshSupersededError(),
   })
+  const abandonIfSuperseded = (): RefreshOutcome | null =>
+    runtime.isCurrent && !runtime.isCurrent() ? superseded() : null
+
   const run = async (
     raceAttempt: number,
     allowMismatchRetry: boolean
   ): Promise<RefreshOutcome> => {
-    if (runtime.isCurrent && !runtime.isCurrent()) return superseded()
+    const supersededOutcome = abandonIfSuperseded()
+    if (supersededOutcome) return supersededOutcome
     const response = await runtime.request(runtime.getExpectedSID())
-    if (runtime.isCurrent && !runtime.isCurrent()) return superseded()
+    const supersededAfterRequest = abandonIfSuperseded()
+    if (supersededAfterRequest) return supersededAfterRequest
     const responseData = isRecord(response.data) ? response.data : undefined
     const code =
       typeof responseData?.code === 'string' ? responseData.code : undefined
@@ -235,20 +240,28 @@ export function createRefreshRunner(
         await runtime.wait(delay)
         return run(raceAttempt + 1, allowMismatchRetry)
       }
+      const supersededBeforeClear = abandonIfSuperseded()
+      if (supersededBeforeClear) return supersededBeforeClear
       runtime.clear(false)
       return { kind: 'out_of_sync', code }
     }
 
     if (response.status === 409 && code === 'AUTH_SESSION_MISMATCH') {
       if (allowMismatchRetry) {
+        const supersededBeforeClear = abandonIfSuperseded()
+        if (supersededBeforeClear) return supersededBeforeClear
         runtime.clear(false, 'idle')
         return run(0, false)
       }
+      const supersededBeforeClear = abandonIfSuperseded()
+      if (supersededBeforeClear) return supersededBeforeClear
       runtime.clear(false)
       return { kind: 'out_of_sync', code }
     }
 
     if (response.status === 401) {
+      const supersededBeforeClear = abandonIfSuperseded()
+      if (supersededBeforeClear) return supersededBeforeClear
       runtime.clear(true)
       return { kind: 'anonymous' }
     }
@@ -261,6 +274,8 @@ export function createRefreshRunner(
       }
     }
 
+    const supersededBeforeClear = abandonIfSuperseded()
+    if (supersededBeforeClear) return supersededBeforeClear
     runtime.clear(false)
     return {
       kind: 'out_of_sync',

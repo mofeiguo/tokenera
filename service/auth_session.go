@@ -307,7 +307,6 @@ func WriteRefreshCookie(c *gin.Context, rawToken string) {
 		MaxAge:   maxAge,
 		Expires:  expiresAt,
 		HttpOnly: true,
-		Secure:   common.SessionCookieSecure,
 		SameSite: http.SameSiteStrictMode,
 	})
 }
@@ -320,7 +319,6 @@ func ClearRefreshCookie(c *gin.Context) {
 		MaxAge:   -1,
 		Expires:  time.Unix(1, 0),
 		HttpOnly: true,
-		Secure:   common.SessionCookieSecure,
 		SameSite: http.SameSiteStrictMode,
 	})
 }

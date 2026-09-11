@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { type ReactNode, useState, useEffect } from 'react'
 
 import { Badge } from '@/components/ui/badge'
@@ -46,66 +46,108 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { Link, useLocation } from '@/lib/router'
+import { cn } from '@/lib/utils'
 
 import { checkIsActive } from '../lib/url-utils'
 import type {
   NavCollapsible,
-  NavChatPresets,
   NavLink,
   NavGroup as NavGroupProps,
 } from '../types'
-import { ChatPresetsItem } from './chat-presets-item'
 
 /**
  * Sidebar navigation group component
  * Renders a group of navigation items, supporting regular links and collapsible submenus
  */
-export function NavGroup({ title, items }: NavGroupProps) {
+const groupLabelClassName =
+  'mb-3 h-auto px-4 text-[14px] leading-none font-bold tracking-[-0.02em] text-[#333333] dark:text-foreground'
+
+const menuItemClassName =
+  'text-[#666666] my-[2px] h-10 rounded-[8px] px-4 text-[14px] font-normal shadow-none hover:bg-black/[0.04] hover:text-[#666666] data-active:bg-white data-active:font-bold data-active:text-[#333333] data-active:shadow-[0_1px_4px_0_rgba(0,0,0,0.05)] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-muted-foreground dark:data-active:bg-muted dark:data-active:text-foreground dark:data-active:shadow-none'
+
+export function NavGroup({ title, items, collapsible }: NavGroupProps) {
   const { state, isMobile } = useSidebar()
   const href = useLocation({ select: (location) => location.href })
+  const groupActive = items.some((item) => checkIsActive(href, item))
+  const [isOpen, setIsOpen] = useState(true)
+  const canCollapse = collapsible !== false && state !== 'collapsed'
 
-  return (
-    <SidebarGroup className='px-2 py-1'>
-      <SidebarGroupLabel className='text-muted-foreground px-2 text-xs font-medium'>
-        {title}
-      </SidebarGroupLabel>
-      <SidebarMenu>
-        {items.map((item) => {
-          const key = `${item.title}-${item.url || item.type}`
+  useEffect(() => {
+    if (groupActive) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsOpen(true)
+    }
+  }, [groupActive])
 
-          // Special handling: dynamic chat presets list
-          if (item.type === 'chat-presets') {
-            return <ChatPresetsItem key={key} item={item as NavChatPresets} />
-          }
+  const menu = (
+    <SidebarMenu>
+      {items.map((item) => {
+        const key = `${item.title}-${item.url}`
 
-          // If no sub-items, render regular link
-          if (!item.items) {
-            return (
-              <SidebarMenuLink key={key} item={item as NavLink} href={href} />
-            )
-          }
-
-          // In collapsed state on non-mobile, render dropdown menu
-          if (state === 'collapsed' && !isMobile) {
-            return (
-              <SidebarMenuCollapsedDropdown
-                key={key}
-                item={item as NavCollapsible}
-                href={href}
-              />
-            )
-          }
-
-          // Render collapsible menu
+        if (!item.items) {
           return (
-            <SidebarMenuCollapsible
+            <SidebarMenuLink key={key} item={item as NavLink} href={href} />
+          )
+        }
+
+        if (state === 'collapsed' && !isMobile) {
+          return (
+            <SidebarMenuCollapsedDropdown
               key={key}
               item={item as NavCollapsible}
               href={href}
             />
           )
-        })}
-      </SidebarMenu>
+        }
+
+        return (
+          <SidebarMenuCollapsible
+            key={key}
+            item={item as NavCollapsible}
+            href={href}
+          />
+        )
+      })}
+    </SidebarMenu>
+  )
+
+  if (!canCollapse) {
+    return (
+      <SidebarGroup className='mt-6 px-2 py-0 first:mt-0'>
+        <SidebarGroupLabel className={groupLabelClassName}>
+          {title}
+        </SidebarGroupLabel>
+        {menu}
+      </SidebarGroup>
+    )
+  }
+
+  return (
+    <SidebarGroup className='mt-6 px-2 py-0 first:mt-0'>
+      <Collapsible
+        className='group/nav-group'
+        onOpenChange={setIsOpen}
+        open={isOpen}
+      >
+        <SidebarGroupLabel
+          className={cn(
+            groupLabelClassName,
+            'hover:text-foreground cursor-pointer justify-between'
+          )}
+          render={<CollapsibleTrigger type='button' />}
+        >
+          {title}
+          <span
+            className={cn(
+              'inline-flex size-3.5 shrink-0 text-[#999999] transition-transform duration-200',
+              isOpen && 'rotate-180'
+            )}
+          >
+            <ChevronDown className='size-3.5' />
+          </span>
+        </SidebarGroupLabel>
+        <CollapsibleContent>{menu}</CollapsibleContent>
+      </Collapsible>
     </SidebarGroup>
   )
 }
@@ -127,6 +169,7 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
       <SidebarMenuButton
         isActive={checkIsActive(href, item)}
         tooltip={item.title}
+        className={menuItemClassName}
         render={
           <Link
             to={item.url}
@@ -176,7 +219,12 @@ function SidebarMenuCollapsible({
     >
       <CollapsibleTrigger
         className='group/collapsible-trigger'
-        render={<SidebarMenuButton tooltip={item.title} />}
+        render={
+          <SidebarMenuButton
+            tooltip={item.title}
+            className={menuItemClassName}
+          />
+        }
       >
         {item.icon && <item.icon className='shrink-0' />}
         <span className='min-w-0 flex-1 truncate'>{item.title}</span>

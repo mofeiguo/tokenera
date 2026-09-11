@@ -26,6 +26,7 @@ import {
   getStreamReadyStateError,
   isStreamClosedReadyState,
   isStreamDoneMessage,
+  isStreamTerminalMessage,
   parseStreamErrorDetails,
   parseStreamMessageUpdates,
   shouldCompleteOnStreamClose,
@@ -137,6 +138,12 @@ export function createStreamRequestController(
         for (const update of updates) {
           callbacks.onUpdate(update.type, update.chunk)
         }
+
+        if (isStreamTerminalMessage(data)) {
+          completed = true
+          closeActiveSource(nextSource)
+          callbacks.onComplete()
+        }
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error('Failed to parse SSE message:', error)
@@ -211,10 +218,11 @@ export function useStreamRequest() {
       getHeaders: getFreshAuthHeaders,
       createSource: (request, headers) =>
         new SSE(request.url, {
+          autoReconnect: false,
           headers,
           method: 'POST',
           payload: JSON.stringify(request.payload),
-        }) as StreamEventSource,
+        }) as unknown as StreamEventSource,
       setStreaming: setIsStreaming,
     })
   }

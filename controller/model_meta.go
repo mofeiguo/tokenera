@@ -18,8 +18,7 @@ func GetAllModelsMeta(c *gin.Context) {
 
 	pageInfo := common.GetPageQuery(c)
 	status := c.Query("status")
-	syncOfficial := c.Query("sync_official")
-	modelsMeta, total, err := model.SearchModels("", "", status, syncOfficial, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	modelsMeta, total, err := model.SearchModels("", "", status, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -47,10 +46,9 @@ func SearchModelsMeta(c *gin.Context) {
 	keyword := c.Query("keyword")
 	vendor := c.Query("vendor")
 	status := c.Query("status")
-	syncOfficial := c.Query("sync_official")
 	pageInfo := common.GetPageQuery(c)
 
-	modelsMeta, total, err := model.SearchModels(keyword, vendor, status, syncOfficial, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	modelsMeta, total, err := model.SearchModels(keyword, vendor, status, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -156,10 +154,6 @@ func CreateModelMeta(c *gin.Context) {
 		common.ApiErrorMsg(c, err.Error())
 		return
 	}
-	if err := m.NormalizePricing(); err != nil {
-		common.ApiErrorMsg(c, err.Error())
-		return
-	}
 	// 名称冲突检查
 	if dup, err := model.IsModelNameDuplicated(0, m.ModelName); err != nil {
 		common.ApiError(c, err)
@@ -194,10 +188,6 @@ func EnsureCatalogModels(c *gin.Context) {
 		return
 	}
 	if len(created) > 0 {
-		if err := model.MigrateCatalogPricingFromSettings(); err != nil {
-			common.ApiError(c, err)
-			return
-		}
 		model.RefreshPricing()
 	}
 	common.ApiSuccess(c, gin.H{
@@ -221,10 +211,6 @@ func UpdateModelMeta(c *gin.Context) {
 	}
 	if !statusOnly {
 		if err := m.NormalizeCatalogMetadata(); err != nil {
-			common.ApiErrorMsg(c, err.Error())
-			return
-		}
-		if err := m.NormalizePricing(); err != nil {
 			common.ApiErrorMsg(c, err.Error())
 			return
 		}

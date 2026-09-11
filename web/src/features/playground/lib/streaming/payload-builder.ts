@@ -24,6 +24,7 @@ import type {
   PlaygroundConfig,
   PlaygroundEndpointType,
 } from '../../types'
+import { parseImageDataUrl } from '../message/image-utils'
 import { formatMessageForAPI, isValidMessage } from '../message/message-utils'
 
 export type PlaygroundRequestPayload = Record<string, unknown>
@@ -98,6 +99,94 @@ function messageText(content: ChatCompletionMessage['content']): string {
     .join('\n')
 }
 
+function toAnthropicContent(
+  content: ChatCompletionMessage['content']
+): string | Record<string, unknown>[] {
+  if (typeof content === 'string') {
+    return content
+  }
+
+  const parts: Record<string, unknown>[] = []
+  for (const part of content) {
+    if (part.type === 'text') {
+      if (part.text) {
+        parts.push({ type: 'text', text: part.text })
+      }
+      continue
+    }
+    const parsed = parseImageDataUrl(part.image_url?.url ?? '')
+    if (!parsed) {
+      continue
+    }
+    parts.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: parsed.mediaType,
+        data: parsed.data,
+      },
+    })
+  }
+
+  return parts.length > 0 ? parts : messageText(content)
+}
+
+function toGeminiParts(
+  content: ChatCompletionMessage['content']
+): Record<string, unknown>[] {
+  if (typeof content === 'string') {
+    return [{ text: content }]
+  }
+
+  const parts: Record<string, unknown>[] = []
+  for (const part of content) {
+    if (part.type === 'text') {
+      if (part.text) {
+        parts.push({ text: part.text })
+      }
+      continue
+    }
+    const parsed = parseImageDataUrl(part.image_url?.url ?? '')
+    if (!parsed) {
+      continue
+    }
+    parts.push({
+      inlineData: {
+        mimeType: parsed.mediaType,
+        data: parsed.data,
+      },
+    })
+  }
+
+  return parts.length > 0 ? parts : [{ text: messageText(content) }]
+}
+
+function toResponsesContent(
+  content: ChatCompletionMessage['content']
+): string | Record<string, unknown>[] {
+  if (typeof content === 'string') {
+    return content
+  }
+
+  const parts: Record<string, unknown>[] = []
+  for (const part of content) {
+    if (part.type === 'text') {
+      if (part.text) {
+        parts.push({ type: 'input_text', text: part.text })
+      }
+      continue
+    }
+    if (part.type === 'image_url' && part.image_url?.url) {
+      parts.push({
+        type: 'input_image',
+        image_url: part.image_url.url,
+      })
+    }
+  }
+
+  return parts.length > 0 ? parts : messageText(content)
+}
+
 function buildOpenAIPayload(
   messages: ChatCompletionMessage[],
   config: PlaygroundConfig,
@@ -105,7 +194,6 @@ function buildOpenAIPayload(
 ): PlaygroundRequestPayload {
   const payload: PlaygroundRequestPayload = {
     model: config.model,
-    group: config.group,
     messages,
     stream: config.stream,
   }
@@ -128,7 +216,10 @@ function buildResponsesPayload(
   const split = splitSystemMessages(messages)
   const payload: PlaygroundRequestPayload = {
     model: config.model,
-    input: split.messages,
+    input: split.messages.map((message) => ({
+      role: message.role,
+      content: toResponsesContent(message.content),
+    })),
     stream: config.stream,
   }
   if (split.instructions) {
@@ -152,7 +243,7 @@ function buildAnthropicPayload(
     model: config.model,
     messages: split.messages.map((message) => ({
       role: message.role,
-      content: messageText(message.content),
+      content: toAnthropicContent(message.content),
     })),
     max_tokens: config.max_tokens,
     stream: config.stream,
@@ -183,7 +274,7 @@ function buildGeminiPayload(
   const payload: PlaygroundRequestPayload = {
     contents: split.messages.map((message) => ({
       role: message.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: messageText(message.content) }],
+      parts: toGeminiParts(message.content),
     })),
   }
   if (split.instructions) {

@@ -219,6 +219,33 @@ describe('authentication session coordination', () => {
     expect(cleared).toBe(true)
   })
 
+  test('a stale refresh 401 does not clear a login that completed while refresh was in flight', async () => {
+    useAuthStore.getState().auth.setBundle(bundle)
+    let current = true
+    let clearCount = 0
+    const runtime: AuthRefreshRuntime = {
+      request: async () => {
+        current = false
+        return { status: 401 }
+      },
+      getExpectedSID: () => undefined,
+      parseBundle: () => null,
+      acceptBundle: () => undefined,
+      clear: () => {
+        clearCount += 1
+      },
+      markTransient: () => undefined,
+      wait: async () => undefined,
+      isCurrent: () => current,
+    }
+
+    const outcome = await createRefreshRunner(runtime)()
+
+    expect(outcome.kind).toBe('transient_error')
+    expect(clearCount).toBe(0)
+    expect(useAuthStore.getState().auth.accessToken).toBe('access-token')
+  })
+
   test('a refresh response cannot restore credentials after a newer auth operation', async () => {
     let current = true
     let accepted = false

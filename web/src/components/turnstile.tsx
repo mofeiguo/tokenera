@@ -18,10 +18,18 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useRef } from 'react'
 
+const TURNSTILE_SCRIPT_ID = 'cf-turnstile'
+const TURNSTILE_SCRIPT_SRC =
+  'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+
 declare global {
   interface Window {
     turnstile?: {
-      render: (element: HTMLElement, options: Record<string, unknown>) => void
+      render: (
+        element: HTMLElement,
+        options: Record<string, unknown>
+      ) => string
+      remove?: (widgetId: string) => void
     }
   }
 }
@@ -33,6 +41,37 @@ interface TurnstileProps {
   className?: string
 }
 
+function loadTurnstileScript(): Promise<void> {
+  if (window.turnstile) {
+    return Promise.resolve()
+  }
+
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById(
+      TURNSTILE_SCRIPT_ID
+    ) as HTMLScriptElement | null
+
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true })
+      existing.addEventListener('error', () => reject(), { once: true })
+      if (window.turnstile) {
+        resolve()
+      }
+      return
+    }
+
+    const script = document.createElement('script')
+    script.id = TURNSTILE_SCRIPT_ID
+    script.src = TURNSTILE_SCRIPT_SRC
+    script.async = true
+    script.defer = true
+    script.onload = () => resolve()
+    script.onerror = () =>
+      reject(new Error('Failed to load Cloudflare Turnstile script'))
+    document.head.appendChild(script)
+  })
+}
+
 export function Turnstile({
   siteKey,
   onVerify,
@@ -40,12 +79,27 @@ export function Turnstile({
   className,
 }: TurnstileProps) {
   const ref = useRef<HTMLDivElement | null>(null)
+  const widgetIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    const render = () => {
-      if (!ref.current || !window.turnstile) return
+    let cancelled = false
+
+    const renderWidget = () => {
+      if (cancelled || !ref.current || !window.turnstile) return
+
+      if (widgetIdRef.current && window.turnstile.remove) {
+        try {
+          window.turnstile.remove(widgetIdRef.current)
+        } catch {
+          /* empty */
+        }
+        widgetIdRef.current = null
+      }
+
+      ref.current.replaceChildren()
+
       try {
-        window.turnstile.render(ref.current, {
+        widgetIdRef.current = window.turnstile.render(ref.current, {
           sitekey: siteKey,
           callback: (token: string) => onVerify(token),
           'error-callback': () => onExpire?.(),
@@ -56,20 +110,27 @@ export function Turnstile({
       }
     }
 
-    if (window.turnstile) {
-      render()
-      return
+    loadTurnstileScript()
+      .then(() => {
+        if (!cancelled) {
+          renderWidget()
+        }
+      })
+      .catch(() => {
+        onExpire?.()
+      })
+
+    return () => {
+      cancelled = true
+      if (widgetIdRef.current && window.turnstile?.remove) {
+        try {
+          window.turnstile.remove(widgetIdRef.current)
+        } catch {
+          /* empty */
+        }
+        widgetIdRef.current = null
+      }
     }
-    const scriptId = 'cf-turnstile'
-    if (document.getElementById(scriptId)) return
-    const s = document.createElement('script')
-    s.id = scriptId
-    s.src =
-      'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
-    s.async = true
-    s.defer = true
-    s.onload = () => render()
-    document.head.appendChild(s)
   }, [siteKey, onVerify, onExpire])
 
   return <div ref={ref} className={className} />

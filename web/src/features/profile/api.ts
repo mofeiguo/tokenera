@@ -107,7 +107,9 @@ export async function sendEmailVerification(
   if (turnstileToken) {
     params.append('turnstile', turnstileToken)
   }
-  const res = await api.get(`/api/verification?${params}`)
+  const res = await api.get(`/api/verification?${params}`, {
+    skipBusinessError: true,
+  })
   return res.data
 }
 
@@ -118,10 +120,14 @@ export async function bindEmail(
   email: string,
   code: string
 ): Promise<ApiResponse> {
-  const res = await api.post('/api/oauth/email/bind', {
-    email,
-    code,
-  })
+  const res = await api.post(
+    '/api/oauth/email/bind',
+    {
+      email,
+      code,
+    },
+    { skipBusinessError: true }
+  )
   return res.data
 }
 

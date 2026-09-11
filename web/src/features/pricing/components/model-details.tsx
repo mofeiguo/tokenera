@@ -45,7 +45,7 @@ import {
 } from '../lib/catalog-signals'
 import { getDynamicPricingSummary } from '../lib/dynamic-price'
 import { isTokenBasedModel } from '../lib/model-helpers'
-import { formatFixedPrice, formatGroupPrice } from '../lib/price'
+import { formatPrice, formatRequestPrice } from '../lib/price'
 import type { PriceType, PricingModel, TokenUnit } from '../types'
 import { CatalogCapabilityChips } from './catalog-capability-chips'
 import { CatalogModalityFlow } from './catalog-modality-icons'
@@ -201,7 +201,7 @@ function ModelHeader(props: {
 }) {
   const { t } = useTranslation()
   const model = props.model
-  const modelIconKey = model.icon || model.vendor_icon
+  const modelIconKey = model.vendor_icon
   const modelIcon = modelIconKey ? getLobeIcon(modelIconKey, 28) : null
   const initial = model.model_name?.charAt(0).toUpperCase() || '?'
 
@@ -309,14 +309,11 @@ function PriceSection(props: {
   const { t } = useTranslation()
   const isTokenBased = isTokenBasedModel(props.model)
   const tokenUnitLabel = props.tokenUnit === 'K' ? '1K' : '1M'
-  const baseGroupKey = '_base'
-  const baseGroupRatioMap = { [baseGroupKey]: 1 }
   const dynamicSummary = getDynamicPricingSummary(props.model, {
     tokenUnit: props.tokenUnit,
     showRechargePrice: props.showRechargePrice,
     priceRate: props.priceRate,
     usdExchangeRate: props.usdExchangeRate,
-    groupRatioMultiplier: 1,
   })
 
   const primaryPriceTypes: { label: string; type: PriceType }[] = [
@@ -449,13 +446,11 @@ function PriceSection(props: {
               {t('Per request')}
             </span>
             <span className='text-foreground font-mono text-lg font-semibold tracking-tight tabular-nums'>
-              {formatFixedPrice(
+              {formatRequestPrice(
                 props.model,
-                baseGroupKey,
                 props.showRechargePrice,
                 props.priceRate,
-                props.usdExchangeRate,
-                baseGroupRatioMap
+                props.usdExchangeRate
               )}
             </span>
           </div>
@@ -467,15 +462,13 @@ function PriceSection(props: {
   const secondaryItems = secondaryPriceTypes.filter((item) => item.available)
   const renderPrice = (type: PriceType) => (
     <>
-      {formatGroupPrice(
+      {formatPrice(
         props.model,
-        baseGroupKey,
         type,
         props.tokenUnit,
         props.showRechargePrice,
         props.priceRate,
-        props.usdExchangeRate,
-        baseGroupRatioMap
+        props.usdExchangeRate
       )}
       <PriceUnit unit={tokenUnitLabel} />
     </>

@@ -144,10 +144,6 @@ const FLOW_STAGE_META: Record<
     labelKey: 'Token',
     descKey: 'The API key used for the requests',
   },
-  group: {
-    labelKey: 'Group',
-    descKey: 'The user group applied to the requests',
-  },
   model: {
     labelKey: 'Model',
     descKey: 'The model that was requested',
@@ -162,7 +158,6 @@ const FLOW_STAGE_LABEL_KEYS: Record<FlowNodeKind, string> = {
   user: FLOW_STAGE_META.user.labelKey,
   node: FLOW_STAGE_META.node.labelKey,
   token: FLOW_STAGE_META.token.labelKey,
-  group: FLOW_STAGE_META.group.labelKey,
   model: FLOW_STAGE_META.model.labelKey,
   channel: FLOW_STAGE_META.channel.labelKey,
 }
@@ -171,7 +166,6 @@ const FLOW_OTHER_NODE_LABEL_KEYS: Record<FlowNodeKind, string> = {
   user: 'Other users',
   node: 'Other nodes',
   token: 'Other tokens',
-  group: 'Other groups',
   model: 'Other models',
   channel: 'Other channels',
 }

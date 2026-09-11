@@ -18,88 +18,103 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 
-import {
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from '@/components/ui/sidebar'
 import { useStatus } from '@/hooks/use-status'
-import { useSystemConfig } from '@/hooks/use-system-config'
 import { Link } from '@/lib/router'
 import { cn } from '@/lib/utils'
+
+import { PUBLIC_BRAND_NAME } from './token-era-logo'
 
 type SystemBrandProps = {
   defaultName?: string
   defaultVersion?: string
   /**
    * Visual layout:
-   * - 'sidebar': stacked card in the sidebar header; clicking goes to /dashboard.
-   * - 'inline': compact horizontal pill (used inside the top app bar).
+   * - 'sidebar': site name + version pill in the sidebar header.
+   * - 'inline': compact horizontal row (e.g. top app bar).
    */
   variant?: 'sidebar' | 'inline'
+  /** Destination for the brand link. Defaults by variant. */
+  to?: string
+}
+
+function formatVersionLabel(version: string): string {
+  if (!version) return version
+  return version.startsWith('v') ? version : `v${version}`
+}
+
+function resolveSiteName(
+  systemName: string | undefined,
+  defaultName: string | undefined
+): string {
+  const trimmed = systemName?.trim()
+  if (trimmed) {
+    return trimmed
+  }
+  return defaultName || PUBLIC_BRAND_NAME
 }
 
 /**
- * System brand component
- * Displays current system logo + name.
- * - inline: compact pill in the top app bar; clicking navigates to home (/)
- * - sidebar: stacked card in the sidebar header; clicking navigates to /dashboard
+ * System brand — ZenMux-style site name + version badge (no logo).
  */
 export function SystemBrand(props: SystemBrandProps) {
   const { t } = useTranslation()
   const { status } = useStatus()
-  const { logo } = useSystemConfig()
 
   const variant = props.variant ?? 'sidebar'
-  const name = status?.system_name || props.defaultName || 'New API'
-  const version =
-    status?.version || props.defaultVersion || t('Unknown version')
+  const name = resolveSiteName(
+    status?.system_name as string | undefined,
+    props.defaultName
+  )
+  const versionRaw =
+    (status?.version as string | undefined) || props.defaultVersion
+  const versionLabel = versionRaw
+    ? formatVersionLabel(versionRaw)
+    : props.defaultVersion
+      ? formatVersionLabel(props.defaultVersion)
+      : null
 
-  if (variant === 'inline') {
-    return (
-      <Link
-        to='/'
-        aria-label={t('Go to home')}
-        className={cn(
-          'text-foreground inline-flex h-7 items-center gap-1.5 rounded-md px-1.5 text-sm font-medium transition-colors outline-none select-none',
-          'hover:bg-accent focus-visible:ring-ring/40 focus-visible:ring-2'
-        )}
-      >
-        <div className='flex size-5 items-center justify-center overflow-hidden rounded-md'>
-          <img
-            src={logo}
-            alt={t('Logo')}
-            className='size-full rounded-md object-cover'
-          />
-        </div>
-        <span className='max-w-[12rem] truncate'>{name}</span>
-      </Link>
-    )
-  }
+  const nameClassName =
+    variant === 'sidebar'
+      ? 'truncate text-base font-bold tracking-tight'
+      : 'max-w-[14rem] truncate text-base font-bold tracking-tight'
+
+  const homeTo = props.to ?? (variant === 'sidebar' ? '/analytics/usage' : '/')
 
   return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          size='lg'
-          className='hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-          render={<Link to='/dashboard' />}
+    <div
+      className={cn(
+        'flex items-center gap-2',
+        variant === 'sidebar' && 'px-2 py-1 md:pl-[11px]'
+      )}
+    >
+      <Link
+        to={homeTo}
+        aria-label={t('Go to home')}
+        className={cn(
+          'text-foreground hover:text-foreground/80 inline-flex min-w-0 items-center gap-2 transition-colors outline-none',
+          'focus-visible:ring-ring/40 rounded-sm focus-visible:ring-2'
+        )}
+      >
+        <span
+          aria-hidden
+          className='bg-muted text-foreground hidden size-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold group-data-[collapsible=icon]:flex'
         >
-          <div className='flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg'>
-            <img
-              src={logo}
-              alt={t('Logo')}
-              className='size-full rounded-lg object-cover'
-            />
-          </div>
-          <div className='grid flex-1 text-start text-sm leading-tight group-data-[collapsible=icon]:hidden'>
-            <span className='truncate text-base font-bold'>{name}</span>
-            <span className='text-muted-foreground truncate text-xs'>
-              {version}
-            </span>
-          </div>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    </SidebarMenu>
+          {name.charAt(0).toUpperCase()}
+        </span>
+        <span className={cn(nameClassName, 'group-data-[collapsible=icon]:hidden')}>
+          {name}
+        </span>
+      </Link>
+      {versionLabel ? (
+        <span
+          className={cn(
+            'bg-muted text-muted-foreground shrink-0 rounded px-1.5 py-1 text-xs leading-none whitespace-nowrap',
+            'group-data-[collapsible=icon]:hidden'
+          )}
+        >
+          {versionLabel}
+        </span>
+      ) : null}
+    </div>
   )
 }

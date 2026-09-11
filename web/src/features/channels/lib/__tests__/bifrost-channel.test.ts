@@ -20,6 +20,7 @@ import { describe, expect, test } from 'vitest'
 
 import {
   CHANNEL_TYPE_BIFROST,
+  CHANNEL_TYPE_OPENAI,
   CHANNEL_TYPE_OPTIONS,
   MODEL_FETCHABLE_TYPES,
 } from '../../constants'
@@ -39,6 +40,22 @@ function bifrostForm(baseUrl: string) {
 }
 
 describe('Bifrost channel', () => {
+  test('registers OpenAI in channel type options', () => {
+    const openAIOption = CHANNEL_TYPE_OPTIONS.find(
+      (item) => item.value === CHANNEL_TYPE_OPENAI
+    )
+
+    expect(openAIOption).toEqual({
+      value: CHANNEL_TYPE_OPENAI,
+      label: 'OpenAI',
+    })
+    expect(MODEL_FETCHABLE_TYPES.has(CHANNEL_TYPE_OPENAI)).toBe(true)
+    expect(getChannelTypeIcon(CHANNEL_TYPE_OPENAI)).toBe('OpenAI')
+    expect(getKeyPromptForType(CHANNEL_TYPE_OPENAI)).toBe('OpenAI API Key')
+    expect(getChannelTypeConfig(CHANNEL_TYPE_OPENAI).icon).toBe('OpenAI')
+    expect(CHANNEL_TYPE_OPTIONS[0]?.value).toBe(CHANNEL_TYPE_OPENAI)
+  })
+
   test('registers selection, model discovery, and icon metadata', () => {
     const option = CHANNEL_TYPE_OPTIONS.find(
       (item) => item.value === CHANNEL_TYPE_BIFROST
@@ -49,9 +66,9 @@ describe('Bifrost channel', () => {
       label: 'Bifrost',
     })
     expect(MODEL_FETCHABLE_TYPES.has(CHANNEL_TYPE_BIFROST)).toBe(true)
-    expect(getChannelTypeIcon(CHANNEL_TYPE_BIFROST)).toBe('OpenAI')
+    expect(getChannelTypeIcon(CHANNEL_TYPE_BIFROST)).toBe('Bifrost')
     expect(getKeyPromptForType(CHANNEL_TYPE_BIFROST)).toBe('Bifrost API Key')
-    expect(getChannelTypeConfig(CHANNEL_TYPE_BIFROST).icon).toBe('OpenAI')
+    expect(getChannelTypeConfig(CHANNEL_TYPE_BIFROST).icon).toBe('Bifrost')
   })
 
   test('requires a non-blank Base URL', () => {

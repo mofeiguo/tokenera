@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { MESSAGE_ROLES } from '../../constants'
 import type { Message } from '../../types'
+import { hasMessageImages } from './image-utils'
 
 type MessageEditorState = {
   canSave: boolean
@@ -30,11 +31,11 @@ export function getMessageEditorState(
   editText: string,
   originalText: string
 ): MessageEditorState {
-  const hasText = editText.trim().length > 0
+  const hasPayload = editText.trim().length > 0 || hasMessageImages(message)
   const hasChanged = editText !== originalText
 
   return {
-    canSave: hasText && hasChanged,
+    canSave: hasPayload && hasChanged,
     hasChanged,
     showSaveAndSubmit: message.from === MESSAGE_ROLES.USER,
   }

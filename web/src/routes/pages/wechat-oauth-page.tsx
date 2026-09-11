@@ -44,7 +44,7 @@ export function WechatOAuthPage() {
             applyAuthBundle(res.data)
             const target =
               sanitizeAuthRedirect(search?.redirect, window.location.origin) ??
-              '/dashboard'
+              '/analytics/usage'
             navigate({ href: target, replace: true })
             return
           }

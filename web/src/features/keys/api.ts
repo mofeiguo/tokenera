@@ -21,11 +21,11 @@ import { api } from '@/lib/api'
 import type {
   ApiKey,
   ApiResponse,
+  CreatedApiKey,
   GetApiKeysParams,
   GetApiKeysResponse,
   SearchApiKeysParams,
   ApiKeyFormData,
-  TokenAutoGroupsConfig,
 } from './types'
 
 // ============================================================================
@@ -36,8 +36,12 @@ import type {
 export async function getApiKeys(
   params: GetApiKeysParams = {}
 ): Promise<GetApiKeysResponse> {
-  const { p = 1, size = 10 } = params
-  const res = await api.get(`/api/token/?p=${p}&size=${size}`)
+  const { p = 1, size = 10, status } = params
+  const queryParams = new URLSearchParams()
+  queryParams.set('p', String(p))
+  queryParams.set('size', String(size))
+  if (status) queryParams.set('status', String(status))
+  const res = await api.get(`/api/token/?${queryParams.toString()}`)
   return res.data
 }
 
@@ -45,10 +49,11 @@ export async function getApiKeys(
 export async function searchApiKeys(
   params: SearchApiKeysParams
 ): Promise<GetApiKeysResponse> {
-  const { keyword = '', token = '', p, size } = params
+  const { keyword = '', token = '', status, p, size } = params
   const queryParams = new URLSearchParams()
   if (keyword) queryParams.set('keyword', keyword)
   if (token) queryParams.set('token', token)
+  if (status) queryParams.set('status', String(status))
   if (p != null) queryParams.set('p', String(p))
   if (size != null) queryParams.set('size', String(size))
   const res = await api.get(`/api/token/search?${queryParams.toString()}`)
@@ -61,18 +66,10 @@ export async function getApiKey(id: number): Promise<ApiResponse<ApiKey>> {
   return res.data
 }
 
-// Get the current user's global Auto order and the per-token selection limit.
-export async function getTokenAutoGroups(): Promise<
-  ApiResponse<TokenAutoGroupsConfig>
-> {
-  const res = await api.get('/api/token/auto-groups')
-  return res.data
-}
-
 // Create a new API key
 export async function createApiKey(
   data: ApiKeyFormData
-): Promise<ApiResponse<ApiKey>> {
+): Promise<ApiResponse<CreatedApiKey & { id?: number }>> {
   const res = await api.post('/api/token/', data)
   return res.data
 }

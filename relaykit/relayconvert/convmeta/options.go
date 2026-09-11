@@ -13,11 +13,6 @@ type Options struct {
 	// system parts) that converters emit only for that dialect. The host sets
 	// it from the channel type.
 	OpenRouterDialect bool
-
-	// PreserveThinkingSuffix reports models whose -thinking/-nothinking/effort
-	// suffix must be kept on the outgoing model name (host blacklist lookup).
-	// Nil means "never preserve".
-	PreserveThinkingSuffix func(modelName string) bool
 }
 
 type ClaudeOptions struct {
@@ -72,8 +67,4 @@ func (o *GeminiOptions) SafetySettingFor(category string) string {
 		return ""
 	}
 	return o.SafetySetting(category)
-}
-
-func (o *Options) ShouldPreserveThinkingSuffix(modelName string) bool {
-	return o != nil && o.PreserveThinkingSuffix != nil && o.PreserveThinkingSuffix(modelName)
 }

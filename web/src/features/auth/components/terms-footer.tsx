@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils'
 import type { SystemStatus } from '../types'
 
 interface TermsFooterProps {
-  variant?: 'sign-in' | 'sign-up'
+  variant?: 'sign-in' | 'sign-up' | 'zenmux'
   className?: string
   status?: SystemStatus | null
 }
@@ -35,9 +35,11 @@ export function TermsFooter({
 }: TermsFooterProps) {
   const { t } = useTranslation()
   const text =
-    variant === 'sign-in'
-      ? 'By clicking sign in, you agree to our'
-      : 'By creating an account, you agree to our'
+    variant === 'zenmux'
+      ? 'By continuing, you agree to our'
+      : variant === 'sign-in'
+        ? 'By clicking sign in, you agree to our'
+        : 'By creating an account, you agree to our'
 
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
@@ -66,29 +68,70 @@ export function TermsFooter({
   const [firstLink, secondLink] = activeLinks
 
   return (
-    <p className={cn('text-muted-foreground text-center text-xs', className)}>
-      {text}{' '}
-      {firstLink && (
-        <a
-          href={firstLink.href}
-          className='hover:text-primary underline underline-offset-4'
-        >
-          {firstLink.label}
-        </a>
+    <p
+      className={cn(
+        'text-muted-foreground text-xs',
+        variant === 'zenmux' ? 'text-center leading-5' : 'text-center',
+        className
       )}
-      {secondLink && (
+    >
+      {variant === 'zenmux' ? (
         <>
-          {' '}
-          {t('and')}{' '}
-          <a
-            href={secondLink.href}
-            className='hover:text-primary underline underline-offset-4'
-          >
-            {secondLink.label}
-          </a>
+          <span>{t(text)}</span>
+          {firstLink && (
+            <>
+              {' '}
+              <a
+                href={firstLink.href}
+                target='_blank'
+                rel='noreferrer'
+                className='text-foreground hover:text-foreground/80 underline underline-offset-4'
+              >
+                {t(firstLink.label)}
+              </a>
+            </>
+          )}
+          {secondLink && (
+            <>
+              <span>{t('and')}</span>
+              {' '}
+              <a
+                href={secondLink.href}
+                target='_blank'
+                rel='noreferrer'
+                className='text-foreground hover:text-foreground/80 underline underline-offset-4'
+              >
+                {t(secondLink.label)}
+              </a>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          {text}{' '}
+          {firstLink && (
+            <a
+              href={firstLink.href}
+              className='hover:text-primary underline underline-offset-4'
+            >
+              {firstLink.label}
+            </a>
+          )}
+          {secondLink && (
+            <>
+              {' '}
+              {t('and')}{' '}
+              <a
+                href={secondLink.href}
+                className='hover:text-primary underline underline-offset-4'
+              >
+                {secondLink.label}
+              </a>
+            </>
+          )}
+          .
         </>
       )}
-      .
     </p>
   )
 }

@@ -16,25 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ChevronDown, Settings } from 'lucide-react'
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -44,6 +25,11 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
+
+import {
+  ChannelIconChevronDown,
+  ChannelIconSettings,
+} from '../../channel-icons'
 
 type ChannelAdvancedSectionProps = {
   children: ReactNode
@@ -68,7 +54,7 @@ export function ChannelAdvancedSection(props: ChannelAdvancedSectionProps) {
       >
         <div className='flex items-start gap-3'>
           <span className='bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-md'>
-            <Settings className='h-4 w-4' aria-hidden='true' />
+            <ChannelIconSettings aria-hidden='true' />
           </span>
           <div className='flex flex-col gap-0.5'>
             <div className='text-[13px] font-semibold'>
@@ -82,9 +68,9 @@ export function ChannelAdvancedSection(props: ChannelAdvancedSectionProps) {
             </div>
           </div>
         </div>
-        <ChevronDown
+        <ChannelIconChevronDown
           className={cn(
-            'text-muted-foreground h-4 w-4 shrink-0 transition-transform',
+            'text-muted-foreground shrink-0 transition-transform',
             props.open && 'rotate-180'
           )}
           aria-hidden='true'

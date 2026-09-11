@@ -35,11 +35,9 @@ import { getModels, searchModels, getVendors } from '../api'
 import {
   DEFAULT_PAGE_SIZE,
   getModelStatusOptions,
-  getSyncStatusOptions,
 } from '../constants'
 import { isModelEnabled, modelsQueryKeys, vendorsQueryKeys } from '../lib'
 import { countModelsWithCapability } from '../lib/model-capabilities'
-import { DataTableBulkActions } from './data-table-bulk-actions'
 import { ModelCard } from './model-card'
 import { useModelsColumns } from './models-columns'
 import { useModels } from './models-provider'
@@ -73,7 +71,6 @@ export function ModelsTable() {
     columnFilters: [
       { columnId: 'status', searchKey: 'status', type: 'array' },
       { columnId: 'vendor_id', searchKey: 'vendor', type: 'array' },
-      { columnId: 'sync_official', searchKey: 'sync', type: 'array' },
     ],
   })
 
@@ -82,9 +79,6 @@ export function ModelsTable() {
     (columnFilters.find((f) => f.id === 'status')?.value as string[]) || []
   const vendorFilter =
     (columnFilters.find((f) => f.id === 'vendor_id')?.value as string[]) || []
-  const syncFilter =
-    (columnFilters.find((f) => f.id === 'sync_official')?.value as string[]) ||
-    []
 
   // Fetch vendors for filter
   const { data: vendorsData } = useQuery({
@@ -115,17 +109,9 @@ export function ModelsTable() {
     statusFilter.length > 0 && !statusFilter.includes('all')
       ? statusFilter[0]
       : undefined
-  const syncFilterValue =
-    syncFilter.length > 0 && !syncFilter.includes('all')
-      ? syncFilter[0]
-      : undefined
 
-  // Use search API whenever any filter is active so status/sync are applied server-side
   const shouldSearch = Boolean(
-    globalFilter?.trim() ||
-    activeVendorFilter ||
-    statusFilterValue ||
-    syncFilterValue
+    globalFilter?.trim() || activeVendorFilter || statusFilterValue
   )
 
   // Fetch models data
@@ -135,7 +121,6 @@ export function ModelsTable() {
       keyword: globalFilter,
       vendor: activeVendorFilter,
       status: statusFilterValue,
-      sync_official: syncFilterValue,
       p: pagination.pageIndex + 1,
       page_size: pagination.pageSize,
     }),
@@ -145,7 +130,6 @@ export function ModelsTable() {
           keyword: globalFilter,
           vendor: activeVendorFilter,
           status: statusFilterValue,
-          sync_official: syncFilterValue,
           p: pagination.pageIndex + 1,
           page_size: pagination.pageSize,
         })
@@ -175,14 +159,12 @@ export function ModelsTable() {
       tags: false,
       endpoints: false,
       quota_types: false,
-      sync_official: false,
       created_time: false,
       updated_time: false,
     },
     columnFilters,
     pagination,
     globalFilter,
-    enableRowSelection: true,
     onColumnFiltersChange,
     onPaginationChange,
     onGlobalFilterChange,
@@ -240,10 +222,11 @@ export function ModelsTable() {
           skeletonKeyPrefix='model-skeleton'
           enableCardView
           viewModeStorageKey={MODELS_VIEW_MODE_STORAGE_KEY}
-          renderCard={(row, { isSelected }) => (
-            <ModelCard row={row} isSelected={isSelected} />
-          )}
-          cardGridClassName='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6'
+          renderCard={(row) => {
+            const vendor = vendors.find((v) => v.id === row.original.vendor_id)
+            return <ModelCard row={row} vendor={vendor} />
+          }}
+          cardGridClassName='grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 xl:gap-5'
           applyHeaderSize
           getRowClassName={(row, { isMobile }) => {
             if (isModelEnabled(row.original)) {
@@ -267,15 +250,8 @@ export function ModelsTable() {
                 options: vendorFilterOptions,
                 singleSelect: true,
               },
-              {
-                columnId: 'sync_official',
-                title: t('Official Sync'),
-                options: [...getSyncStatusOptions(t)],
-                singleSelect: true,
-              },
             ],
           }}
-          bulkActions={<DataTableBulkActions table={table} />}
         />
       </div>
     </div>

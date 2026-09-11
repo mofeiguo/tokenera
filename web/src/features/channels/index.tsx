@@ -16,92 +16,47 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Settings2 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useState } from 'react'
 
-import { SectionPageLayout } from '@/components/layout'
-import { Badge } from '@/components/ui/badge'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
-import { useQuery } from '@/lib/query'
-import { ROLE } from '@/lib/roles'
-import { Link } from '@/lib/router'
-import { useAuthStore } from '@/stores/auth-store'
+import { Main } from '@/components/layout'
+import { PageFooterProvider } from '@/components/layout/components/page-footer'
 
-import { getChannelOps } from './api'
 import { ChannelsDialogs } from './components/channels-dialogs'
-import { ChannelsPrimaryButtons } from './components/channels-primary-buttons'
+import { ChannelsPageHeader } from './components/channels-page-header'
 import { ChannelsProvider } from './components/channels-provider'
 import { ChannelsTable } from './components/channels-table'
 
-export function Channels() {
-  const { t } = useTranslation()
-  const isRoot = useAuthStore(
-    (state) => state.auth.user?.role === ROLE.SUPER_ADMIN
+function ChannelsContent() {
+  const [footerContainer, setFooterContainer] = useState<HTMLDivElement | null>(
+    null
   )
-  const channelOpsQuery = useQuery({
-    queryKey: ['channel-ops'],
-    queryFn: getChannelOps,
-    retry: false,
-    staleTime: 5 * 60 * 1000,
-  })
-  const retryTimes = channelOpsQuery.data?.data?.retry_times
-  const retryLabel =
-    typeof retryTimes === 'number' ? `${t('Max Retries')}: ${retryTimes}` : null
-  let retryBadge = null
-  if (retryLabel) {
-    retryBadge = isRoot ? (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Badge
-              variant='outline'
-              className='shrink-0 cursor-pointer'
-              aria-label={t('Retry Settings')}
-              render={
-                <Link
-                  to='/system-settings/models/$section'
-                  params={{ section: 'routing-reliability' }}
-                />
-              }
-            />
-          }
-        >
-          <span>{retryLabel}</span>
-          <Settings2 data-icon='inline-end' />
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{t('Retry Settings')}</p>
-        </TooltipContent>
-      </Tooltip>
-    ) : (
-      <Badge variant='outline' className='shrink-0'>
-        {retryLabel}
-      </Badge>
-    )
-  }
 
   return (
-    <ChannelsProvider>
-      <SectionPageLayout fixedContent>
-        <SectionPageLayout.Title>
-          <span className='flex min-w-0 items-center gap-2'>
-            <span className='truncate'>{t('Channels')}</span>
-            {retryBadge}
-          </span>
-        </SectionPageLayout.Title>
-        <SectionPageLayout.Actions>
-          <ChannelsPrimaryButtons />
-        </SectionPageLayout.Actions>
-        <SectionPageLayout.Content>
-          <ChannelsTable />
-        </SectionPageLayout.Content>
-      </SectionPageLayout>
+    <>
+      <PageFooterProvider container={footerContainer}>
+        <Main>
+          <div className='shrink-0 px-[var(--page-padding-x)] pt-6 pb-4 md:pt-8'>
+            <ChannelsPageHeader />
+          </div>
+          <div className='min-h-0 flex-1 overflow-hidden px-[var(--page-padding-x)] pb-[var(--page-padding-y)]'>
+            <ChannelsTable />
+          </div>
+          <div
+            ref={setFooterContainer}
+            className='bg-background shrink-0 border-t px-[var(--page-padding-x)] py-3 empty:hidden'
+          />
+        </Main>
+      </PageFooterProvider>
 
       <ChannelsDialogs />
+    </>
+  )
+}
+
+export function Channels() {
+  return (
+    <ChannelsProvider>
+      <ChannelsContent />
     </ChannelsProvider>
   )
 }

@@ -17,15 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { type Table } from '@tanstack/react-table'
-import { Power, PowerOff, Tag, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
 import { Dialog } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Tooltip,
   TooltipContent,
@@ -44,9 +41,11 @@ import {
   handleBatchDelete,
   handleBatchDisable,
   handleBatchEnable,
-  handleBatchSetTag,
+  CHANNEL_ACTION_DISABLE,
+  CHANNEL_ACTION_ENABLE,
 } from '../lib'
 import type { Channel } from '../types'
+import { ChannelIconDelete, ChannelIconPowerOff, ChannelIconPowerOn } from './channel-icons'
 
 interface DataTableBulkActionsProps<TData> {
   table: Table<TData>
@@ -57,9 +56,7 @@ export function DataTableBulkActions<TData>({
 }: DataTableBulkActionsProps<TData>) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [showTagDialog, setShowTagDialog] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [tagValue, setTagValue] = useState('')
   const currentUser = useAuthStore((s) => s.auth.user)
   const canEditSensitive = hasPermission(
     currentUser,
@@ -98,14 +95,6 @@ export function DataTableBulkActions<TData>({
     })
   }
 
-  const handleSetTag = () => {
-    handleBatchSetTag(selectedIds, tagValue || null, queryClient, () => {
-      setShowTagDialog(false)
-      setTagValue('')
-      handleClearSelection()
-    })
-  }
-
   return (
     <>
       <BulkActionsToolbar table={table} entityName='channel'>
@@ -116,13 +105,13 @@ export function DataTableBulkActions<TData>({
                 variant='outline'
                 size='icon'
                 onClick={handleEnableAll}
-                className='size-8'
+                className={cn('size-8', CHANNEL_ACTION_ENABLE)}
                 aria-label={t('Enable selected channels')}
                 title={t('Enable selected channels')}
               />
             }
           >
-            <Power />
+            <ChannelIconPowerOn />
             <span className='sr-only'>{t('Enable selected channels')}</span>
           </TooltipTrigger>
           <TooltipContent>
@@ -137,40 +126,17 @@ export function DataTableBulkActions<TData>({
                 variant='outline'
                 size='icon'
                 onClick={handleDisableAll}
-                className='size-8'
+                className={cn('size-8', CHANNEL_ACTION_DISABLE)}
                 aria-label={t('Disable selected channels')}
                 title={t('Disable selected channels')}
               />
             }
           >
-            <PowerOff />
+            <ChannelIconPowerOff />
             <span className='sr-only'>{t('Disable selected channels')}</span>
           </TooltipTrigger>
           <TooltipContent>
             <p>{t('Disable selected channels')}</p>
-          </TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant='outline'
-                size='icon'
-                onClick={() => setShowTagDialog(true)}
-                className='size-8'
-                aria-label={t('Set tag for selected channels')}
-                title={t('Set tag for selected channels')}
-              />
-            }
-          >
-            <Tag />
-            <span className='sr-only'>
-              {t('Set tag for selected channels')}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{t('Set tag for selected channels')}</p>
           </TooltipContent>
         </Tooltip>
 
@@ -198,7 +164,7 @@ export function DataTableBulkActions<TData>({
               />
             }
           >
-            <Trash2 />
+            <ChannelIconDelete />
             <span className='sr-only'>{t('Delete selected channels')}</span>
           </TooltipTrigger>
           <TooltipContent>
@@ -211,49 +177,6 @@ export function DataTableBulkActions<TData>({
         </Tooltip>
       </BulkActionsToolbar>
 
-      {/* Set Tag Dialog */}
-      <Dialog
-        open={showTagDialog}
-        onOpenChange={setShowTagDialog}
-        title={t('Set Tag')}
-        description={
-          <>
-            {t('Set a tag for')}
-            {selectedIds.length}{' '}
-            {t('selected channel(s). Leave empty to remove tag.')}
-          </>
-        }
-        contentHeight='auto'
-        bodyClassName='space-y-4'
-        footer={
-          <>
-            <Button
-              variant='outline'
-              onClick={() => {
-                setShowTagDialog(false)
-                setTagValue('')
-              }}
-            >
-              {t('Cancel')}
-            </Button>
-            <Button onClick={handleSetTag}>{t('Set Tag')}</Button>
-          </>
-        }
-      >
-        <div className='grid gap-4 py-4'>
-          <div className='grid gap-2'>
-            <Label htmlFor='tag'>{t('Tag')}</Label>
-            <Input
-              id='tag'
-              placeholder={t('Enter tag name (optional)')}
-              value={tagValue}
-              onChange={(e) => setTagValue(e.target.value)}
-            />
-          </div>
-        </div>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
       <Dialog
         open={showDeleteConfirm}
         onOpenChange={setShowDeleteConfirm}

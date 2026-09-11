@@ -32,10 +32,7 @@ import { cn } from '@/lib/utils'
 
 import { DEFAULT_TOKEN_UNIT } from '../constants'
 import { formatCatalogTokenCount } from '../lib/catalog-signals'
-import {
-  getDynamicDisplayGroupRatio,
-  getDynamicPricingSummary,
-} from '../lib/dynamic-price'
+import { getDynamicPricingSummary } from '../lib/dynamic-price'
 import { isTokenBasedModel } from '../lib/model-helpers'
 import { formatPrice, formatRequestPrice } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
@@ -48,7 +45,6 @@ export interface ModelCardProps {
   usdExchangeRate?: number
   tokenUnit?: TokenUnit
   showRechargePrice?: boolean
-  selectedGroup?: string
 }
 
 function PriceStat(props: { label: string; value: string }) {
@@ -72,7 +68,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const showRechargePrice = props.showRechargePrice ?? false
   const isTokenBased = isTokenBasedModel(props.model)
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
-  const vendorIconKey = props.model.icon || props.model.vendor_icon
+  const vendorIconKey = props.model.vendor_icon
   const vendorIcon = vendorIconKey ? getLobeIcon(vendorIconKey, 28) : null
   const vendorName = props.model.vendor_name || t('Unknown')
   const initial = props.model.model_name?.charAt(0).toUpperCase() || '?'
@@ -87,10 +83,6 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
         showRechargePrice,
         priceRate,
         usdExchangeRate,
-        groupRatioMultiplier: getDynamicDisplayGroupRatio(
-          props.model,
-          props.selectedGroup
-        ),
       })
     : null
 
@@ -162,8 +154,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             tokenUnit,
             showRechargePrice,
             priceRate,
-            usdExchangeRate,
-            props.selectedGroup
+            usdExchangeRate
           )}
         />
         {hasCachePrice ? (
@@ -175,8 +166,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
               tokenUnit,
               showRechargePrice,
               priceRate,
-              usdExchangeRate,
-              props.selectedGroup
+              usdExchangeRate
             )}
           />
         ) : null}
@@ -188,8 +178,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             tokenUnit,
             showRechargePrice,
             priceRate,
-            usdExchangeRate,
-            props.selectedGroup
+            usdExchangeRate
           )}
         />
       </div>
@@ -202,8 +191,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           props.model,
           showRechargePrice,
           priceRate,
-          usdExchangeRate,
-          props.selectedGroup
+          usdExchangeRate
         )}
       />
     )

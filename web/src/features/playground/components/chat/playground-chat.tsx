@@ -27,15 +27,19 @@ import {
 import { Loader } from '@/components/ai-elements/loader'
 import { Message } from '@/components/ai-elements/message'
 
+import { cn } from '@/lib/utils'
+
 import {
   getChatMessageRenderState,
   getEditingMessageContent,
   getMessageAlignment,
   getPreviousUserMessage,
   isErrorMessage,
+  PLAYGROUND_COLUMN,
 } from '../../lib'
 import type {
   Message as MessageType,
+  ModelOption,
   PlaygroundMessageLayoutMode,
 } from '../../types'
 import { MessageActions } from '../message/message-actions'
@@ -52,7 +56,8 @@ interface PlaygroundChatProps {
   onRegenerateMessage?: (message: MessageType) => void
   onEditMessage?: (message: MessageType) => void
   onDeleteMessage?: (message: MessageType) => void
-  onSelectPrompt?: (prompt: string) => void
+  models?: ModelOption[]
+  modelValue?: string
   isGenerating?: boolean
   isLoadingMessages?: boolean
   editingKey?: string | null
@@ -68,7 +73,8 @@ export function PlaygroundChat({
   onRegenerateMessage,
   onEditMessage,
   onDeleteMessage,
-  onSelectPrompt,
+  models = [],
+  modelValue = '',
   isGenerating = false,
   isLoadingMessages = false,
   editingKey,
@@ -129,11 +135,21 @@ export function PlaygroundChat({
 
     return (
       <Message
-        className='group flex-row-reverse py-2.5'
+        className={cn(
+          'py-2.5 sm:py-3',
+          message.from === 'user' ? 'justify-end' : 'justify-start'
+        )}
         from={message.from}
         key={message.key}
       >
-        <div className='w-full min-w-0 flex-1 basis-full'>
+        <div
+          className={cn(
+            'min-w-0',
+            message.from === 'user'
+              ? 'w-fit max-w-[min(85%,36rem)]'
+              : 'w-full max-w-[78ch]'
+          )}
+        >
           {isEditing ? (
             <PlaygroundMessageEditor
               editText={editText}
@@ -193,9 +209,13 @@ export function PlaygroundChat({
     )
   })
 
-  if (visibleMessages.length === 0 && onSelectPrompt) {
+  if (visibleMessages.length === 0) {
     chatContent = [
-      <PlaygroundEmptyState key='empty' onSelectPrompt={onSelectPrompt} />,
+      <PlaygroundEmptyState
+        key='empty'
+        models={models}
+        modelValue={modelValue}
+      />,
     ]
   }
 
@@ -213,9 +233,10 @@ export function PlaygroundChat({
 
   return (
     <Conversation>
-      {/* Remove outer padding; apply padding to inner centered container to align with input */}
       <ConversationContent className='p-0'>
-        <div className='mx-auto w-full max-w-4xl px-4 py-4'>{chatContent}</div>
+        <div className={`${PLAYGROUND_COLUMN} py-4 sm:py-5`}>
+          {chatContent}
+        </div>
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>

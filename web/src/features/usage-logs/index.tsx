@@ -7,7 +7,7 @@ published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU Affero General Public License for more details.
 
@@ -16,17 +16,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useMemo } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
-import type { NavGroup } from '@/components/layout/types'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AnalyticsTasksPage } from '@/features/analytics/components/analytics-tasks-page'
 import { CacheStatsDialog } from '@/features/system-settings/general/channel-affinity/cache-stats-dialog'
-import { useSidebarConfig } from '@/hooks/use-sidebar-config'
-import { getRouteApi, useNavigate } from '@/lib/router'
+import { getRouteApi } from '@/lib/router'
 
+import { CommonLogsStats } from './components/common-logs-stats'
 import { UserInfoDialog } from './components/dialogs/user-info-dialog'
+import { LogsSensitiveToggle } from './components/logs-sensitive-toggle'
 import {
   type LogsViewScope,
   UsageLogsProvider,
@@ -34,31 +35,11 @@ import {
   useUsageLogsContext,
 } from './components/usage-logs-provider'
 import { UsageLogsTable } from './components/usage-logs-table'
-import {
-  isUsageLogsSectionId,
-  USAGE_LOGS_DEFAULT_SECTION,
-  type UsageLogsSectionId,
-} from './section-registry'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
-const SECTION_META: Record<UsageLogsSectionId, { titleKey: string }> = {
-  common: {
-    titleKey: 'Common Logs',
-  },
-  task: {
-    titleKey: 'Task Logs',
-  },
-}
-
 function UsageLogsContent() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
-  const params = route.useParams()
-  const activeCategory: UsageLogsSectionId =
-    params.section && isUsageLogsSectionId(params.section)
-      ? params.section
-      : USAGE_LOGS_DEFAULT_SECTION
   const {
     selectedUserId,
     userInfoDialogOpen,
@@ -68,43 +49,6 @@ function UsageLogsContent() {
     setAffinityDialogOpen,
   } = useUsageLogsContext()
   const { canManageScope, viewScope, setViewScope } = useLogsViewScope()
-  const tabNavGroups = useMemo<NavGroup[]>(
-    () => [
-      {
-        title: 'Task Logs',
-        items: [
-          {
-            title: SECTION_META.task.titleKey,
-            url: '/usage-logs/task',
-          },
-        ],
-      },
-    ],
-    []
-  )
-  const filteredTabGroups = useSidebarConfig(tabNavGroups)
-  const visibleSections = useMemo(
-    () =>
-      (filteredTabGroups[0]?.items ?? [])
-        .map((item) => {
-          if (!('url' in item) || typeof item.url !== 'string') return null
-          return item.url.split('/').pop() ?? null
-        })
-        .filter((section): section is UsageLogsSectionId =>
-          Boolean(section && isUsageLogsSectionId(section))
-        ),
-    [filteredTabGroups]
-  )
-
-  const handleSectionChange = useCallback(
-    (section: string) => {
-      void navigate({
-        to: '/usage-logs/$section',
-        params: { section: section as UsageLogsSectionId },
-      })
-    },
-    [navigate]
-  )
 
   const handleViewScopeChange = useCallback(
     (scope: string) => {
@@ -115,42 +59,33 @@ function UsageLogsContent() {
     [setViewScope]
   )
 
-  const pageMeta =
-    activeCategory === 'common' ? SECTION_META.common : SECTION_META.task
-  const showTaskSwitcher =
-    activeCategory !== 'common' && visibleSections.length > 1
-
   return (
     <>
       <SectionPageLayout fixedContent>
-        <SectionPageLayout.Title>
-          {t(pageMeta.titleKey)}
-        </SectionPageLayout.Title>
-        {canManageScope && (
-          <SectionPageLayout.Actions>
-            <Tabs value={viewScope} onValueChange={handleViewScopeChange}>
-              <TabsList>
-                <TabsTrigger value='all'>{t('All')}</TabsTrigger>
-                <TabsTrigger value='self'>{t('Only Mine')}</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </SectionPageLayout.Actions>
-        )}
-        <SectionPageLayout.Content>
-          <div className='flex h-full min-h-0 flex-col gap-4'>
-            {showTaskSwitcher && (
-              <Tabs value={activeCategory} onValueChange={handleSectionChange}>
-                <TabsList className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>
-                  {visibleSections.map((section) => (
-                    <TabsTrigger key={section} value={section}>
-                      {t(SECTION_META[section].titleKey)}
-                    </TabsTrigger>
-                  ))}
+        <SectionPageLayout.Title>{t('Common Logs')}</SectionPageLayout.Title>
+        <SectionPageLayout.Description>
+          {t(
+            'Review API call history, token usage, and billing details for the selected time range.'
+          )}
+        </SectionPageLayout.Description>
+        <SectionPageLayout.Actions>
+          <div className='flex flex-wrap items-center justify-end gap-2'>
+            <LogsSensitiveToggle />
+            {canManageScope && (
+              <Tabs value={viewScope} onValueChange={handleViewScopeChange}>
+                <TabsList>
+                  <TabsTrigger value='all'>{t('All')}</TabsTrigger>
+                  <TabsTrigger value='self'>{t('Only Mine')}</TabsTrigger>
                 </TabsList>
               </Tabs>
             )}
+          </div>
+        </SectionPageLayout.Actions>
+        <SectionPageLayout.Content>
+          <div className='flex h-full min-h-0 flex-col gap-4'>
+            <CommonLogsStats />
             <div className='min-h-0 flex-1'>
-              <UsageLogsTable logCategory={activeCategory} />
+              <UsageLogsTable logCategory='common' />
             </div>
           </div>
         </SectionPageLayout.Content>
@@ -184,6 +119,11 @@ function UsageLogsContent() {
 }
 
 export function UsageLogs() {
+  const params = route.useParams()
+  if (params.section === 'task') {
+    return <AnalyticsTasksPage />
+  }
+
   return (
     <UsageLogsProvider>
       <UsageLogsContent />

@@ -30,7 +30,6 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 	_ "github.com/QuantumNous/new-api/setting/performance_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
@@ -143,7 +142,7 @@ func main() {
 	}
 
 	// Register the periodic channel test, upstream model update, and async task
-	// polling (Suno / video) jobs as scheduled system tasks
+	// polling (video) jobs as scheduled system tasks
 	// (DB-lease dedup across masters + run history), then start the runner that
 	// schedules and executes them. Master-only execution and the UpdateTask
 	// switch are enforced inside the runner and each handler's Enabled().
@@ -295,9 +294,6 @@ func InitResources() error {
 
 	logger.SetupLogger()
 
-	// Initialize model settings
-	ratio_setting.InitRatioSettings()
-
 	service.InitHttpClient()
 
 	service.InitTokenEncoders()
@@ -322,12 +318,6 @@ func InitResources() error {
 		}
 	}
 	model.InitOptionMap()
-	if common.IsMasterNode {
-		if err := model.MigrateCatalogPricingFromSettings(); err != nil {
-			common.SysError("failed to migrate catalog pricing: " + err.Error())
-		}
-	}
-	model.RefreshCatalogPricingCache()
 
 	// 清理旧的磁盘缓存文件
 	common.CleanupOldCacheFiles()

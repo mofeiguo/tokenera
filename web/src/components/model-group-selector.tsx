@@ -16,25 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ChevronsUpDown, Check, CpuIcon, LayersIcon } from 'lucide-react'
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
+import {
+  ArrowUpDown,
+  Check,
+  ChevronDown,
+  ChevronsUpDown,
+  CpuIcon,
+  Search,
+} from 'lucide-react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -66,34 +55,26 @@ import {
   modelGroupSelectorLayoutClasses,
   scrollSelectedOptionIntoView,
 } from './model-group-selector/layout'
+import {
+  formatModelSelectorListLabel,
+  formatModelSelectorTriggerLabel,
+  ModelSelectorIcon,
+  type ModelSelectorOption,
+} from './model-group-selector/model-display'
+import {
+  filterPlaygroundModels,
+  type ModelCategoryTab,
+  type ModelSortMode,
+  type PlaygroundModelOption,
+} from './model-group-selector/model-filters'
+import { zenmuxModelPanelClasses } from './model-group-selector/panel-styles'
 
-interface ModelOption {
-  label: string
-  value: string
-  category?: string
-  description?: string
-}
-
-interface GroupOption {
-  label: string
-  value: string
-  ratio?: number
-  desc?: string
-  description?: string
-}
+interface ModelOption extends PlaygroundModelOption {}
 
 interface ModelSelectorProps {
   selectedModel: string
   models: ModelOption[]
   onModelChange: (value: string) => void
-  className?: string
-  disabled?: boolean
-}
-
-interface GroupSelectorProps {
-  selectedGroup: string
-  groups: GroupOption[]
-  onGroupChange: (value: string) => void
   className?: string
   disabled?: boolean
 }
@@ -133,42 +114,6 @@ const ModelTriggerButton = React.forwardRef<
 ))
 
 ModelTriggerButton.displayName = 'ModelTriggerButton'
-
-const GroupTriggerButton = React.forwardRef<
-  React.ComponentRef<typeof Button>,
-  React.ComponentPropsWithoutRef<typeof Button> & {
-    currentLabel: string
-    triggerClassName?: string
-    isDisabled?: boolean
-  }
->(({ currentLabel, triggerClassName, isDisabled, ...props }, ref) => (
-  <Button
-    ref={ref}
-    variant='outline'
-    role='combobox'
-    size='sm'
-    disabled={isDisabled}
-    className={cn(
-      'flex h-8 items-center gap-2 border px-3 font-medium',
-      'justify-center p-0 sm:w-auto sm:justify-start sm:px-3',
-      'w-8',
-      'bg-background text-foreground',
-      'hover:bg-accent transition-colors',
-      'focus:!ring-0 focus:!outline-none',
-      'shadow-none',
-      triggerClassName
-    )}
-    {...props}
-  >
-    <LayersIcon className='text-muted-foreground block size-4 sm:hidden' />
-    <span className='text-muted-foreground sm:text-foreground hidden truncate text-xs sm:block'>
-      {currentLabel}
-    </span>
-    <ChevronsUpDown className='text-muted-foreground hidden h-4 w-4 opacity-50 sm:block' />
-  </Button>
-))
-
-GroupTriggerButton.displayName = 'GroupTriggerButton'
 
 /**
  * Model Selector Component
@@ -365,260 +310,48 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
 
 ModelSelector.displayName = 'ModelSelector'
 
-/**
- * Group Selector Component
- * Styled following Scira's form-component design patterns
- */
-export const GroupSelector: React.FC<GroupSelectorProps> = React.memo(
-  ({ selectedGroup, groups, onGroupChange, className, disabled = false }) => {
-    const { t } = useTranslation()
-    const [open, setOpen] = useState(false)
-    const isMobile = useIsMobile()
-
-    const currentGroup = useMemo(
-      () => groups.find((g) => g.value === selectedGroup),
-      [groups, selectedGroup]
-    )
-
-    const handleGroupChange = useCallback(
-      (value: string) => {
-        onGroupChange(value)
-        setOpen(false)
-      },
-      [onGroupChange]
-    )
-
-    // Shared command content
-    const renderGroupCommandContent = () => (
-      <Command
-        className={cn(
-          isMobile
-            ? 'h-full flex-1 rounded-lg border-0 bg-transparent'
-            : 'rounded-lg'
-        )}
-        filter={(value, search) => {
-          const group = groups.find((g) => g.value === value)
-          if (!group || !search) return 1
-
-          const searchTerm = search.toLowerCase()
-          const searchableFields = [
-            group.label,
-            group.description || '',
-            group.value,
-          ]
-            .join(' ')
-            .toLowerCase()
-
-          return searchableFields.includes(searchTerm) ? 1 : 0
-        }}
-      >
-        <CommandInput placeholder={t('Search groups...')} className='h-9' />
-        <CommandEmpty>{t('No group found.')}</CommandEmpty>
-        <CommandList
-          className={isMobile ? '!max-h-full flex-1 p-2' : 'max-h-[240px]'}
-        >
-          <CommandGroup>
-            <div className='text-muted-foreground px-2 py-1 text-[10px] font-medium'>
-              {t('Model Group')}
-            </div>
-            {groups.map((group) => (
-              <CommandItem
-                key={group.value}
-                value={group.value}
-                onSelect={handleGroupChange}
-                className={cn(
-                  'mb-0.5 flex items-center justify-between rounded-lg px-2 py-2 text-xs',
-                  'transition-all duration-200',
-                  'hover:bg-accent',
-                  'data-[selected=true]:bg-accent'
-                )}
-              >
-                <div className='flex min-w-0 flex-1 items-center gap-2 pr-4'>
-                  <div className='flex min-w-0 flex-1 flex-col'>
-                    <span className='text-foreground truncate text-[11px] font-medium'>
-                      {group.label}
-                    </span>
-                    {(group.desc || group.description) && (
-                      <div className='text-muted-foreground truncate text-[9px] leading-tight'>
-                        {group.desc || group.description}
-                        {group.ratio && (
-                          <>
-                            {' · '}
-                            {t('Ratio: {{value}}', { value: group.ratio })}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <Check
-                  className={cn(
-                    'ml-auto h-4 w-4',
-                    selectedGroup === group.value ? 'opacity-100' : 'opacity-0'
-                  )}
-                />
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
-      </Command>
-    )
-
-    return isMobile ? (
-      <Drawer open={open} onOpenChange={setOpen}>
-        <DrawerTrigger asChild>
-          <GroupTriggerButton
-            currentLabel={currentGroup?.label || t('Group')}
-            triggerClassName={className}
-            isDisabled={disabled}
-            aria-expanded={open}
-          />
-        </DrawerTrigger>
-        <DrawerContent className='max-h-[80vh]'>
-          <DrawerHeader className='pb-4 text-left'>
-            <DrawerTitle>{t('Choose Group')}</DrawerTitle>
-          </DrawerHeader>
-          <div className='max-h-[calc(80vh-100px)] overflow-y-auto px-4 pb-6'>
-            <div className='space-y-2'>
-              {groups.map((group) => (
-                <Button
-                  key={group.value}
-                  variant='outline'
-                  onClick={() => handleGroupChange(group.value)}
-                  className={cn(
-                    'flex h-auto w-full items-center justify-between rounded-lg p-4 text-left whitespace-normal',
-                    'border-border hover:bg-accent',
-                    selectedGroup === group.value
-                      ? 'bg-accent border-primary/20'
-                      : 'bg-background'
-                  )}
-                >
-                  <div className='flex min-w-0 flex-1 items-center gap-3'>
-                    <div className='flex min-w-0 flex-1 flex-col'>
-                      <span className='text-foreground text-sm font-medium'>
-                        {group.label}
-                      </span>
-                      {(group.desc || group.description) && (
-                        <div className='text-muted-foreground mt-0.5 text-xs'>
-                          {group.desc || group.description}
-                          {group.ratio && (
-                            <>
-                              {' · '}
-                              {t('Ratio: {{value}}', {
-                                value: group.ratio,
-                              })}
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <Check
-                    className={cn(
-                      'ml-3 h-5 w-5 shrink-0',
-                      selectedGroup === group.value
-                        ? 'opacity-100'
-                        : 'opacity-0'
-                    )}
-                  />
-                </Button>
-              ))}
-            </div>
-          </div>
-        </DrawerContent>
-      </Drawer>
-    ) : (
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          render={
-            <GroupTriggerButton
-              currentLabel={currentGroup?.label || t('Group')}
-              triggerClassName={className}
-              isDisabled={disabled}
-              aria-expanded={open}
-            />
-          }
-        />
-        <PopoverContent
-          className='bg-popover z-50 w-[90vw] max-w-[14em] rounded-lg border p-0 !shadow-none sm:w-[14em]'
-          align='start'
-          side='bottom'
-          sideOffset={4}
-          collisionPadding={8}
-        >
-          {renderGroupCommandContent()}
-        </PopoverContent>
-      </Popover>
-    )
-  }
-)
-
-GroupSelector.displayName = 'GroupSelector'
-
 // Export combined selector component
 export interface ModelGroupSelectorProps {
-  // Model props
   selectedModel: string
   models: ModelOption[]
   onModelChange: (value: string) => void
-  // Group props
-  selectedGroup: string
-  groups: GroupOption[]
-  onGroupChange: (value: string) => void
-  // Common props
   className?: string
   disabled?: boolean
 }
 
 /**
- * Combined Model and Group Selector Component
- * Provides both model and group selection in a unified interface
+ * Model selector used by Playground.
  */
 export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
   selectedModel,
   models,
   onModelChange,
-  selectedGroup,
-  groups,
-  onGroupChange,
   className,
   disabled = false,
 }) => {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [categoryTab, setCategoryTab] = useState<ModelCategoryTab>('all')
+  const [sortMode, setSortMode] = useState<ModelSortMode>('catalog')
   const isMobile = useIsMobile()
-  const groupScrollContainerRef = useRef<HTMLDivElement | null>(null)
-  const selectedGroupOptionRef = useRef<HTMLButtonElement | null>(null)
-  const selectedModelOptionRef = useRef<HTMLDivElement | null>(null)
+  const selectedModelOptionRef = useRef<HTMLButtonElement | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
 
   const currentModel = useMemo(
     () => models.find((model) => model.value === selectedModel),
     [models, selectedModel]
   )
-  const currentGroup = useMemo(
-    () => groups.find((group) => group.value === selectedGroup),
-    [groups, selectedGroup]
+
+  const filteredModels = useMemo(
+    () =>
+      filterPlaygroundModels(models, {
+        categoryTab,
+        searchQuery,
+        sortMode,
+      }),
+    [categoryTab, models, searchQuery, sortMode]
   )
-  const filteredModels = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
-    if (!query) {
-      return models
-    }
-
-    return models.filter((model) => {
-      const searchableText = [
-        model.label,
-        model.value,
-        model.description || '',
-        model.category || '',
-      ]
-        .join(' ')
-        .toLowerCase()
-
-      return searchableText.includes(query)
-    })
-  }, [models, searchQuery])
 
   const handleModelChange = useCallback(
     (value: string) => {
@@ -629,12 +362,12 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
     [onModelChange]
   )
 
-  const handleGroupChange = useCallback(
-    (value: string) => {
-      onGroupChange(value)
-    },
-    [onGroupChange]
-  )
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen)
+    if (!nextOpen) {
+      setSearchQuery('')
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) {
@@ -645,10 +378,9 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
     const firstFrameId = window.requestAnimationFrame(() => {
       secondFrameId = window.requestAnimationFrame(() => {
         scrollSelectedOptionIntoView(
-          selectedGroupOptionRef.current,
-          groupScrollContainerRef.current
+          selectedModelOptionRef.current,
+          listRef.current
         )
-        scrollSelectedOptionIntoView(selectedModelOptionRef.current)
       })
     })
 
@@ -656,196 +388,149 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
       window.cancelAnimationFrame(firstFrameId)
       window.cancelAnimationFrame(secondFrameId)
     }
-  }, [open, selectedGroup, selectedModel])
+  }, [open, selectedModel, filteredModels.length])
+
+  const categoryTabs: { id: ModelCategoryTab; label: string }[] = [
+    { id: 'all', label: t('All') },
+    { id: 'text', label: t('Text') },
+    { id: 'image', label: t('Image') },
+  ]
 
   const renderTrigger = () => (
     <Button
       aria-expanded={open}
       className={cn(
-        'h-8 max-w-[15rem] justify-start gap-2 border px-2.5 font-medium shadow-none',
-        'bg-background/80 hover:bg-accent/70 text-foreground',
-        'focus:!ring-0 focus:!outline-none',
+        'text-foreground h-8 max-w-full min-w-0 justify-start gap-2 border-0 px-1 font-normal shadow-none',
+        'bg-transparent hover:bg-muted/60',
+        'focus-visible:ring-0 focus-visible:ring-offset-0',
         className
       )}
       disabled={disabled}
       role='combobox'
       size='sm'
-      variant='outline'
+      type='button'
+      variant='ghost'
     >
-      <CpuIcon className='text-muted-foreground size-4 shrink-0' />
-      <span className='min-w-0 truncate text-xs'>
-        {currentModel?.label || t('Model')}
+      <ModelSelectorIcon
+        icon={currentModel?.icon}
+        label={currentModel?.label || currentModel?.value}
+        size={20}
+      />
+      <span className='min-w-0 truncate text-sm leading-5'>
+        {formatModelSelectorTriggerLabel(currentModel, t('Model'))}
       </span>
-      <span className='bg-muted text-muted-foreground hidden max-w-20 shrink-0 rounded px-1.5 py-0.5 text-[10px] sm:inline-flex'>
-        {currentGroup?.label || t('Group')}
-      </span>
-      <ChevronsUpDown className='text-muted-foreground ml-auto size-3.5 shrink-0 opacity-60' />
+      <ChevronDown
+        className={cn(
+          'text-muted-foreground size-3.5 shrink-0 opacity-70 transition-transform',
+          open && 'rotate-180'
+        )}
+      />
     </Button>
   )
 
-  const renderGroupList = () => (
-    <div
-      className={cn(
-        'min-w-0 space-y-2',
-        !isMobile && modelGroupSelectorLayoutClasses.groupColumn
-      )}
-    >
-      <div className='text-muted-foreground px-1 text-[11px] leading-4 font-medium'>
-        {t('Model Group')}
+  const renderPanel = () => (
+    <div className={zenmuxModelPanelClasses.panel}>
+      <div className={zenmuxModelPanelClasses.toolbar}>
+        <div className={zenmuxModelPanelClasses.searchWrap}>
+          <Search className={zenmuxModelPanelClasses.searchIcon} />
+          <input
+            className={zenmuxModelPanelClasses.searchInput}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={t('Search models...')}
+            type='search'
+            value={searchQuery}
+          />
+        </div>
+        <Button
+          className={zenmuxModelPanelClasses.sortButton}
+          onClick={() =>
+            setSortMode((current) => (current === 'catalog' ? 'name' : 'catalog'))
+          }
+          size='sm'
+          type='button'
+          variant='outline'
+        >
+          <ArrowUpDown className='size-3.5 opacity-60' />
+          {sortMode === 'catalog' ? t('Latest') : t('Name')}
+        </Button>
       </div>
-      <div
-        className={cn(
-          'grid gap-1',
-          !isMobile && modelGroupSelectorLayoutClasses.groupScroll
-        )}
-        ref={groupScrollContainerRef}
-      >
-        {groups.map((group) => {
-          const isSelected = selectedGroup === group.value
 
-          return (
-            <button
-              className={cn(
-                'flex min-w-0 items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-[12px] leading-4 transition-colors',
-                isSelected
-                  ? 'bg-primary/10 text-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-              )}
-              disabled={disabled}
-              key={group.value}
-              onClick={() => handleGroupChange(group.value)}
-              ref={isSelected ? selectedGroupOptionRef : undefined}
-              type='button'
-            >
-              <span className='min-w-0 truncate font-medium'>
-                {group.label}
-              </span>
-              <Check
-                className={cn(
-                  'size-3.5 shrink-0',
-                  isSelected ? 'opacity-100' : 'opacity-0'
-                )}
-              />
-            </button>
-          )
-        })}
+      <div className={zenmuxModelPanelClasses.tabsWrap}>
+        {categoryTabs.map((tab) => (
+          <button
+            className={cn(
+              zenmuxModelPanelClasses.tabButton,
+              categoryTab === tab.id
+                ? zenmuxModelPanelClasses.tabActive
+                : zenmuxModelPanelClasses.tabInactive
+            )}
+            key={tab.id}
+            onClick={() => setCategoryTab(tab.id)}
+            type='button'
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
-    </div>
-  )
 
-  const renderModelList = () => (
-    <Command
-      className={cn(
-        'min-w-0 rounded-lg border-0 bg-transparent p-1',
-        !isMobile && modelGroupSelectorLayoutClasses.modelCommand
-      )}
-      filter={() => 1}
-      shouldFilter={false}
-    >
-      <CommandInput
-        className='h-8 text-[13px]'
-        onValueChange={setSearchQuery}
-        placeholder={t('Search models...')}
-        value={searchQuery}
-      />
-      <CommandList
-        className={
-          isMobile ? 'max-h-[45vh]' : modelGroupSelectorLayoutClasses.modelList
-        }
-      >
+      <div className={zenmuxModelPanelClasses.list} ref={listRef}>
         {filteredModels.length === 0 ? (
-          <div className='text-muted-foreground px-3 py-8 text-center text-[12px] leading-5'>
+          <div className={zenmuxModelPanelClasses.empty}>
             {t('No model found.')}
           </div>
         ) : (
-          <CommandGroup className='p-1'>
-            {filteredModels.map((model) => (
-              <CommandItem
+          filteredModels.map((model) => {
+            const isSelected = selectedModel === model.value
+            return (
+              <button
                 className={cn(
-                  modelGroupSelectorLayoutClasses.modelItem,
-                  selectedModel === model.value
-                    ? modelGroupSelectorLayoutClasses.selectedModelItem
-                    : modelGroupSelectorLayoutClasses.unselectedModelItem
+                  zenmuxModelPanelClasses.listItem,
+                  isSelected && zenmuxModelPanelClasses.listItemActive
                 )}
                 key={model.value}
-                onSelect={handleModelChange}
-                ref={
-                  selectedModel === model.value
-                    ? selectedModelOptionRef
-                    : undefined
-                }
-                value={model.value}
+                onClick={() => handleModelChange(model.value)}
+                ref={isSelected ? selectedModelOptionRef : undefined}
+                type='button'
               >
-                <span
-                  className={cn(
-                    'min-w-0 truncate',
-                    selectedModel === model.value
-                      ? modelGroupSelectorLayoutClasses.selectedModelText
-                      : modelGroupSelectorLayoutClasses.unselectedModelText
-                  )}
-                >
-                  {model.label}
-                </span>
-                <Check
-                  className={cn(
-                    'size-3.5 shrink-0',
-                    selectedModel === model.value ? 'opacity-100' : 'opacity-0'
-                  )}
+                <ModelSelectorIcon
+                  icon={model.icon}
+                  label={model.label || model.value}
+                  size={20}
                 />
-              </CommandItem>
-            ))}
-          </CommandGroup>
+                <span className={zenmuxModelPanelClasses.listItemLabel}>
+                  {formatModelSelectorListLabel(model, model.value)}
+                </span>
+              </button>
+            )
+          })
         )}
-      </CommandList>
-    </Command>
-  )
-
-  const renderContent = () => (
-    <div
-      className={
-        isMobile
-          ? 'grid gap-3 p-2 md:grid-cols-[9.5rem_minmax(0,1fr)]'
-          : modelGroupSelectorLayoutClasses.desktopContent
-      }
-    >
-      {renderGroupList()}
-      <div
-        className={cn(
-          'min-w-0 overflow-hidden rounded-lg border',
-          !isMobile && modelGroupSelectorLayoutClasses.modelColumn
-        )}
-      >
-        {renderModelList()}
       </div>
     </div>
   )
 
   return isMobile ? (
-    <Drawer open={open} onOpenChange={setOpen}>
+    <Drawer open={open} onOpenChange={handleOpenChange}>
       <DrawerTrigger asChild>{renderTrigger()}</DrawerTrigger>
-      <DrawerContent className='flex max-h-[80vh] min-h-[60vh] flex-col'>
-        <DrawerHeader className='pb-3 text-left'>
+      <DrawerContent className='flex max-h-[85vh] flex-col rounded-t-2xl'>
+        <DrawerHeader className='pb-2 text-left'>
           <DrawerTitle>{t('Select Model')}</DrawerTitle>
         </DrawerHeader>
-        <div className='min-h-0 flex-1 overflow-y-auto px-4 pb-5'>
-          {renderContent()}
+        <div className='min-h-0 flex-1 overflow-hidden px-3 pb-5'>
+          {renderPanel()}
         </div>
       </DrawerContent>
     </Drawer>
   ) : (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger render={renderTrigger()} />
       <PopoverContent
-        align='end'
-        className={cn(
-          'bg-popover z-50 w-[34rem] max-w-[calc(100vw-2rem)] rounded-xl border p-0 shadow-lg',
-          modelGroupSelectorLayoutClasses.desktopPanel
-        )}
+        align='start'
+        className='w-auto border-0 bg-transparent p-0 shadow-none'
         collisionPadding={8}
-        side='top'
-        sideOffset={8}
+        side='bottom'
+        sideOffset={6}
       >
-        {renderContent()}
+        {renderPanel()}
       </PopoverContent>
     </Popover>
   )

@@ -57,7 +57,7 @@ export function Features() {
     <section className='py-24 md:py-36'>
       <div className='mx-auto grid max-w-7xl gap-14 px-6 lg:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] lg:gap-24'>
         <div>
-          <h2 className='font-display text-foreground max-w-md min-w-0 text-4xl font-bold tracking-[-0.035em] [overflow-wrap:anywhere] md:text-5xl'>
+          <h2 className='font-display text-foreground max-w-md min-w-0 text-4xl font-bold tracking-[-0.03em] [overflow-wrap:anywhere] md:text-5xl'>
             {t('Keep one integration. Change everything behind it.')}
           </h2>
           <p className='text-muted-foreground mt-6 max-w-md text-base leading-7'>

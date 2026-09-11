@@ -18,21 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 
-import { ThemeSwitch } from '@/components/theme-switch'
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarRail,
-} from '@/components/ui/sidebar'
+import { Sidebar, SidebarContent, SidebarRail } from '@/components/ui/sidebar'
 import { useSidebarView } from '@/hooks/use-sidebar-view'
 import { MOTION_TRANSITION, MOTION_VARIANTS } from '@/lib/motion'
 
 import { NavGroup } from './nav-group'
-import { SidebarUserMenu } from './sidebar-user-menu'
 import { SidebarViewHeader } from './sidebar-view-header'
-import { SystemBrand } from './system-brand'
 
 /**
  * Application sidebar.
@@ -57,13 +48,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible='icon' variant='inset'>
-      {view ? (
-        <SidebarViewHeader view={view} />
-      ) : (
-        <SidebarHeader className='border-sidebar-border border-b px-2 py-2'>
-          <SystemBrand />
-        </SidebarHeader>
-      )}
+      {view ? <SidebarViewHeader view={view} /> : null}
 
       <SidebarContent className='py-2'>
         <AnimatePresence mode='wait' initial={false}>
@@ -83,13 +68,6 @@ export function AppSidebar() {
           </motion.div>
         </AnimatePresence>
       </SidebarContent>
-
-      <SidebarFooter className='border-sidebar-border border-t'>
-        <div className='px-2 py-1 group-data-[collapsible=icon]:hidden'>
-          <ThemeSwitch className='w-full justify-center' />
-        </div>
-        <SidebarUserMenu />
-      </SidebarFooter>
 
       <SidebarRail />
     </Sidebar>

@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { KeyRound } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -29,15 +28,9 @@ export function ChannelAuthSection(props: ChannelAuthSectionProps) {
 
   return (
     <div className='border-border/60 flex flex-col gap-3 border-t pt-4'>
-      <div className='flex items-center gap-2'>
-        <KeyRound
-          className='text-muted-foreground h-3.5 w-3.5'
-          aria-hidden='true'
-        />
-        <h4 className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-          {t('Authentication')}
-        </h4>
-      </div>
+      <h4 className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+        {t('Authentication')}
+      </h4>
       {props.children}
     </div>
   )

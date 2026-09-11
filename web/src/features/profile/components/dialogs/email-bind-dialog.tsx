@@ -22,9 +22,11 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Dialog } from '@/components/dialog'
+import { Turnstile } from '@/components/turnstile'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
 import { useCountdown } from '@/hooks/use-countdown'
 
 import { sendEmailVerification, bindEmail } from '../../api'
@@ -51,6 +53,14 @@ export function EmailBindDialog({
   const [sendingCode, setSendingCode] = useState(false)
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
+  const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0)
+  const {
+    isTurnstileEnabled,
+    turnstileSiteKey,
+    turnstileToken,
+    setTurnstileToken,
+    validateTurnstile,
+  } = useTurnstile()
   const {
     secondsLeft,
     isActive,
@@ -59,16 +69,28 @@ export function EmailBindDialog({
   } = useCountdown({
     initialSeconds: 60,
   })
+  const turnstileReady = !isTurnstileEnabled || Boolean(turnstileToken)
+  let sendCodeLabel = t('Send')
+  if (isActive) {
+    sendCodeLabel = `${secondsLeft}s`
+  } else if (sendingCode) {
+    sendCodeLabel = t('Sending...')
+  }
 
   const handleSendCode = async () => {
     if (!email || !email.includes('@')) {
       toast.error(t('Please enter a valid email address'))
       return
     }
+    if (!validateTurnstile()) return
 
     try {
       setSendingCode(true)
-      const response = await sendEmailVerification(email)
+      const submittedTurnstileToken = turnstileToken
+      const response = await sendEmailVerification(
+        email,
+        submittedTurnstileToken
+      )
 
       if (response.success) {
         toast.success(t('Verification code sent! Please check your email.'))
@@ -76,8 +98,12 @@ export function EmailBindDialog({
       } else {
         toast.error(response.message || t('Failed to send verification code'))
       }
-    } catch (_error) {
-      toast.error(t('Failed to send verification code'))
+      if (isTurnstileEnabled) {
+        setTurnstileToken('')
+        setTurnstileWidgetKey((current) => current + 1)
+      }
+    } catch {
+      // HTTP errors are handled by the shared interceptor
     } finally {
       setSendingCode(false)
     }
@@ -104,8 +130,8 @@ export function EmailBindDialog({
       } else {
         toast.error(response.message || t('Failed to bind email'))
       }
-    } catch (_error) {
-      toast.error(t('Failed to bind email'))
+    } catch {
+      // HTTP errors are handled by the shared interceptor
     } finally {
       setLoading(false)
     }
@@ -161,9 +187,9 @@ export function EmailBindDialog({
     >
       <div className='space-y-4 py-4'>
         <div className='space-y-2'>
-          <Label htmlFor='email'>{t('Email Address')}</Label>
+          <Label htmlFor='email-bind-address'>{t('Email Address')}</Label>
           <Input
-            id='email'
+            id='email-bind-address'
             type='email'
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -173,10 +199,10 @@ export function EmailBindDialog({
         </div>
 
         <div className='space-y-2'>
-          <Label htmlFor='code'>{t('Verification Code')}</Label>
+          <Label htmlFor='email-bind-code'>{t('Verification Code')}</Label>
           <div className='flex gap-2'>
             <Input
-              id='code'
+              id='email-bind-code'
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder={t('Enter code')}
@@ -187,16 +213,21 @@ export function EmailBindDialog({
               type='button'
               variant='outline'
               onClick={handleSendCode}
-              disabled={sendingCode || isActive || !email}
+              disabled={sendingCode || isActive || !email || !turnstileReady}
             >
-              {isActive
-                ? `${secondsLeft}s`
-                : sendingCode
-                  ? t('Sending...')
-                  : t('Send')}
+              {sendCodeLabel}
             </Button>
           </div>
         </div>
+
+        {isTurnstileEnabled && (
+          <Turnstile
+            key={turnstileWidgetKey}
+            siteKey={turnstileSiteKey}
+            onVerify={setTurnstileToken}
+            onExpire={() => setTurnstileToken('')}
+          />
+        )}
       </div>
     </Dialog>
   )

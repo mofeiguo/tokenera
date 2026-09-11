@@ -17,8 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { DescriptionDialog } from './dialogs/description-dialog'
-import { SyncWizardDialog } from './dialogs/sync-wizard-dialog'
-import { UpstreamConflictDialog } from './dialogs/upstream-conflict-dialog'
 import { VendorMutateDialog } from './dialogs/vendor-mutate-dialog'
 import { ModelMutateDrawer } from './drawers/model-mutate-drawer'
 import { useModels } from './models-provider'
@@ -35,33 +33,18 @@ export function ModelsDialogs() {
 
   return (
     <>
-      {/* Model Create/Update Drawer */}
       <ModelMutateDrawer
         open={open === 'create-model' || open === 'update-model'}
         onOpenChange={(v) => !v && setOpen(null)}
         currentRow={currentRow}
       />
 
-      {/* Vendor Create/Update Dialog */}
       <VendorMutateDialog
         open={open === 'create-vendor' || open === 'update-vendor'}
         onOpenChange={(v) => !v && setOpen(null)}
         currentVendor={open === 'update-vendor' ? currentVendor : null}
       />
 
-      {/* Sync Wizard Dialog */}
-      <SyncWizardDialog
-        open={open === 'sync-wizard'}
-        onOpenChange={(v) => !v && setOpen(null)}
-      />
-
-      {/* Upstream Conflict Dialog */}
-      <UpstreamConflictDialog
-        open={open === 'upstream-conflict'}
-        onOpenChange={(v) => !v && setOpen(null)}
-      />
-
-      {/* Description Dialog */}
       <DescriptionDialog
         open={open === 'description'}
         onOpenChange={(v) => {

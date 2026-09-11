@@ -33,16 +33,6 @@ export const apiKeySchema = z.object({
   expired_time: z.number(), // -1 for never expires
   created_time: z.number(),
   accessed_time: z.number(),
-  group: z.string().nullish().default(''),
-  auto_groups: z.array(z.string()).nullish().default(null),
-  cross_group_retry: z
-    .preprocess((v) => {
-      if (v === 1) return true
-      if (v === 0) return false
-      return v
-    }, z.boolean())
-    .optional()
-    .default(false),
   model_limits_enabled: z.boolean(),
   model_limits: z.string().nullish().default(''),
   allow_ips: z.string().nullish().default(''),
@@ -63,6 +53,7 @@ export interface ApiResponse<T = unknown> {
 export interface GetApiKeysParams {
   p?: number
   size?: number
+  status?: number
 }
 
 export interface GetApiKeysResponse {
@@ -79,8 +70,14 @@ export interface GetApiKeysResponse {
 export interface SearchApiKeysParams {
   keyword?: string
   token?: string
+  status?: number
   p?: number
   size?: number
+}
+
+export type CreatedApiKey = {
+  name: string
+  key: string
 }
 
 export interface ApiKeyFormData {
@@ -91,14 +88,6 @@ export interface ApiKeyFormData {
   model_limits_enabled: boolean
   model_limits: string
   allow_ips: string
-  group: string
-  auto_groups: string[]
-  cross_group_retry: boolean
-}
-
-export interface TokenAutoGroupsConfig {
-  groups: string[]
-  max_count: number
 }
 
 // ============================================================================
@@ -110,4 +99,4 @@ export type ApiKeysDialogType =
   | 'update'
   | 'delete'
   | 'batch-delete'
-  | 'cc-switch'
+  | 'created'

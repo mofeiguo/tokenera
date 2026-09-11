@@ -80,9 +80,8 @@ func applyChannelStatusFilter(query *gorm.DB, statusFilter int) *gorm.DB {
 	return query
 }
 
-func buildChannelListQuery(group string, statusFilter int, typeFilter int) *gorm.DB {
+func buildChannelListQuery(statusFilter int, typeFilter int) *gorm.DB {
 	query := model.DB.Model(&model.Channel{})
-	query = model.ApplyChannelGroupFilter(query, group)
 	query = applyChannelStatusFilter(query, statusFilter)
 	if typeFilter >= 0 {
 		query = query.Where("type = ?", typeFilter)
@@ -101,8 +100,6 @@ func GetAllChannels(c *gin.Context) {
 	channelData := make([]*model.Channel, 0)
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
 	sortOptions := model.NewChannelSortOptions(c.Query("sort_by"), c.Query("sort_order"), idSort)
-	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
-	groupFilter := model.NormalizeChannelGroupFilter(c.Query("group"))
 	statusParam := c.Query("status")
 	// statusFilter: -1 all, 1 enabled, 0 disabled (include auto & manual)
 	statusFilter := parseStatusFilter(statusParam)
@@ -117,59 +114,28 @@ func GetAllChannels(c *gin.Context) {
 
 	var total int64
 
-	if enableTagMode {
-		tags, err := model.GetPaginatedChannelTags(buildChannelListQuery(groupFilter, statusFilter, typeFilter), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
-		if err != nil {
-			common.SysError("failed to get paginated tags: " + err.Error())
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取标签失败，请稍后重试"})
-			return
-		}
-		total, err = model.CountChannelTags(buildChannelListQuery(groupFilter, statusFilter, typeFilter))
-		if err != nil {
-			common.SysError("failed to count tags: " + err.Error())
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取标签数量失败，请稍后重试"})
-			return
-		}
-		for _, tag := range tags {
-			if tag == nil || *tag == "" {
-				continue
-			}
-			var tagChannels []*model.Channel
-			err := sortOptions.Apply(buildChannelListQuery(groupFilter, statusFilter, typeFilter).Where("tag = ?", *tag)).
-				Omit("key").
-				Find(&tagChannels).Error
-			if err != nil {
-				common.SysError("failed to get channels by tag: " + err.Error())
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取标签渠道失败，请稍后重试"})
-				return
-			}
-			channelData = append(channelData, tagChannels...)
-		}
-	} else {
-		if err := buildChannelListQuery(groupFilter, statusFilter, typeFilter).Count(&total).Error; err != nil {
-			common.SysError("failed to count channels: " + err.Error())
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取渠道数量失败，请稍后重试"})
-			return
-		}
-
-		err := sortOptions.Apply(buildChannelListQuery(groupFilter, statusFilter, typeFilter)).
-			Limit(pageInfo.GetPageSize()).
-			Offset(pageInfo.GetStartIdx()).
-			Omit("key").
-			Find(&channelData).Error
-		if err != nil {
-			common.SysError("failed to get channels: " + err.Error())
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取渠道列表失败，请稍后重试"})
-			return
-		}
+	if err := buildChannelListQuery(statusFilter, typeFilter).Count(&total).Error; err != nil {
+		common.SysError("failed to count channels: " + err.Error())
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取渠道数量失败，请稍后重试"})
+		return
 	}
 
-	enrichChannelBindingModels(channelData)
+	err := sortOptions.Apply(buildChannelListQuery(statusFilter, typeFilter)).
+		Limit(pageInfo.GetPageSize()).
+		Offset(pageInfo.GetStartIdx()).
+		Omit("key").
+		Find(&channelData).Error
+	if err != nil {
+		common.SysError("failed to get channels: " + err.Error())
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取渠道列表失败，请稍后重试"})
+		return
+	}
+
 	for _, datum := range channelData {
 		clearChannelInfo(datum)
 	}
 
-	countQuery := buildChannelListQuery(groupFilter, statusFilter, -1)
+	countQuery := buildChannelListQuery(statusFilter, -1)
 	var results []struct {
 		Type  int64
 		Count int64
@@ -258,50 +224,20 @@ func FetchUpstreamModels(c *gin.Context) {
 
 func SearchChannels(c *gin.Context) {
 	keyword := c.Query("keyword")
-	group := c.Query("group")
 	modelKeyword := c.Query("model")
 	statusParam := c.Query("status")
 	statusFilter := parseStatusFilter(statusParam)
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
 	sortOptions := model.NewChannelSortOptions(c.Query("sort_by"), c.Query("sort_order"), idSort)
-	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
-	channelData := make([]*model.Channel, 0)
-	if enableTagMode {
-		tags, err := model.SearchTags(keyword, group, modelKeyword, idSort)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-		for _, tag := range tags {
-			if tag != nil && *tag != "" {
-				var tagChannels []*model.Channel
-				err := sortOptions.Apply(buildChannelListQuery(group, -1, -1).Where("tag = ?", *tag)).
-					Omit("key").
-					Find(&tagChannels).Error
-				if err != nil {
-					c.JSON(http.StatusOK, gin.H{
-						"success": false,
-						"message": err.Error(),
-					})
-					return
-				}
-				channelData = append(channelData, tagChannels...)
-			}
-		}
-	} else {
-		channels, err := model.SearchChannels(keyword, group, modelKeyword, idSort, sortOptions)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-		channelData = channels
+	channels, err := model.SearchChannels(keyword, modelKeyword, idSort, sortOptions)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
 	}
+	channelData := channels
 
 	if statusFilter == common.ChannelStatusEnabled || statusFilter == 0 {
 		filtered := make([]*model.Channel, 0, len(channelData))
@@ -362,7 +298,6 @@ func SearchChannels(c *gin.Context) {
 
 	pagedData := channelData[startIdx:endIdx]
 
-	enrichChannelBindingModels(pagedData)
 	for _, datum := range pagedData {
 		clearChannelInfo(datum)
 	}
@@ -377,25 +312,6 @@ func SearchChannels(c *gin.Context) {
 		},
 	})
 	return
-}
-
-func enrichChannelBindingModels(channels []*model.Channel) {
-	channelIds := make([]int, 0, len(channels))
-	for _, channel := range channels {
-		if channel != nil {
-			channelIds = append(channelIds, channel.Id)
-		}
-	}
-	modelsByChannel, err := model.GetChannelBoundModelNames(channelIds)
-	if err != nil {
-		common.SysError("failed to load channel model bindings: " + err.Error())
-		return
-	}
-	for _, channel := range channels {
-		if channel != nil {
-			channel.Models = strings.Join(modelsByChannel[channel.Id], ",")
-		}
-	}
 }
 
 func GetChannel(c *gin.Context) {
@@ -680,120 +596,8 @@ func DeleteDisabledChannel(c *gin.Context) {
 	return
 }
 
-type ChannelTag struct {
-	Tag            string  `json:"tag"`
-	NewTag         *string `json:"new_tag"`
-	Priority       *int64  `json:"priority"`
-	Weight         *uint   `json:"weight"`
-	Models         *string `json:"models"`
-	Groups         *string `json:"groups"`
-	HeaderOverride *string `json:"header_override"`
-}
-
-func DisableTagChannels(c *gin.Context) {
-	channelTag := ChannelTag{}
-	err := c.ShouldBindJSON(&channelTag)
-	if err != nil || channelTag.Tag == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "参数错误",
-		})
-		return
-	}
-	err = model.DisableChannelByTag(channelTag.Tag)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	model.InitChannelCache()
-	recordManageAudit(c, "channel.tag_disable", map[string]interface{}{
-		"tag": channelTag.Tag,
-	})
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-	})
-	return
-}
-
-func EnableTagChannels(c *gin.Context) {
-	channelTag := ChannelTag{}
-	err := c.ShouldBindJSON(&channelTag)
-	if err != nil || channelTag.Tag == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "参数错误",
-		})
-		return
-	}
-	err = model.EnableChannelByTag(channelTag.Tag)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	model.InitChannelCache()
-	recordManageAudit(c, "channel.tag_enable", map[string]interface{}{
-		"tag": channelTag.Tag,
-	})
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-	})
-	return
-}
-
-func EditTagChannels(c *gin.Context) {
-	channelTag := ChannelTag{}
-	err := c.ShouldBindJSON(&channelTag)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "参数错误",
-		})
-		return
-	}
-	if channelTag.Tag == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "tag不能为空",
-		})
-		return
-	}
-	if channelTag.HeaderOverride != nil &&
-		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {
-		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
-		return
-	}
-	if channelTag.HeaderOverride != nil {
-		trimmed := strings.TrimSpace(*channelTag.HeaderOverride)
-		if trimmed != "" && !json.Valid([]byte(trimmed)) {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "请求头覆盖必须是合法的 JSON 格式",
-			})
-			return
-		}
-		channelTag.HeaderOverride = common.GetPointer[string](trimmed)
-	}
-	err = model.EditChannelByTag(channelTag.Tag, channelTag.NewTag, channelTag.Models, channelTag.Groups, channelTag.Priority, channelTag.Weight, channelTag.HeaderOverride)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	model.InitChannelCache()
-	recordManageAudit(c, "channel.tag_edit", map[string]interface{}{
-		"tag": channelTag.Tag,
-	})
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-	})
-	return
-}
-
 type ChannelBatch struct {
-	Ids []int   `json:"ids"`
-	Tag *string `json:"tag"`
+	Ids []int `json:"ids"`
 }
 
 func DeleteChannelBatch(c *gin.Context) {
@@ -975,9 +779,6 @@ func UpdateChannel(c *gin.Context) {
 	changedFields := make([]string, 0)
 	if channel.Models != originChannel.Models {
 		changedFields = append(changedFields, "models")
-	}
-	if channel.Group != originChannel.Group {
-		changedFields = append(changedFields, "group")
 	}
 	if channel.Type != originChannel.Type {
 		changedFields = append(changedFields, "type")
@@ -1191,74 +992,6 @@ func FetchModels(c *gin.Context) {
 		"message": "",
 		"data":    models,
 	})
-}
-
-func BatchSetChannelTag(c *gin.Context) {
-	channelBatch := ChannelBatch{}
-	err := c.ShouldBindJSON(&channelBatch)
-	if err != nil || len(channelBatch.Ids) == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "参数错误",
-		})
-		return
-	}
-	err = model.BatchSetChannelTag(channelBatch.Ids, channelBatch.Tag)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	model.InitChannelCache()
-	recordManageAudit(c, "channel.tag_batch_set", map[string]interface{}{
-		"count": len(channelBatch.Ids),
-	})
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    len(channelBatch.Ids),
-	})
-	return
-}
-
-func GetTagModels(c *gin.Context) {
-	tag := c.Query("tag")
-	if tag == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "tag不能为空",
-		})
-		return
-	}
-
-	channels, err := model.GetChannelsByTag(tag, false, false) // idSort=false, selectAll=false
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	var longestModels string
-	maxLength := 0
-
-	// Find the longest models string among all channels with the given tag
-	for _, channel := range channels {
-		if channel.Models != "" {
-			currentModels := strings.Split(channel.Models, ",")
-			if len(currentModels) > maxLength {
-				maxLength = len(currentModels)
-				longestModels = channel.Models
-			}
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    longestModels,
-	})
-	return
 }
 
 // CopyChannel handles cloning an existing channel with its key.

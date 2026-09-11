@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/require"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -173,7 +174,6 @@ func seedToken(t *testing.T, db *gorm.DB, userID int, name string, rawKey string
 		ExpiredTime:    -1,
 		RemainQuota:    100,
 		UnlimitedQuota: true,
-		Group:          "default",
 	}
 	if err := db.Create(token).Error; err != nil {
 		t.Fatalf("failed to create token: %v", err)
@@ -273,34 +273,6 @@ func getTokenKeyColumnType(t *testing.T, db *gorm.DB, dialect string) string {
 	}
 }
 
-func getTokenAutoGroupsColumnType(t *testing.T, db *gorm.DB, dialect string) string {
-	t.Helper()
-
-	switch dialect {
-	case "sqlite":
-		return getSQLiteColumnType(t, db, "tokens", "auto_groups")
-	case "mysql":
-		var columnType string
-		if err := db.Raw(`SELECT DATA_TYPE FROM information_schema.columns
-			WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
-			"tokens", "auto_groups").Scan(&columnType).Error; err != nil {
-			t.Fatalf("failed to inspect mysql token auto_groups column: %v", err)
-		}
-		return strings.ToLower(columnType)
-	case "postgres":
-		var dataType string
-		if err := db.Raw(`SELECT data_type FROM information_schema.columns
-			WHERE table_schema = current_schema() AND table_name = ? AND column_name = ?`,
-			"tokens", "auto_groups").Scan(&dataType).Error; err != nil {
-			t.Fatalf("failed to inspect postgres token auto_groups column: %v", err)
-		}
-		return strings.ToLower(dataType)
-	default:
-		t.Fatalf("unsupported dialect %q", dialect)
-		return ""
-	}
-}
-
 func runTokenMigrationCompatibilityTest(t *testing.T, db *gorm.DB, dialect string, managedTokensTable *bool) {
 	t.Helper()
 
@@ -327,7 +299,6 @@ func runTokenMigrationCompatibilityTest(t *testing.T, db *gorm.DB, dialect strin
 		ModelLimits:        "",
 		AllowIps:           common.GetPointer(""),
 		UsedQuota:          0,
-		Group:              "default",
 		CrossGroupRetry:    false,
 	}).Error; err != nil {
 		t.Fatalf("failed to seed legacy token row: %v", err)
@@ -342,13 +313,6 @@ func runTokenMigrationCompatibilityTest(t *testing.T, db *gorm.DB, dialect strin
 	if got := getTokenKeyColumnType(t, db, dialect); got != "varchar(128)" {
 		t.Fatalf("expected migrated key column type varchar(128), got %q", got)
 	}
-	if !db.Migrator().HasColumn(&model.Token{}, "auto_groups") {
-		t.Fatal("expected migration to add auto_groups column")
-	}
-	if got := getTokenAutoGroupsColumnType(t, db, dialect); got != "text" {
-		t.Fatalf("expected migrated auto_groups column type text, got %q", got)
-	}
-
 	var migratedToken model.Token
 	if err := db.First(&migratedToken, "name = ?", "legacy-token").Error; err != nil {
 		t.Fatalf("failed to load migrated token row: %v", err)
@@ -358,9 +322,6 @@ func runTokenMigrationCompatibilityTest(t *testing.T, db *gorm.DB, dialect strin
 	}
 	if migratedToken.Name != "legacy-token" {
 		t.Fatalf("expected migrated token name to be preserved, got %q", migratedToken.Name)
-	}
-	if migratedToken.AutoGroups != "" {
-		t.Fatalf("expected legacy token to inherit global Auto groups, got %q", migratedToken.AutoGroups)
 	}
 
 	inserted := model.Token{
@@ -377,8 +338,6 @@ func runTokenMigrationCompatibilityTest(t *testing.T, db *gorm.DB, dialect strin
 		ModelLimits:        "",
 		AllowIps:           common.GetPointer(""),
 		UsedQuota:          0,
-		Group:              "default",
-		CrossGroupRetry:    false,
 	}
 	if err := db.Create(&inserted).Error; err != nil {
 		t.Fatalf("failed to insert long token after migration: %v", err)
@@ -398,9 +357,6 @@ func TestTokenAutoMigrateUsesVarchar128KeyColumn(t *testing.T) {
 
 	if got := getTokenKeyColumnType(t, db, "sqlite"); got != "varchar(128)" {
 		t.Fatalf("expected key column type varchar(128), got %q", got)
-	}
-	if got := getSQLiteColumnType(t, db, "tokens", "auto_groups"); got != "text" {
-		t.Fatalf("expected auto_groups column type text, got %q", got)
 	}
 }
 
@@ -577,4 +533,56 @@ func TestGetTokenKeyRequiresOwnershipAndReturnsFullKey(t *testing.T) {
 	if strings.Contains(unauthorizedRecorder.Body.String(), token.Key) {
 		t.Fatalf("unauthorized key response leaked raw token key: %s", unauthorizedRecorder.Body.String())
 	}
+}
+
+func TestAddTokenReturnsCreatedKey(t *testing.T) {
+	setupTokenControllerTestDB(t)
+
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/token/", map[string]any{
+		"name":                 "created-key",
+		"expired_time":         -1,
+		"remain_quota":         0,
+		"unlimited_quota":      true,
+		"model_limits_enabled": false,
+		"model_limits":         "",
+	}, 1)
+	AddToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	require.True(t, response.Success, response.Message)
+
+	var created struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+		Key  string `json:"key"`
+	}
+	require.NoError(t, common.Unmarshal(response.Data, &created))
+	require.NotZero(t, created.ID)
+	require.Equal(t, "created-key", created.Name)
+	require.NotEmpty(t, created.Key)
+	require.NotContains(t, created.Key, "*")
+
+	stored, err := model.GetTokenByIds(created.ID, 1)
+	require.NoError(t, err)
+	require.Equal(t, stored.GetFullKey(), created.Key)
+}
+
+func TestGetAllTokensFiltersByStatus(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	enabled := seedToken(t, db, 1, "enabled-key", "enab1234token5678")
+	disabled := seedToken(t, db, 1, "disabled-key", "disa1234token5678")
+	require.NoError(t, db.Model(disabled).Update("status", common.TokenStatusDisabled).Error)
+
+	ctx, recorder := newAuthenticatedContext(t, http.MethodGet, "/api/token/?p=1&size=10&status=2", nil, 1)
+	GetAllTokens(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	require.True(t, response.Success, response.Message)
+
+	var page tokenPageResponse
+	require.NoError(t, common.Unmarshal(response.Data, &page))
+	require.Len(t, page.Items, 1)
+	require.Equal(t, disabled.Id, page.Items[0].ID)
+	require.Equal(t, common.TokenStatusDisabled, page.Items[0].Status)
+	require.NotEqual(t, enabled.Id, page.Items[0].ID)
 }

@@ -224,6 +224,37 @@ export function isStreamDoneMessage(data: string): boolean {
   }
 }
 
+export function isStreamTerminalMessage(data: string): boolean {
+  try {
+    const payload = JSON.parse(data) as {
+      candidates?: Array<{ finishReason?: string | null }>
+      promptFeedback?: { blockReason?: string | null }
+    }
+
+    if (
+      Array.isArray(payload.candidates) &&
+      payload.candidates.some(
+        (candidate) =>
+          typeof candidate.finishReason === 'string' &&
+          candidate.finishReason.length > 0
+      )
+    ) {
+      return true
+    }
+
+    if (
+      typeof payload.promptFeedback?.blockReason === 'string' &&
+      payload.promptFeedback.blockReason.length > 0
+    ) {
+      return true
+    }
+
+    return false
+  } catch {
+    return false
+  }
+}
+
 export function isStreamClosedReadyState(readyState?: number): boolean {
   return readyState === STREAM_CLOSED_READY_STATE
 }

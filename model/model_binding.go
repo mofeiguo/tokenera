@@ -14,16 +14,15 @@ import (
 
 type ModelBinding struct {
 	Id            int    `json:"id"`
-	ModelId       int    `json:"model_id" gorm:"not null;uniqueIndex:uk_model_channel,priority:1;index"`
-	ChannelId     int    `json:"channel_id" gorm:"not null;uniqueIndex:uk_model_channel,priority:2;index"`
+	ModelId       int    `json:"model_id" gorm:"not null;uniqueIndex:uk_model_channel_upstream,priority:1;index"`
+	ChannelId     int    `json:"channel_id" gorm:"not null;uniqueIndex:uk_model_channel_upstream,priority:2;index"`
 	Priority      int64  `json:"priority" gorm:"bigint;default:0;index"`
 	Weight        int    `json:"weight" gorm:"default:0"`
 	Enabled       bool   `json:"enabled" gorm:"index"`
-	UpstreamModel string `json:"upstream_model" gorm:"size:128;column:upstream_model"`
+	UpstreamModel string `json:"upstream_model" gorm:"size:128;column:upstream_model;uniqueIndex:uk_model_channel_upstream,priority:3"`
 	Deleted       bool   `json:"-" gorm:"index"`
 	CreatedTime   int64  `json:"created_time" gorm:"bigint"`
 	UpdatedTime   int64  `json:"updated_time" gorm:"bigint"`
-	GroupsRaw     string `json:"-" gorm:"column:groups;type:varchar(512)"`
 
 	ModelName     string `json:"model_name,omitempty" gorm:"->"`
 	ChannelName   string `json:"channel_name,omitempty" gorm:"->"`
@@ -69,30 +68,6 @@ func GetChannelModelBindings(channelId int) ([]ModelBinding, error) {
 	return bindings, nil
 }
 
-func GetChannelBoundModelNames(channelIds []int) (map[int][]string, error) {
-	result := make(map[int][]string, len(channelIds))
-	if len(channelIds) == 0 {
-		return result, nil
-	}
-	var rows []struct {
-		ChannelId int
-		ModelName string
-	}
-	err := DB.Table("model_bindings").
-		Select("model_bindings.channel_id, models.model_name").
-		Joins("JOIN models ON models.id = model_bindings.model_id").
-		Where("model_bindings.channel_id IN ? AND model_bindings.deleted = ?", channelIds, false).
-		Order("models.model_name ASC").
-		Scan(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		result[row.ChannelId] = append(result[row.ChannelId], row.ModelName)
-	}
-	return result, nil
-}
-
 func ReplaceModelBindings(modelId int, inputs []ModelBindingInput) error {
 	var catalogModel Model
 	if err := DB.First(&catalogModel, modelId).Error; err != nil {
@@ -103,17 +78,13 @@ func ReplaceModelBindings(modelId int, inputs []ModelBindingInput) error {
 	}
 
 	normalized := make([]ModelBindingInput, 0, len(inputs))
+	seenBindings := make(map[string]struct{}, len(inputs))
+	uniqueChannelIds := make([]int, 0, len(inputs))
 	seenChannelIds := make(map[int]struct{}, len(inputs))
-	channelIds := make([]int, 0, len(inputs))
 	for _, input := range inputs {
 		if input.ChannelId <= 0 {
 			return fmt.Errorf("channel_id must be positive")
 		}
-		if _, exists := seenChannelIds[input.ChannelId]; exists {
-			return fmt.Errorf("channel %d is bound more than once", input.ChannelId)
-		}
-		seenChannelIds[input.ChannelId] = struct{}{}
-		channelIds = append(channelIds, input.ChannelId)
 		if input.Weight < 0 {
 			return fmt.Errorf("weight must be non-negative")
 		}
@@ -122,15 +93,24 @@ func ReplaceModelBindings(modelId int, inputs []ModelBindingInput) error {
 			upstreamModel = catalogModel.ModelName
 		}
 		input.UpstreamModel = upstreamModel
+		bindingKey := fmt.Sprintf("%d\n%s", input.ChannelId, upstreamModel)
+		if _, exists := seenBindings[bindingKey]; exists {
+			return fmt.Errorf("channel %d model %s is bound more than once", input.ChannelId, upstreamModel)
+		}
+		seenBindings[bindingKey] = struct{}{}
+		if _, exists := seenChannelIds[input.ChannelId]; !exists {
+			seenChannelIds[input.ChannelId] = struct{}{}
+			uniqueChannelIds = append(uniqueChannelIds, input.ChannelId)
+		}
 		normalized = append(normalized, input)
 	}
-	allowedModelsByChannel := make(map[int]map[string]struct{}, len(channelIds))
-	if len(channelIds) > 0 {
+	allowedModelsByChannel := make(map[int]map[string]struct{}, len(uniqueChannelIds))
+	if len(uniqueChannelIds) > 0 {
 		var channels []Channel
-		if err := DB.Select("id", "models").Where("id IN ?", channelIds).Find(&channels).Error; err != nil {
+		if err := DB.Select("id", "models").Where("id IN ?", uniqueChannelIds).Find(&channels).Error; err != nil {
 			return err
 		}
-		if len(channels) != len(channelIds) {
+		if len(channels) != len(uniqueChannelIds) {
 			return fmt.Errorf("one or more selected channels do not exist")
 		}
 		for _, channel := range channels {
@@ -172,6 +152,7 @@ func ReplaceModelBindings(modelId int, inputs []ModelBindingInput) error {
 				Columns: []clause.Column{
 					{Name: "model_id"},
 					{Name: "channel_id"},
+					{Name: "upstream_model"},
 				},
 				DoUpdates: clause.Assignments(map[string]any{
 					"priority":       input.Priority,
@@ -220,6 +201,7 @@ func getBindingUpstreamModelFromDB(catalogModel string, channelId int) string {
 		Select("model_bindings.upstream_model, models.model_name").
 		Joins("JOIN models ON models.id = model_bindings.model_id").
 		Where("models.model_name = ? AND model_bindings.channel_id = ? AND model_bindings.enabled = ? AND model_bindings.deleted = ?", catalogModel, channelId, true, false).
+		Order("model_bindings.priority DESC, model_bindings.weight DESC, model_bindings.id ASC").
 		Limit(1).
 		Scan(&row).Error
 	if err != nil {
@@ -236,13 +218,13 @@ func getBindingUpstreamModelFromDB(catalogModel string, channelId int) string {
 
 func EnsureModelBindingIndexes() error {
 	migrator := DB.Migrator()
-	if migrator.HasIndex(&ModelBinding{}, "uk_model_channel_upstream") {
-		if err := migrator.DropIndex(&ModelBinding{}, "uk_model_channel_upstream"); err != nil {
+	if migrator.HasIndex(&ModelBinding{}, "uk_model_channel") {
+		if err := migrator.DropIndex(&ModelBinding{}, "uk_model_channel"); err != nil {
 			return err
 		}
 	}
-	if !migrator.HasIndex(&ModelBinding{}, "uk_model_channel") {
-		if err := migrator.CreateIndex(&ModelBinding{}, "uk_model_channel"); err != nil {
+	if !migrator.HasIndex(&ModelBinding{}, "uk_model_channel_upstream") {
+		if err := migrator.CreateIndex(&ModelBinding{}, "uk_model_channel_upstream"); err != nil {
 			return err
 		}
 	}
@@ -253,18 +235,19 @@ type bindingChannelCandidate struct {
 	Channel
 	BindingPriority int64
 	BindingWeight   int
+	UpstreamModel   string
 }
 
-func GetChannelFromBindings(group string, modelName string, retry int, requestPath string) (*Channel, error) {
+func GetChannelFromBindings(modelName string, retry int, requestPath string) (*Channel, string, error) {
 	loadCandidates := func(name string) ([]bindingChannelCandidate, error) {
 		var rows []struct {
-			ChannelId int
-			Priority  int64
-			Weight    int
-			Groups    string
+			ChannelId     int
+			Priority      int64
+			Weight        int
+			UpstreamModel string
 		}
 		err := DB.Table("model_bindings").
-			Select("model_bindings.channel_id, model_bindings.priority, model_bindings.weight, channels."+commonGroupCol+" AS groups").
+			Select("model_bindings.channel_id, model_bindings.priority, model_bindings.weight, model_bindings.upstream_model").
 			Joins("JOIN models ON models.id = model_bindings.model_id").
 			Joins("JOIN channels ON channels.id = model_bindings.channel_id").
 			Where("models.model_name = ? AND model_bindings.enabled = ? AND model_bindings.deleted = ? AND channels.status = ?", name, true, false, common.ChannelStatusEnabled).
@@ -273,25 +256,13 @@ func GetChannelFromBindings(group string, modelName string, retry int, requestPa
 			return nil, err
 		}
 		channelIds := make([]int, 0, len(rows))
-		priorityByChannel := make(map[int]int64, len(rows))
-		weightByChannel := make(map[int]int, len(rows))
+		seenChannelIds := make(map[int]struct{}, len(rows))
 		for _, row := range rows {
-			if !servingGroupsContain(row.Groups, group) {
+			if _, exists := seenChannelIds[row.ChannelId]; exists {
 				continue
 			}
-			weight := row.Weight
-			if weight < 0 {
-				weight = 0
-			}
-			currentPriority, exists := priorityByChannel[row.ChannelId]
-			if exists && (currentPriority > row.Priority || (currentPriority == row.Priority && weightByChannel[row.ChannelId] >= weight)) {
-				continue
-			}
-			if !exists {
-				channelIds = append(channelIds, row.ChannelId)
-			}
-			priorityByChannel[row.ChannelId] = row.Priority
-			weightByChannel[row.ChannelId] = weight
+			seenChannelIds[row.ChannelId] = struct{}{}
+			channelIds = append(channelIds, row.ChannelId)
 		}
 		if len(channelIds) == 0 {
 			return nil, nil
@@ -300,26 +271,43 @@ func GetChannelFromBindings(group string, modelName string, retry int, requestPa
 		if err := DB.Where("id IN ?", channelIds).Find(&channels).Error; err != nil {
 			return nil, err
 		}
-		candidates := make([]bindingChannelCandidate, 0, len(channels))
+		channelById := make(map[int]Channel, len(channels))
 		for i := range channels {
+			channelById[channels[i].Id] = channels[i]
+		}
+		candidates := make([]bindingChannelCandidate, 0, len(rows))
+		for _, row := range rows {
+			channel, ok := channelById[row.ChannelId]
+			if !ok {
+				continue
+			}
+			weight := row.Weight
+			if weight < 0 {
+				weight = 0
+			}
+			upstreamModel := strings.TrimSpace(row.UpstreamModel)
+			if upstreamModel == "" {
+				upstreamModel = name
+			}
 			candidates = append(candidates, bindingChannelCandidate{
-				Channel:         channels[i],
-				BindingPriority: priorityByChannel[channels[i].Id],
-				BindingWeight:   weightByChannel[channels[i].Id],
+				Channel:         channel,
+				BindingPriority: row.Priority,
+				BindingWeight:   weight,
+				UpstreamModel:   upstreamModel,
 			})
 		}
 		return candidates, nil
 	}
 	candidates, err := loadCandidates(modelName)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if len(candidates) == 0 {
 		normalized := ratio_setting.FormatMatchingModelName(modelName)
 		if normalized != "" && normalized != modelName {
 			candidates, err = loadCandidates(normalized)
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 		}
 	}
@@ -334,7 +322,7 @@ func GetChannelFromBindings(group string, modelName string, retry int, requestPa
 		filtered = append(filtered, candidates[i])
 	}
 	if len(filtered) == 0 {
-		return nil, nil
+		return nil, "", nil
 	}
 	priorities := make([]int64, 0)
 	seenPriorities := make(map[int64]struct{})
@@ -361,46 +349,39 @@ func GetChannelFromBindings(group string, modelName string, retry int, requestPa
 		totalWeight += filtered[i].BindingWeight
 	}
 	if totalWeight <= 0 {
-		return &matched[common.GetRandomInt(len(matched))].Channel, nil
+		picked := matched[common.GetRandomInt(len(matched))]
+		return &picked.Channel, picked.UpstreamModel, nil
 	}
 	randomWeight := common.GetRandomInt(totalWeight)
 	for i := range matched {
 		randomWeight -= matched[i].BindingWeight
 		if randomWeight < 0 {
-			return &matched[i].Channel, nil
+			return &matched[i].Channel, matched[i].UpstreamModel, nil
 		}
 	}
-	return &matched[len(matched)-1].Channel, nil
-}
-
-func BackfillModelBindingGroupsFromChannels() error {
-	var channels []Channel
-	if err := DB.Select("id, " + commonGroupCol).Find(&channels).Error; err != nil {
-		return err
-	}
-	for i := range channels {
-		groups := strings.TrimSpace(channels[i].Group)
-		if groups == "" {
-			groups = "default"
-		}
-		if err := DB.Model(&ModelBinding{}).
-			Where("channel_id = ?", channels[i].Id).
-			Update("groups", groups).Error; err != nil {
-			return err
-		}
-	}
-	return nil
+	last := matched[len(matched)-1]
+	return &last.Channel, last.UpstreamModel, nil
 }
 
 func BackfillModelBindingPrioritiesFromChannels() error {
-	var channels []Channel
-	if err := DB.Select("id", "priority").Find(&channels).Error; err != nil {
+	if !hasDBColumn("channels", "priority") {
+		return nil
+	}
+	var channels []struct {
+		Id       int
+		Priority *int64
+	}
+	if err := DB.Table("channels").Select("id", "priority").Find(&channels).Error; err != nil {
 		return err
 	}
 	for i := range channels {
+		priority := int64(0)
+		if channels[i].Priority != nil {
+			priority = *channels[i].Priority
+		}
 		if err := DB.Model(&ModelBinding{}).
 			Where("channel_id = ?", channels[i].Id).
-			Update("priority", channels[i].GetPriority()).Error; err != nil {
+			Update("priority", priority).Error; err != nil {
 			return err
 		}
 	}
@@ -408,14 +389,24 @@ func BackfillModelBindingPrioritiesFromChannels() error {
 }
 
 func BackfillModelBindingWeightsFromChannels() error {
-	var channels []Channel
-	if err := DB.Select("id", "weight").Find(&channels).Error; err != nil {
+	if !hasDBColumn("channels", "weight") {
+		return nil
+	}
+	var channels []struct {
+		Id     int
+		Weight *uint
+	}
+	if err := DB.Table("channels").Select("id", "weight").Find(&channels).Error; err != nil {
 		return err
 	}
 	for i := range channels {
+		weight := 0
+		if channels[i].Weight != nil {
+			weight = int(*channels[i].Weight)
+		}
 		if err := DB.Model(&ModelBinding{}).
 			Where("channel_id = ?", channels[i].Id).
-			Update("weight", channels[i].GetWeight()).Error; err != nil {
+			Update("weight", weight).Error; err != nil {
 			return err
 		}
 	}
@@ -439,27 +430,4 @@ func splitNormalizedList(raw string) []string {
 	}
 	sort.Strings(result)
 	return result
-}
-
-const DefaultServingGroup = "default"
-
-func servingGroupsFromRaw(raw string) []string {
-	groups := splitNormalizedList(raw)
-	if len(groups) == 0 {
-		return []string{DefaultServingGroup}
-	}
-	return groups
-}
-
-func servingGroupsContain(raw string, group string) bool {
-	group = strings.TrimSpace(group)
-	if group == "" {
-		group = DefaultServingGroup
-	}
-	for _, value := range servingGroupsFromRaw(raw) {
-		if value == group {
-			return true
-		}
-	}
-	return false
 }

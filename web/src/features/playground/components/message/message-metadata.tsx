@@ -37,7 +37,6 @@ function formatMessageTime(timestamp?: number): string | undefined {
   return new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
   }).format(new Date(timestamp))
 }
 
@@ -69,6 +68,7 @@ export function MessageMetadata(props: MessageMetadataProps) {
     <div
       className={cn(
         'text-muted-foreground mt-1 flex min-h-4 items-center gap-1.5 text-[11px] leading-none',
+        'opacity-0 transition-opacity duration-150 group-hover:opacity-100',
         props.alignment === 'right' && 'justify-end'
       )}
     >

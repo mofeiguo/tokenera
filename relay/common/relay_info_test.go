@@ -81,7 +81,6 @@ func TestRelayInfoMetaTypedNilReceiver(t *testing.T) {
 	assert.NotNil(t, firstOptions.Claude.DefaultMaxTokens)
 	assert.NotNil(t, firstOptions.Gemini.SupportsImagine)
 	assert.NotNil(t, firstOptions.Gemini.SafetySetting)
-	assert.NotNil(t, firstOptions.PreserveThinkingSuffix)
 }
 
 func TestGenRelayInfoCapturesRequestReasoningEffort(t *testing.T) {
@@ -237,4 +236,32 @@ func TestRewriteRequestURLPathModel(t *testing.T) {
 		),
 	)
 	assert.Equal(t, "/v1/messages", RewriteRequestURLPathModel("/v1/messages", "my-alias", "claude-sonnet"))
+
+	assert.Equal(
+		t,
+		"/v1beta/models/deepseek/deepseek-v4-pro:generateContent",
+		RewriteRequestURLPathModel(
+			"/v1beta/models/{model}:generateContent",
+			"deepseek/deepseek-v4-pro",
+			"deepseek/deepseek-v4-pro",
+		),
+	)
+	assert.Equal(
+		t,
+		"/v1beta/models/deepseek/deepseek-v4-pro:generateContent",
+		RewriteRequestURLPathModel(
+			"/v1beta/models/%7Bmodel%7D:generateContent",
+			"deepseek/deepseek-v4-pro",
+			"deepseek/deepseek-v4-pro",
+		),
+	)
+	assert.Equal(
+		t,
+		"/v1beta/models/gemini-2.5-flash:generateContent",
+		RewriteRequestURLPathModel(
+			"/v1beta/models/{model}:generateContent",
+			"my-alias",
+			"gemini-2.5-flash",
+		),
+	)
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
@@ -152,7 +151,6 @@ func seedModelBinding(t *testing.T, db *gorm.DB, channelID int, group string, mo
 			Type:   constant.ChannelTypeOpenAI,
 			Name:   fmt.Sprintf("channel-%d", channelID),
 			Status: common.ChannelStatusEnabled,
-			Group:  group,
 		}).Error)
 	} else {
 		require.NoError(t, err)
@@ -185,7 +183,6 @@ func seedModelBinding(t *testing.T, db *gorm.DB, channelID int, group string, mo
 		ModelId:   catalogModel.Id,
 		ChannelId: channelID,
 		Enabled:   true,
-		GroupsRaw: group,
 	}).Error)
 }
 
@@ -302,7 +299,6 @@ func TestGetUserModelsFiltersByRequestedGroup(t *testing.T) {
 		Id:       1002,
 		Username: "playground-model-user",
 		Password: "password",
-		Group:    "default",
 		Status:   common.UserStatusEnabled,
 	}).Error)
 	seedModelBinding(t, db, 1, "default", "zz-default-only-model", true)
@@ -335,16 +331,26 @@ func TestGetUserModelsIncludesCatalogEndpointTypes(t *testing.T) {
 		Id:       1005,
 		Username: "playground-endpoint-user",
 		Password: "password",
-		Group:    "default",
 		Status:   common.UserStatusEnabled,
 	}).Error)
 	seedModelBinding(t, db, 1, "default", "zz-endpoint-model", true)
 	seedModelBinding(t, db, 1, "default", "zz-open-model", true)
 	publishModelListCatalog(t, db, "zz-endpoint-model", "zz-open-model")
-	require.NoError(t, db.Model(&model.Model{}).Where("model_name = ?", "zz-endpoint-model").Update("endpoints", `{
+	require.NoError(t, db.Model(&model.Model{}).Where("model_name = ?", "zz-endpoint-model").Updates(map[string]any{
+		"endpoints": `{
 		"anthropic": "/v1/messages",
 		"openai": "/v1/chat/completions"
-	}`).Error)
+	}`,
+		"input_modalities": model.CatalogStringList{"text", "image"},
+		"capabilities":     model.CatalogStringList{"web_search"},
+		"icon":             "Qwen",
+		"vendor_id":        1,
+	}).Error)
+	require.NoError(t, db.Create(&model.Vendor{
+		Id:   1,
+		Name: "Alibaba Cloud",
+		Icon: "AlibabaCloud",
+	}).Error)
 	model.InvalidatePricingCache()
 	model.GetPricing()
 
@@ -360,6 +366,10 @@ func TestGetUserModelsIncludesCatalogEndpointTypes(t *testing.T) {
 		Success                bool                               `json:"success"`
 		Data                   []string                           `json:"data"`
 		SupportedEndpointTypes map[string][]constant.EndpointType `json:"supported_endpoint_types"`
+		InputModalities        map[string][]string                `json:"input_modalities"`
+		Capabilities           map[string][]string                `json:"capabilities"`
+		ModelIcons             map[string]string                  `json:"model_icons"`
+		VendorNames            map[string]string                  `json:"vendor_names"`
 	}
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
 	require.True(t, payload.Success)
@@ -369,21 +379,20 @@ func TestGetUserModelsIncludesCatalogEndpointTypes(t *testing.T) {
 		constant.EndpointTypeOpenAI,
 	}, payload.SupportedEndpointTypes["zz-endpoint-model"])
 	assert.Empty(t, payload.SupportedEndpointTypes["zz-open-model"])
+	assert.Equal(t, []string{"text", "image"}, payload.InputModalities["zz-endpoint-model"])
+	assert.Empty(t, payload.InputModalities["zz-open-model"])
+	assert.Equal(t, []string{"web_search"}, payload.Capabilities["zz-endpoint-model"])
+	assert.Empty(t, payload.Capabilities["zz-open-model"])
+	assert.Equal(t, "Qwen", payload.ModelIcons["zz-endpoint-model"])
+	assert.Equal(t, "Alibaba Cloud", payload.VendorNames["zz-endpoint-model"])
 }
 
-func TestGetUserModelsUsesAccessibleGroups(t *testing.T) {
-	originalInherit := setting.GroupInherit2JSONString()
-	require.NoError(t, setting.UpdateGroupInheritByJSONString(`{"default":["default"],"vip":["vip","default"]}`))
-	t.Cleanup(func() {
-		require.NoError(t, setting.UpdateGroupInheritByJSONString(originalInherit))
-	})
-
+func TestGetUserModelsReturnsSinglePoolEnabledModels(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.Create(&model.User{
 		Id:       1003,
 		Username: "playground-auto-model-user",
 		Password: "password",
-		Group:    "default",
 		Status:   common.UserStatusEnabled,
 		AffCode:  "aff1003",
 	}).Error)
@@ -391,7 +400,6 @@ func TestGetUserModelsUsesAccessibleGroups(t *testing.T) {
 		Id:       1004,
 		Username: "playground-vip-model-user",
 		Password: "password",
-		Group:    "vip",
 		Status:   common.UserStatusEnabled,
 		AffCode:  "aff1004",
 	}).Error)
@@ -401,19 +409,21 @@ func TestGetUserModelsUsesAccessibleGroups(t *testing.T) {
 	seedModelBinding(t, db, 4, "unavailable", "zz-unavailable-model", true)
 	publishModelListCatalog(t, db, "zz-vip-model", "zz-shared-model", "zz-default-model")
 
+	want := []string{"zz-vip-model", "zz-shared-model", "zz-default-model", "zz-unavailable-model"}
+
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
 	context.Request = httptest.NewRequest(http.MethodGet, "/api/user/models", nil)
 	context.Set("id", 1003)
 	GetUserModels(context)
-	assert.ElementsMatch(t, []string{"zz-shared-model", "zz-default-model"}, decodeUserModelsResponse(t, recorder))
+	assert.ElementsMatch(t, want, decodeUserModelsResponse(t, recorder))
 
 	vipRecorder := httptest.NewRecorder()
 	vipContext, _ := gin.CreateTestContext(vipRecorder)
 	vipContext.Request = httptest.NewRequest(http.MethodGet, "/api/user/models", nil)
 	vipContext.Set("id", 1004)
 	GetUserModels(vipContext)
-	assert.ElementsMatch(t, []string{"zz-vip-model", "zz-shared-model", "zz-default-model"}, decodeUserModelsResponse(t, vipRecorder))
+	assert.ElementsMatch(t, want, decodeUserModelsResponse(t, vipRecorder))
 }
 
 func TestListModelsIncludesTieredBillingModel(t *testing.T) {
@@ -432,7 +442,6 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 		Id:       1001,
 		Username: "model-list-user",
 		Password: "password",
-		Group:    "default",
 		Status:   common.UserStatusEnabled,
 	}).Error)
 	seedModelBinding(t, db, 1, "default", "zz-tiered-visible-model", true)
@@ -492,7 +501,6 @@ func TestListModelsDoesNotInferEndpointTypesFromChannel(t *testing.T) {
 		Id:       1003,
 		Username: "bifrost-model-list-user",
 		Password: "password",
-		Group:    "default",
 		Status:   common.UserStatusEnabled,
 	}).Error)
 
@@ -502,7 +510,6 @@ func TestListModelsDoesNotInferEndpointTypesFromChannel(t *testing.T) {
 		Key:    "bifrost-key",
 		Status: common.ChannelStatusEnabled,
 		Name:   "bifrost-channel",
-		Group:  "default",
 		Models: "gpt-5",
 	}
 	require.NoError(t, db.Create(channel).Error)
@@ -540,7 +547,6 @@ func TestListModelsUsesCatalogEndpointTypes(t *testing.T) {
 		Id:       1004,
 		Username: "catalog-endpoint-model-list-user",
 		Password: "password",
-		Group:    "default",
 		Status:   common.UserStatusEnabled,
 	}).Error)
 
@@ -550,7 +556,6 @@ func TestListModelsUsesCatalogEndpointTypes(t *testing.T) {
 		Key:    "bifrost-key",
 		Status: common.ChannelStatusEnabled,
 		Name:   "bifrost-channel",
-		Group:  "default",
 		Models: "gpt-5",
 	}
 	require.NoError(t, db.Create(channel).Error)
@@ -627,19 +632,19 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 	require.NotContains(t, ids, "zz-token-unpriced-model")
 }
 
-func TestListModelsIgnoresTokenGroupAndUsesUserInherit(t *testing.T) {
+func TestListModelsUsesSinglePoolAndTokenModelLimit(t *testing.T) {
 	withSelfUseModeEnabled(t)
-	originalInherit := setting.GroupInherit2JSONString()
-	require.NoError(t, setting.UpdateGroupInheritByJSONString(`{"vip":["vip","default"],"default":["default"]}`))
-	t.Cleanup(func() {
-		require.NoError(t, setting.UpdateGroupInheritByJSONString(originalInherit))
-	})
 
 	db := setupModelListControllerTestDB(t)
 	seedModelBinding(t, db, 1, "vip", "zz-vip-allowed", true)
 	seedModelBinding(t, db, 1, "vip", "zz-vip-denied", true)
 	seedModelBinding(t, db, 2, "default", "zz-default-outside-snapshot", true)
 	publishModelListCatalog(t, db, "zz-vip-allowed", "zz-vip-denied", "zz-default-outside-snapshot")
+
+	want := map[string]struct{}{
+		"zz-vip-allowed":              {},
+		"zz-default-outside-snapshot": {},
+	}
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -655,8 +660,7 @@ func TestListModelsIgnoresTokenGroupAndUsesUserInherit(t *testing.T) {
 	})
 
 	ListModels(ctx, constant.ChannelTypeOpenAI)
-	ids := decodeListModelsResponse(t, recorder)
-	require.Equal(t, map[string]struct{}{"zz-default-outside-snapshot": {}}, ids)
+	require.Equal(t, want, decodeListModelsResponse(t, recorder))
 
 	vipRecorder := httptest.NewRecorder()
 	vipCtx, _ := gin.CreateTestContext(vipRecorder)
@@ -668,10 +672,7 @@ func TestListModelsIgnoresTokenGroupAndUsesUserInherit(t *testing.T) {
 		"zz-default-outside-snapshot": true,
 	})
 	ListModels(vipCtx, constant.ChannelTypeOpenAI)
-	require.Equal(t, map[string]struct{}{
-		"zz-vip-allowed":              {},
-		"zz-default-outside-snapshot": {},
-	}, decodeListModelsResponse(t, vipRecorder))
+	require.Equal(t, want, decodeListModelsResponse(t, vipRecorder))
 }
 
 func TestCheckUpdatePasswordRequiresCurrentPassword(t *testing.T) {
@@ -725,7 +726,6 @@ func TestSetupLoginDoesNotTouchPasswordWhenPasswordFieldOmitted(t *testing.T) {
 		Password: hashedPassword,
 		Role:     common.RoleCommonUser,
 		Status:   common.UserStatusEnabled,
-		Group:    "default",
 	}
 	require.NoError(t, db.Create(user).Error)
 
@@ -736,7 +736,6 @@ func TestSetupLoginDoesNotTouchPasswordWhenPasswordFieldOmitted(t *testing.T) {
 			Username: user.Username,
 			Role:     user.Role,
 			Status:   user.Status,
-			Group:    user.Group,
 		}, c)
 	})
 

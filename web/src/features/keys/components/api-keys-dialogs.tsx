@@ -16,27 +16,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { ApiKeysCreatedDialog } from './api-keys-created-dialog'
 import { ApiKeysDeleteDialog } from './api-keys-delete-dialog'
-import { ApiKeysMutateDrawer } from './api-keys-mutate-drawer'
+import { ApiKeysMutateDialog } from './api-keys-mutate-dialog'
 import { useApiKeys } from './api-keys-provider'
-import { CCSwitchDialog } from './dialogs/cc-switch-dialog'
 
 export function ApiKeysDialogs() {
-  const { open, setOpen, currentRow, resolvedKey } = useApiKeys()
+  const { open, setOpen, currentRow } = useApiKeys()
 
   return (
     <>
-      <ApiKeysMutateDrawer
-        open={open === 'create' || open === 'update'}
-        onOpenChange={(isOpen) => !isOpen && setOpen(null)}
+      <ApiKeysMutateDialog
         currentRow={open === 'update' ? currentRow || undefined : undefined}
-      />
-      <ApiKeysDeleteDialog />
-      <CCSwitchDialog
-        open={open === 'cc-switch'}
         onOpenChange={(isOpen) => !isOpen && setOpen(null)}
-        tokenKey={resolvedKey}
+        open={open === 'create' || open === 'update'}
       />
+      <ApiKeysCreatedDialog />
+      <ApiKeysDeleteDialog />
     </>
   )
 }

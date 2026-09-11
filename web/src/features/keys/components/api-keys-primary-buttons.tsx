@@ -20,18 +20,21 @@ import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 import { useApiKeys } from './api-keys-provider'
+import { apiKeysCreateButtonClass } from './api-keys-styles'
 
 export function ApiKeysPrimaryButtons() {
   const { t } = useTranslation()
   const { setOpen } = useApiKeys()
   return (
-    <div className='flex gap-2'>
-      <Button size='sm' onClick={() => setOpen('create')}>
-        <Plus className='h-4 w-4' />
-        {t('Create API Key')}
-      </Button>
-    </div>
+    <Button
+      className={cn(apiKeysCreateButtonClass)}
+      onClick={() => setOpen('create')}
+    >
+      <Plus className='size-3.5' />
+      {t('Create API Key')}
+    </Button>
   )
 }

@@ -70,13 +70,13 @@ export function getPlaygroundEndpointLabel(
 ): string {
   switch (endpointType) {
     case 'openai-response':
-      return t('Response')
+      return t('OpenAI Responses')
     case 'anthropic':
-      return t('Anthropic')
+      return t('Anthropic Messages')
     case 'gemini':
-      return t('Gemini')
+      return t('Gemini Generate Content')
     default:
-      return t('Chat')
+      return t('OpenAI Chat Completions')
   }
 }
 

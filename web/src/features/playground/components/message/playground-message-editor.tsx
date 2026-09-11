@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button'
 
 import { getMessageEditorState } from '../../lib'
 import type { Message } from '../../types'
+import { PlaygroundMessageImages } from './playground-message-images'
 
 type PlaygroundMessageEditorProps = {
   editText: string
@@ -152,6 +153,7 @@ export function PlaygroundMessageEditor({
 
   return (
     <>
+      <PlaygroundMessageImages images={message.images ?? []} />
       <CodeBlockEditor
         actions={editorActions}
         ariaLabel={t('Edit')}

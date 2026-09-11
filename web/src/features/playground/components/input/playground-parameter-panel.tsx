@@ -19,8 +19,13 @@ For commercial licensing, please contact support@quantumnous.com
 import { SlidersHorizontalIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import {
+  formatModelSelectorTriggerLabel,
+  ModelSelectorIcon,
+} from '@/components/model-group-selector/model-display'
 import { PromptInputButton } from '@/components/ai-elements/prompt-input'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Popover,
@@ -44,6 +49,7 @@ import {
 import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
 
+import { PlaygroundProtocolSelector } from '../playground-protocol-selector'
 import {
   getParameterControlValueText,
   normalizeParameterNumberValue,
@@ -51,35 +57,77 @@ import {
   PLAYGROUND_PARAMETER_PANEL_SCROLL_CLASS,
   type PlaygroundParameterKey,
 } from '../../lib/parameters/playground-parameters'
-import type { ParameterEnabled, PlaygroundConfig } from '../../types'
+import {
+  PLAYGROUND_INPUT_TOOL_BUTTON,
+  PLAYGROUND_TOOLBAR_ICON_BUTTON,
+} from '../../lib/playground-surface'
+import type {
+  ModelOption,
+  ParameterEnabled,
+  PlaygroundConfig,
+  PlaygroundEndpointType,
+} from '../../types'
 
 type PlaygroundParameterPanelProps = {
   config: PlaygroundConfig
   disabled?: boolean
+  endpointTypes: PlaygroundEndpointType[]
+  endpointValue: PlaygroundEndpointType
+  isModelLoading?: boolean
+  modelValue: string
+  models: ModelOption[]
   onConfigChange: <K extends keyof PlaygroundConfig>(
     key: K,
     value: PlaygroundConfig[K]
   ) => void
+  onEndpointChange: (value: PlaygroundEndpointType) => void
   onParameterEnabledChange: (
     key: PlaygroundParameterKey,
     value: boolean
   ) => void
   parameterEnabled: ParameterEnabled
+  variant?: 'composer' | 'toolbar'
 }
 
 type PlaygroundParameterContentProps = PlaygroundParameterPanelProps & {
   compact?: boolean
 }
 
+function PlaygroundParameterPanelHeader({
+  modelValue,
+  models,
+}: Pick<PlaygroundParameterPanelProps, 'modelValue' | 'models'>) {
+  const { t } = useTranslation()
+  const selectedModel = models.find((model) => model.value === modelValue)
+
+  return (
+    <div className='flex min-w-0 items-center gap-2 px-1'>
+      <ModelSelectorIcon
+        icon={selectedModel?.icon}
+        label={selectedModel?.label ?? modelValue}
+        size={18}
+      />
+      <div className='min-w-0 truncate text-sm font-semibold'>
+        {formatModelSelectorTriggerLabel(selectedModel, t('Model'))}
+      </div>
+    </div>
+  )
+}
+
 function PlaygroundParameterContent({
   compact = false,
   config,
   disabled,
+  endpointTypes,
+  endpointValue,
+  isModelLoading,
   onConfigChange,
+  onEndpointChange,
   onParameterEnabledChange,
   parameterEnabled,
 }: PlaygroundParameterContentProps) {
   const { t } = useTranslation()
+  const selectorDisabled = disabled || isModelLoading
 
   const updateParameterConfig = (
     key: PlaygroundParameterKey,
@@ -96,11 +144,20 @@ function PlaygroundParameterContent({
   return (
     <div
       className={cn(
-        'grid gap-3',
+        'grid gap-4',
         PLAYGROUND_PARAMETER_PANEL_SCROLL_CLASS,
         compact ? 'px-4 pb-4' : 'p-1'
       )}
     >
+      {endpointTypes.length > 0 ? (
+        <PlaygroundProtocolSelector
+          disabled={selectorDisabled}
+          endpointTypes={endpointTypes}
+          onChange={onEndpointChange}
+          value={endpointValue}
+        />
+      ) : null}
+
       {PLAYGROUND_PARAMETER_CONTROLS.map((control) => {
         const enabled = parameterEnabled[control.key]
         const value = config[control.key]
@@ -198,23 +255,42 @@ function PlaygroundParameterContent({
 export function PlaygroundParameterPanel(props: PlaygroundParameterPanelProps) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
+  const variant = props.variant ?? 'composer'
   const activeCount = PLAYGROUND_PARAMETER_CONTROLS.filter(
     (control) => props.parameterEnabled[control.key]
   ).length
 
-  const trigger = (
-    <PromptInputButton
-      aria-label={t('Parameters')}
-      className='text-muted-foreground hover:text-foreground hover:bg-muted/70 relative font-medium'
-      disabled={props.disabled}
-      variant='ghost'
-    >
-      <SlidersHorizontalIcon size={16} />
-      <span className='bg-primary text-primary-foreground absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-1 text-[9px] leading-none font-semibold'>
+  const badge =
+    activeCount > 0 ? (
+      <span className='bg-primary text-primary-foreground absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-1 text-[9px] leading-none font-semibold'>
         {activeCount}
       </span>
-    </PromptInputButton>
-  )
+    ) : null
+
+  const trigger =
+    variant === 'toolbar' ? (
+      <Button
+        aria-label={t('Parameters')}
+        className={cn(PLAYGROUND_TOOLBAR_ICON_BUTTON, 'relative')}
+        disabled={props.disabled}
+        size='icon'
+        type='button'
+        variant='ghost'
+      >
+        <SlidersHorizontalIcon className='size-[18px]' />
+        {badge}
+      </Button>
+    ) : (
+      <PromptInputButton
+        aria-label={t('Parameters')}
+        className={cn(PLAYGROUND_INPUT_TOOL_BUTTON, 'relative')}
+        disabled={props.disabled}
+        variant='ghost'
+      >
+        <SlidersHorizontalIcon size={16} />
+        {badge}
+      </PromptInputButton>
+    )
 
   if (isMobile) {
     return (
@@ -230,7 +306,11 @@ export function PlaygroundParameterPanel(props: PlaygroundParameterPanelProps) {
           side='bottom'
         >
           <SheetHeader>
-            <SheetTitle>{t('Parameter settings')}</SheetTitle>
+            <SheetTitle className='sr-only'>{t('Parameter settings')}</SheetTitle>
+            <PlaygroundParameterPanelHeader
+              modelValue={props.modelValue}
+              models={props.models}
+            />
           </SheetHeader>
           <PlaygroundParameterContent {...props} compact />
         </SheetContent>
@@ -247,18 +327,16 @@ export function PlaygroundParameterPanel(props: PlaygroundParameterPanelProps) {
         </TooltipContent>
       </Tooltip>
       <PopoverContent
-        align='start'
-        className='w-[22rem] max-w-[calc(100vw-2rem)] gap-3 p-3'
+        align='end'
+        className='w-[min(24rem,calc(100vw-2rem))] gap-4 p-4'
         collisionPadding={8}
-        side='top'
+        side='bottom'
         sideOffset={8}
       >
-        <div className='space-y-1 px-1'>
-          <div className='text-sm font-semibold'>{t('Parameter settings')}</div>
-          <div className='text-muted-foreground text-xs leading-4'>
-            {t('Only enabled parameters are sent with the request.')}
-          </div>
-        </div>
+        <PlaygroundParameterPanelHeader
+          modelValue={props.modelValue}
+          models={props.models}
+        />
         <PlaygroundParameterContent {...props} />
       </PopoverContent>
     </Popover>

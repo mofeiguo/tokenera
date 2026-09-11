@@ -16,21 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Logout01Icon, SmartPhone01Icon } from '@hugeicons/core-free-icons'
+import {
+  Logout01Icon,
+  SmartPhone01Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { TitledCard } from '@/components/ui/titled-card'
 import {
   Empty,
   EmptyDescription,
@@ -171,31 +167,30 @@ export function LoginSessionsCard() {
 
   return (
     <>
-      <Card data-card-hover='false'>
-        <CardHeader>
-          <CardTitle>{t('Login sessions')}</CardTitle>
-          <CardDescription>
-            {t('Review and sign out devices currently using your account.')}
-          </CardDescription>
-          <CardAction>
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              disabled={!hasOtherSessions || revokeOthersMutation.isPending}
-              onClick={() => setConfirmOthers(true)}
-            >
-              <HugeiconsIcon
-                icon={Logout01Icon}
-                data-icon='inline-start'
-                strokeWidth={2}
-              />
-              {t('Sign out other sessions')}
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent>{sessionsContent}</CardContent>
-      </Card>
+      <TitledCard
+        title={t('Login sessions')}
+        disableHoverEffect
+        titleClassName='text-[15px] font-semibold tracking-tight'
+        action={
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            disabled={!hasOtherSessions || revokeOthersMutation.isPending}
+            onClick={() => setConfirmOthers(true)}
+          >
+            <HugeiconsIcon
+              icon={Logout01Icon}
+              data-icon='inline-start'
+              strokeWidth={2}
+            />
+            <span className='hidden sm:inline'>{t('Sign out other sessions')}</span>
+            <span className='sm:hidden'>{t('Sign out others')}</span>
+          </Button>
+        }
+      >
+        {sessionsContent}
+      </TitledCard>
 
       <LoginSessionDialogs
         revokeTarget={revokeTarget}

@@ -453,7 +453,7 @@ export function ChannelAffinitySection(props: Props) {
           onCheckedChange={setKeepOnChannelDisabled}
           label={t('Keep affinity when channel is disabled')}
           description={t(
-            'When enabled, keep the affinity entry even if the affinity channel is disabled or no longer usable for the current group/model. Leave it off to delete the entry and select another channel.'
+            'When enabled, keep the affinity entry even if the affinity channel is disabled or no longer usable for the current model. Leave it off to delete the entry and select another channel.'
           )}
         />
 
@@ -600,7 +600,6 @@ export function ChannelAffinitySection(props: Props) {
                 header: t('Scope'),
                 cell: (rule) => {
                   const scopeItems = [
-                    rule.include_using_group && t('Group'),
                     rule.include_model_name && t('Model'),
                     rule.include_rule_name && t('Rule'),
                   ].filter(Boolean) as string[]

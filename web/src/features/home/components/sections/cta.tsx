@@ -38,7 +38,7 @@ export function CTA(props: CTAProps) {
       <div className='mx-auto max-w-7xl px-6'>
         <div className='bg-foreground text-background grid gap-10 rounded-2xl px-7 py-10 sm:px-10 md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:px-14 md:py-14'>
           <div>
-            <h2 className='font-display max-w-xl min-w-0 text-4xl font-bold tracking-[-0.04em] [overflow-wrap:anywhere] md:text-5xl'>
+            <h2 className='font-display max-w-xl min-w-0 text-4xl font-bold tracking-[-0.03em] [overflow-wrap:anywhere] md:text-5xl'>
               {t('Your first request needs one key.')}
             </h2>
             <p className='mt-5 max-w-xl text-base leading-7 opacity-70'>

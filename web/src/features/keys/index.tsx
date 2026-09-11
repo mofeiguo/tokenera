@@ -16,30 +16,34 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useTranslation } from 'react-i18next'
-
-import { SectionPageLayout } from '@/components/layout'
+import { Main } from '@/components/layout'
 
 import { ApiKeysDialogs } from './components/api-keys-dialogs'
-import { ApiKeysPrimaryButtons } from './components/api-keys-primary-buttons'
+import { ApiKeysPageHeader } from './components/api-keys-page-header'
 import { ApiKeysProvider } from './components/api-keys-provider'
 import { ApiKeysTable } from './components/api-keys-table'
 
-export function ApiKeys() {
-  const { t } = useTranslation()
+function ApiKeysContent() {
   return (
-    <ApiKeysProvider>
-      <SectionPageLayout fixedContent>
-        <SectionPageLayout.Title>{t('API Keys')}</SectionPageLayout.Title>
-        <SectionPageLayout.Actions>
-          <ApiKeysPrimaryButtons />
-        </SectionPageLayout.Actions>
-        <SectionPageLayout.Content>
-          <ApiKeysTable />
-        </SectionPageLayout.Content>
-      </SectionPageLayout>
+    <>
+      <Main className='bg-background'>
+        <div className='flex min-h-0 flex-1 flex-col overflow-auto px-6 py-8 md:px-10'>
+          <ApiKeysPageHeader />
+          <div className='mt-6 min-w-0 flex-1'>
+            <ApiKeysTable />
+          </div>
+        </div>
+      </Main>
 
       <ApiKeysDialogs />
+    </>
+  )
+}
+
+export function ApiKeys() {
+  return (
+    <ApiKeysProvider>
+      <ApiKeysContent />
     </ApiKeysProvider>
   )
 }

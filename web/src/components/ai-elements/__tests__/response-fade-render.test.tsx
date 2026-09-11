@@ -111,4 +111,24 @@ describe('Response streaming fade', () => {
     rerender(<Response final>Streaming text</Response>)
     expect(document.querySelectorAll('[data-stream-fade]')).toHaveLength(0)
   })
+
+  test('skips fade wrappers when streamFade is false', () => {
+    const { rerender } = render(
+      <Response final={false} streamFade={false}>
+        Hello
+      </Response>
+    )
+
+    expect(document.querySelectorAll('[data-stream-fade]')).toHaveLength(0)
+    expect(screen.getByText('Hello')).toBeTruthy()
+
+    rerender(
+      <Response final={false} streamFade={false}>
+        Hello world
+      </Response>
+    )
+
+    expect(document.querySelectorAll('[data-stream-fade]')).toHaveLength(0)
+    expect(screen.getByText(/Hello world/)).toBeTruthy()
+  })
 })

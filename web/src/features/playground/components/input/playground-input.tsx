@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import {
   PromptInput,
@@ -26,123 +27,102 @@ import {
   type PromptInputMessage,
 } from '@/components/ai-elements/prompt-input'
 
-import { getSubmittableInputText } from '../../lib'
+import {
+  PLAYGROUND_MAX_IMAGE_BYTES,
+  PLAYGROUND_MAX_IMAGES,
+} from '../../constants'
+import {
+  getModelInputModalities,
+  getPlaygroundAttachmentAccept,
+  getPlaygroundSubmitPayload,
+  PLAYGROUND_INPUT_ACTIONS,
+  PLAYGROUND_INPUT_SURFACE,
+  PLAYGROUND_INPUT_TEXTAREA,
+  PLAYGROUND_INPUT_TEXTAREA_WRAP,
+  modelSupportsAttachments,
+} from '../../lib'
 import type {
   ModelOption,
-  GroupOption,
-  ParameterEnabled,
-  PlaygroundConfig,
-  PlaygroundEndpointType,
+  PlaygroundImageAttachment,
 } from '../../types'
-import { PlaygroundInputControls } from './playground-input-controls'
-import { PlaygroundInputTools } from './playground-input-tools'
+import { PlaygroundAttachmentSync } from './playground-attachment-sync'
+import { PlaygroundComposerActions } from './playground-composer-actions'
+import { PlaygroundComposerAttachments } from './playground-composer-attachments'
 
 interface PlaygroundInputProps {
-  config: PlaygroundConfig
-  onSubmit: (text: string) => void
-  onStop?: () => void
   disabled?: boolean
   isGenerating?: boolean
+  isModelLoading?: boolean
   models: ModelOption[]
   modelValue: string
-  onModelChange: (value: string) => void
-  onEndpointChange: (value: PlaygroundEndpointType) => void
-  isModelLoading?: boolean
-  groups: GroupOption[]
-  groupValue: string
-  onGroupChange: (value: string) => void
-  hasMessages?: boolean
-  onConfigChange: <K extends keyof PlaygroundConfig>(
-    key: K,
-    value: PlaygroundConfig[K]
-  ) => void
-  onClearMessages?: () => void
-  onParameterEnabledChange: (
-    key: keyof ParameterEnabled,
-    value: boolean
-  ) => void
-  parameterEnabled: ParameterEnabled
+  onStop?: () => void
+  onSubmit: (text: string, images?: PlaygroundImageAttachment[]) => void
 }
 
 export function PlaygroundInput({
-  config,
-  onSubmit,
-  onStop,
   disabled,
   isGenerating,
+  isModelLoading = false,
   models,
   modelValue,
-  onModelChange,
-  onEndpointChange,
-  isModelLoading = false,
-  groups,
-  groupValue,
-  onGroupChange,
-  hasMessages = false,
-  onConfigChange,
-  onClearMessages,
-  onParameterEnabledChange,
-  parameterEnabled,
+  onStop,
+  onSubmit,
 }: PlaygroundInputProps) {
   const { t } = useTranslation()
   const [text, setText] = useState('')
+  const inputModalities = getModelInputModalities(models, modelValue)
+  const attachmentsEnabled = modelSupportsAttachments(inputModalities)
+  const attachmentAccept = getPlaygroundAttachmentAccept(inputModalities)
 
   const handleSubmit = (message: PromptInputMessage) => {
-    const submittableText = getSubmittableInputText(message, disabled)
+    const payload = getPlaygroundSubmitPayload(message, disabled)
 
-    if (!submittableText) return
-    onSubmit(submittableText)
+    if (!payload) return
+    onSubmit(payload.text, payload.images)
     setText('')
   }
 
   return (
-    <div className='grid shrink-0 gap-4 px-1 md:pb-4'>
-      <PromptInput
-        className='relative'
-        groupClassName='bg-background/95 dark:bg-background/80 border-border/70 shadow-[0_18px_60px_-32px_rgba(0,0,0,0.65)] ring-1 ring-foreground/5 rounded-xl overflow-hidden transition-all duration-200 focus-within:border-primary/45 focus-within:ring-primary/15 focus-within:shadow-[0_22px_70px_-34px_rgba(0,0,0,0.75)]'
-        onSubmit={handleSubmit}
-      >
+    <PromptInput
+      accept={attachmentAccept}
+      attachmentsEnabled={attachmentsEnabled}
+      className='relative w-full'
+      groupClassName={PLAYGROUND_INPUT_SURFACE}
+      maxFileSize={PLAYGROUND_MAX_IMAGE_BYTES}
+      maxFiles={PLAYGROUND_MAX_IMAGES}
+      multiple
+      onError={(error) => toast.error(error.message)}
+      onSubmit={handleSubmit}
+    >
+      <PlaygroundAttachmentSync modelValue={modelValue} models={models} />
+      <PlaygroundComposerAttachments />
+      <div className={PLAYGROUND_INPUT_TEXTAREA_WRAP}>
         <PromptInputTextarea
           autoComplete='off'
           autoCorrect='off'
           autoCapitalize='off'
           spellCheck={false}
-          className='min-h-20 px-5 pt-4 pb-3 leading-7 md:min-h-24 md:text-base'
+          className={PLAYGROUND_INPUT_TEXTAREA}
           disabled={disabled}
           onChange={(event) => setText(event.target.value)}
-          placeholder={t('Ask anything')}
+          placeholder={t('Start a new conversation...')}
+          rows={1}
           value={text}
         />
+      </div>
 
-        <PromptInputFooter className='border-border/60 bg-muted/20 dark:bg-muted/10 border-t px-3 py-2.5 backdrop-blur'>
-          <PlaygroundInputControls
-            disabled={disabled}
-            groups={groups}
-            groupValue={groupValue}
-            isGenerating={isGenerating}
-            isModelLoading={isModelLoading}
-            models={models}
-            modelValue={modelValue}
-            endpointValue={config.endpointType}
-            onGroupChange={onGroupChange}
-            onModelChange={onModelChange}
-            onEndpointChange={onEndpointChange}
-            onStop={onStop}
-            text={text}
-            tools={
-              <PlaygroundInputTools
-                config={config}
-                disabled={disabled}
-                hasMessages={hasMessages}
-                onConfigChange={onConfigChange}
-                onClearMessages={onClearMessages}
-                onParameterEnabledChange={onParameterEnabledChange}
-                parameterEnabled={parameterEnabled}
-              />
-            }
-          />
-        </PromptInputFooter>
-      </PromptInput>
-    </div>
+      <PromptInputFooter className={PLAYGROUND_INPUT_ACTIONS}>
+        <PlaygroundComposerActions
+          disabled={disabled}
+          inputModalities={inputModalities}
+          isGenerating={isGenerating}
+          isModelLoading={isModelLoading}
+          modelValue={modelValue}
+          models={models}
+          onStop={onStop}
+          text={text}
+        />
+      </PromptInputFooter>
+    </PromptInput>
   )
 }

@@ -11,11 +11,17 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	hosttypes "github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 )
+
+func acceptUnsetModelRatio(info *relaycommon.RelayInfo) bool {
+	if info == nil {
+		return false
+	}
+	return info.IsChannelTest || info.UserSetting.AcceptUnsetRatioModel
+}
 
 func modelPriceNotConfiguredError(modelName string, userId int) error {
 	if model.IsAdmin(userId) {
@@ -40,19 +46,13 @@ const claudeCacheCreation1hMultiplier = 6 / 3.75
 // the pre-consumed quota still reflects a plausible output cost in paid groups.
 const defaultTieredPreConsumeMaxTokens = 8192
 
-// HandleGroupRatio bills against the user's identity group, not the matched binding group.
+// HandleGroupRatio is a no-op after group flattening: billing always uses 1.
 func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) hosttypes.GroupRatioInfo {
-	identity := relayInfo.UserGroup
-	if identity == "" {
-		identity = relayInfo.UsingGroup
+	if relayInfo != nil && relayInfo.UsingGroup == "" {
+		relayInfo.UsingGroup = "default"
 	}
-	if identity == "" {
-		identity = "default"
-	}
-	relayInfo.UsingGroup = identity
-	logger.LogDebug(ctx, "billing identity group: %s", identity)
 	return hosttypes.GroupRatioInfo{
-		GroupRatio:        ratio_setting.GetGroupRatio(identity),
+		GroupRatio:        1,
 		GroupSpecialRatio: -1,
 	}
 }
@@ -86,14 +86,8 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 			preConsumedTokens += meta.MaxTokens
 		}
 		modelRatio = resolvedPricing.ModelRatio
-		if !resolvedPricing.Configured {
-			acceptUnsetRatio := false
-			if info.UserSetting.AcceptUnsetRatioModel {
-				acceptUnsetRatio = true
-			}
-			if !acceptUnsetRatio {
-				return hosttypes.PriceData{}, modelPriceNotConfiguredError(info.OriginModelName, info.UserId)
-			}
+		if !resolvedPricing.Configured && !acceptUnsetModelRatio(info) {
+			return hosttypes.PriceData{}, modelPriceNotConfiguredError(info.OriginModelName, info.UserId)
 		}
 		completionRatio = resolvedPricing.CompletionRatio
 		cacheRatio = resolvedPricing.CacheRatio
@@ -180,19 +174,9 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hostt
 	var modelRatio float64
 
 	if !usePrice {
-		defaultPrice, ok := ratio_setting.GetDefaultModelPriceMap()[info.OriginModelName]
-		if ok {
-			modelPrice = defaultPrice
-			usePrice = true
-		} else {
-			modelRatio = resolvedPricing.ModelRatio
-			acceptUnsetRatio := false
-			if info.UserSetting.AcceptUnsetRatioModel {
-				acceptUnsetRatio = true
-			}
-			if !resolvedPricing.Configured && !acceptUnsetRatio {
-				return hosttypes.PriceData{}, modelPriceNotConfiguredError(info.OriginModelName, info.UserId)
-			}
+		modelRatio = resolvedPricing.ModelRatio
+		if !resolvedPricing.Configured && !acceptUnsetModelRatio(info) {
+			return hosttypes.PriceData{}, modelPriceNotConfiguredError(info.OriginModelName, info.UserId)
 		}
 	}
 

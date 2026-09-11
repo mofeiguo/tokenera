@@ -18,24 +18,30 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   Activity,
+  BarChart3,
   Box,
+  CircleDollarSign,
   CreditCard,
   FileText,
-  FlaskConical,
+  GitBranch,
+  Image,
   Key,
-  LayoutDashboard,
   ListTodo,
+  MessageSquare,
   Radio,
+  ScrollText,
   ServerCog,
   Settings,
   Ticket,
-  User,
   Users,
+  Video,
   Wallet,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { type SidebarData } from '@/components/layout/types'
+import type { SidebarData } from '@/components/layout/types'
+import { STUDIO_NAV_ITEMS } from '@/components/layout/lib/studio-nav'
+import { ANALYTICS_NAV_ITEMS } from '@/features/analytics/nav'
 import { ROLE } from '@/lib/roles'
 
 /**
@@ -46,95 +52,111 @@ import { ROLE } from '@/lib/roles'
  */
 export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
+  const studioIcons = {
+    Chat: MessageSquare,
+    Image,
+    Video,
+  } as const
+  const analysisIcons = {
+    Logs: ScrollText,
+    Cost: CircleDollarSign,
+    Usage: Activity,
+  } as const
 
   return {
     navGroups: [
       {
-        id: 'chat',
-        title: t('Chat'),
-        items: [
-          {
-            title: t('Playground'),
-            url: '/playground',
-            icon: FlaskConical,
-          },
-        ],
+        id: 'studio',
+        title: t('Studio'),
+        items: STUDIO_NAV_ITEMS.map((item) => ({
+          title: t(item.titleKey),
+          url: item.href,
+          icon: studioIcons[item.titleKey],
+          activeUrls: item.href === '/studio/chat' ? ['/playground'] : undefined,
+        })),
       },
       {
-        id: 'general',
-        title: t('General'),
+        id: 'analysis',
+        title: t('Analysis'),
         items: [
+          ...ANALYTICS_NAV_ITEMS.map((item) => ({
+            title: t(item.titleKey),
+            url: item.url,
+            icon: analysisIcons[item.titleKey],
+          })),
           {
-            title: t('Overview'),
-            url: '/dashboard/overview',
-            icon: Activity,
-          },
-          {
-            title: t('Dashboard'),
-            url: '/dashboard/models',
-            icon: LayoutDashboard,
-          },
-          {
-            title: t('API Keys'),
-            url: '/keys',
-            icon: Key,
-          },
-          {
-            title: t('Usage Logs'),
-            url: '/usage-logs/common',
-            icon: FileText,
-          },
-          {
-            title: t('Task Logs'),
+            title: t('Task'),
             url: '/usage-logs/task',
             icon: ListTodo,
           },
         ],
       },
       {
-        id: 'personal',
-        title: t('Personal'),
+        id: 'management',
+        title: t('Management'),
         items: [
+          {
+            title: t('API Keys'),
+            url: '/keys',
+            icon: Key,
+          },
           {
             title: t('Wallet'),
             url: '/wallet',
             icon: Wallet,
           },
           {
-            title: t('Profile'),
+            title: t('Settings'),
             url: '/profile',
-            icon: User,
+            icon: Settings,
           },
-        ],
-      },
-      {
-        id: 'admin',
-        title: t('Admin'),
-        items: [
           {
             title: t('Channels'),
             url: '/channels',
             icon: Radio,
+            requiredRole: ROLE.ADMIN,
           },
           {
             title: t('Models'),
             url: '/models/metadata',
             icon: Box,
+            requiredRole: ROLE.ADMIN,
           },
           {
             title: t('Users'),
             url: '/users',
             icon: Users,
+            requiredRole: ROLE.ADMIN,
+          },
+          {
+            title: t('Usage Logs'),
+            url: '/usage-logs/common',
+            icon: FileText,
+            requiredRole: ROLE.ADMIN,
+          },
+          {
+            title: t('Flow'),
+            url: '/dashboard/flow',
+            icon: GitBranch,
+            requiredRole: ROLE.ADMIN,
+          },
+          {
+            title: t('User Analytics'),
+            url: '/dashboard/users',
+            icon: BarChart3,
+            requiredRole: ROLE.ADMIN,
           },
           {
             title: t('Redemption Codes'),
             url: '/redemption-codes',
             icon: Ticket,
+            requiredRole: ROLE.ADMIN,
           },
           {
             title: t('Subscriptions'),
             url: '/subscriptions',
             icon: CreditCard,
+            requiredRole: ROLE.ADMIN,
           },
           {
             title: t('System Info'),
@@ -147,6 +169,7 @@ export function useSidebarData(): SidebarData {
             url: '/system-settings/site',
             activeUrls: ['/system-settings'],
             icon: Settings,
+            requiredRole: ROLE.ADMIN,
           },
         ],
       },

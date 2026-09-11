@@ -37,7 +37,6 @@ export interface FlowQuotaDataItem {
   user_id?: number
   username?: string
   node_name?: string
-  use_group?: string
   token_id?: number
   token_name?: string
   channel_id?: number
@@ -58,7 +57,6 @@ export type FlowNodeKind =
   | 'user'
   | 'node'
   | 'token'
-  | 'group'
   | 'model'
   | 'channel'
 
@@ -162,22 +160,6 @@ export interface ProcessedFlowData {
   summary: FlowSummary
   flow: DashboardFlowGraph
   filterOptions: FlowFilterOptions
-}
-
-// ============================================================================
-// Uptime Monitoring Types
-// ============================================================================
-
-export interface UptimeMonitor {
-  name: string
-  uptime: number
-  status: number
-  group?: string
-}
-
-export interface UptimeGroupResult {
-  categoryName: string
-  monitors: UptimeMonitor[]
 }
 
 // ============================================================================

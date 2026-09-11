@@ -54,14 +54,13 @@ export async function getUsers(
 }
 
 /**
- * Search users by keyword or group
+ * Search users by keyword
  */
 export async function searchUsers(
   params: SearchUsersParams
 ): Promise<GetUsersResponse> {
   const {
     keyword = '',
-    group = '',
     role = '',
     status = '',
     p = 1,
@@ -71,7 +70,6 @@ export async function searchUsers(
   } = params
   const queryParams = new URLSearchParams()
   queryParams.set('keyword', keyword)
-  queryParams.set('group', group)
   if (role) queryParams.set('role', role)
   if (status) queryParams.set('status', status)
   queryParams.set('p', String(p))
@@ -152,14 +150,6 @@ export async function resetUserPasskey(id: number): Promise<ApiResponse> {
  */
 export async function resetUserTwoFA(id: number): Promise<ApiResponse> {
   const res = await api.delete(`/api/user/${id}/2fa`)
-  return res.data
-}
-
-/**
- * Get all available groups
- */
-export async function getGroups(): Promise<ApiResponse<string[]>> {
-  const res = await api.get('/api/group/')
   return res.data
 }
 

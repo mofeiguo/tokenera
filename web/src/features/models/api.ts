@@ -28,11 +28,6 @@ import type {
   ModelChannelBinding,
   Vendor,
   SearchModelsParams,
-  SyncUpstreamResponse,
-  PreviewUpstreamDiffResponse,
-  SyncLocale,
-  SyncSource,
-  SyncOverwritePayload,
 } from './types'
 
 // ============================================================================
@@ -218,53 +213,4 @@ export async function deleteVendor(
 ): Promise<{ success: boolean; message?: string }> {
   const res = await api.delete(`/api/vendors/${id}`)
   return res.data
-}
-
-// ============================================================================
-// Sync Operations
-// ============================================================================
-
-/**
- * Sync upstream metadata onto existing catalog models (overwrite only)
- */
-export async function syncUpstream(params?: {
-  locale?: SyncLocale
-  source?: SyncSource
-  overwrite?: SyncOverwritePayload[]
-}): Promise<SyncUpstreamResponse> {
-  const res = await api.post('/api/models/sync_upstream', params)
-  return res.data
-}
-
-/**
- * Preview upstream diff
- */
-export async function previewUpstreamDiff(params?: {
-  locale?: SyncLocale
-  source?: SyncSource
-}): Promise<PreviewUpstreamDiffResponse> {
-  const searchParams = new URLSearchParams()
-  if (params?.locale) {
-    searchParams.set('locale', params.locale)
-  }
-  if (params?.source) {
-    searchParams.set('source', params.source)
-  }
-  const queryString = searchParams.toString()
-  const url = queryString
-    ? `/api/models/sync_upstream/preview?${queryString}`
-    : '/api/models/sync_upstream/preview'
-  const res = await api.get(url)
-  return res.data
-}
-
-/**
- * Apply upstream overwrite
- */
-export async function applyUpstreamOverwrite(params: {
-  overwrite: SyncOverwritePayload[]
-  locale?: SyncLocale
-  source?: SyncSource
-}): Promise<SyncUpstreamResponse> {
-  return syncUpstream(params)
 }

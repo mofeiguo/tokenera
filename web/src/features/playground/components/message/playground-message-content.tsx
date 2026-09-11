@@ -51,6 +51,7 @@ import { getMessageContentStyles } from '../../lib/message/message-styles'
 import type { Message } from '../../types'
 import { MessageError } from './message-error'
 import { MessageMetadata } from './message-metadata'
+import { PlaygroundMessageImages } from './playground-message-images'
 
 type PlaygroundMessageContentProps = {
   actions: ReactNode
@@ -108,11 +109,12 @@ export function PlaygroundMessageContent({
 
       {hasReasoning && (
         <Reasoning
-          defaultOpen
+          className='mb-1.5'
+          defaultOpen={false}
           duration={message.reasoning?.duration}
           isStreaming={message.isReasoningStreaming}
         >
-          <ReasoningTrigger />
+          <ReasoningTrigger className='text-xs' />
           <ReasoningContent>{reasoningContent}</ReasoningContent>
         </Reasoning>
       )}
@@ -136,7 +138,8 @@ export function PlaygroundMessageContent({
 
       {!isError && showMessageContent && (
         <>
-          {isSourceVisible ? (
+          <PlaygroundMessageImages images={message.images ?? []} />
+          {isSourceVisible && displayContent ? (
             <CodeBlock
               code={versionContent}
               className='my-0 group-[.is-assistant]:w-full group-[.is-assistant]:max-w-[78ch]'
@@ -150,14 +153,17 @@ export function PlaygroundMessageContent({
             >
               <CodeBlockCopyButton />
             </CodeBlock>
-          ) : (
+          ) : null}
+          {!isSourceVisible && displayContent ? (
             <MessageContent
               variant='flat'
               className={cn(getMessageContentStyles())}
             >
-              <Response final={isMessageFinal}>{displayContent}</Response>
+              <Response final={isMessageFinal} streamFade={false}>
+                {displayContent}
+              </Response>
             </MessageContent>
-          )}
+          ) : null}
           <MessageMetadata alignment={alignment} message={message} />
           {actions}
         </>

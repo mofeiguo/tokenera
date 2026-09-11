@@ -17,12 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ChevronDown, Loader2 } from 'lucide-react'
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { Loader2 } from 'lucide-react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import * as z from 'zod'
 
 import {
   SideDrawerSection,
@@ -36,11 +35,6 @@ import { JsonEditor } from '@/components/json-editor'
 import { MultiSelect } from '@/components/multi-select'
 import { TagInput } from '@/components/tag-input'
 import { Button } from '@/components/ui/button'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
 import {
   Form,
   FormControl,
@@ -73,12 +67,6 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { getChannels } from '@/features/channels/api'
-import {
-  useSystemOptions,
-  getOptionValue,
-} from '@/features/system-settings/hooks/use-system-options'
-import type { ModelSettings } from '@/features/system-settings/types'
-import { safeJsonParse } from '@/features/system-settings/utils/json-parser'
 import { useQuery, useQueryClient } from '@/lib/query'
 
 import {
@@ -91,7 +79,12 @@ import {
 } from '../../api'
 import { getNameRuleOptions, ENDPOINT_TEMPLATES } from '../../constants'
 import { modelsQueryKeys, vendorsQueryKeys, parseModelTags } from '../../lib'
-import type { Model, ModelChannelBinding } from '../../types'
+import {
+  modelFormSchema,
+  type Model,
+  type ModelChannelBinding,
+  type ModelFormValues,
+} from '../../types'
 import { ModelChannelBindingsEditor } from '../model-channel-bindings-editor'
 
 const MODALITY_VALUES = ['text', 'image', 'audio', 'video', 'file'] as const
@@ -109,202 +102,6 @@ const CAPABILITY_VALUES = [
   'embeddings',
 ] as const
 
-// Extended schema for ratio configuration (internal form state only)
-const extendedModelFormSchema = z.object({
-  id: z.number().optional(),
-  model_name: z.string().min(1, 'Model name is required'),
-  description: z.string(),
-  icon: z.string(),
-  tags: z.array(z.string()),
-  input_modalities: z.array(z.enum(MODALITY_VALUES)),
-  output_modalities: z.array(z.enum(MODALITY_VALUES)),
-  capabilities: z.array(z.enum(CAPABILITY_VALUES)),
-  context_length: z.number().int().min(0),
-  max_output_tokens: z.number().int().min(0),
-  vendor_id: z.number().optional(),
-  endpoints: z.string(),
-  name_rule: z.number(),
-  status: z.boolean(),
-  sync_official: z.boolean(),
-  price: z.string().optional(),
-  ratio: z.string().optional(),
-  cacheRatio: z.string().optional(),
-  completionRatio: z.string().optional(),
-  imageRatio: z.string().optional(),
-  audioRatio: z.string().optional(),
-  audioCompletionRatio: z.string().optional(),
-})
-
-type ExtendedModelFormValues = z.infer<typeof extendedModelFormSchema>
-
-type PricingMode = 'per-token' | 'per-request'
-type PricingSubMode = 'ratio' | 'price'
-
-type PricingFields = Pick<
-  ExtendedModelFormValues,
-  | 'price'
-  | 'ratio'
-  | 'cacheRatio'
-  | 'completionRatio'
-  | 'imageRatio'
-  | 'audioRatio'
-  | 'audioCompletionRatio'
->
-
-// Form state describing the pricing currently configured for one model name.
-type PricingConfig = {
-  mode: PricingMode
-  fields: PricingFields
-  promptPrice: string
-  completionPrice: string
-  advancedOpen: boolean
-}
-
-const EMPTY_PRICING_FIELDS: PricingFields = {
-  price: '',
-  ratio: '',
-  cacheRatio: '',
-  completionRatio: '',
-  imageRatio: '',
-  audioRatio: '',
-  audioCompletionRatio: '',
-}
-
-const EMPTY_PRICING_CONFIG: PricingConfig = {
-  mode: 'per-token',
-  fields: EMPTY_PRICING_FIELDS,
-  promptPrice: '',
-  completionPrice: '',
-  advancedOpen: false,
-}
-
-function lookupModelRatio(
-  rawMap: string,
-  modelName: string
-): number | undefined {
-  return safeJsonParse<Record<string, number>>(rawMap, {
-    fallback: {},
-    silent: true,
-  })[modelName]
-}
-
-// Pricing is not stored on the model row: it lives in system options as
-// model-name keyed JSON maps, so it has to be read back out of those maps to
-// populate the form. Both create and edit rely on this, because submit rebuilds
-// the maps from the form and would otherwise drop pricing it never loaded.
-function readPricingConfig(
-  settings: ModelSettings | null,
-  modelName: string,
-  catalogModel?: Model
-): PricingConfig {
-  if (!modelName) return EMPTY_PRICING_CONFIG
-
-  if (
-    catalogModel?.pricing_mode === 'per_request' &&
-    catalogModel.model_price != null
-  ) {
-    return {
-      ...EMPTY_PRICING_CONFIG,
-      mode: 'per-request',
-      fields: {
-        ...EMPTY_PRICING_FIELDS,
-        price: catalogModel.model_price.toString(),
-      },
-    }
-  }
-  if (
-    catalogModel?.pricing_mode === 'per_token' &&
-    catalogModel.model_ratio != null
-  ) {
-    const promptPrice = (catalogModel.model_ratio * 2).toString()
-    return {
-      mode: 'per-token',
-      fields: {
-        price: '',
-        ratio: catalogModel.model_ratio.toString(),
-        cacheRatio: catalogModel.cache_ratio?.toString() || '',
-        completionRatio: catalogModel.completion_ratio?.toString() || '',
-        imageRatio: catalogModel.image_ratio?.toString() || '',
-        audioRatio: catalogModel.audio_ratio?.toString() || '',
-        audioCompletionRatio:
-          catalogModel.audio_completion_ratio?.toString() || '',
-      },
-      promptPrice,
-      completionPrice:
-        catalogModel.completion_ratio != null
-          ? (
-              catalogModel.model_ratio *
-              2 *
-              catalogModel.completion_ratio
-            ).toString()
-          : '',
-      advancedOpen: [
-        catalogModel.cache_ratio,
-        catalogModel.image_ratio,
-        catalogModel.audio_ratio,
-        catalogModel.audio_completion_ratio,
-      ].some((value) => value !== undefined && value !== null),
-    }
-  }
-
-  if (!settings) return EMPTY_PRICING_CONFIG
-
-  const price = lookupModelRatio(settings.ModelPrice, modelName)
-  const ratio = lookupModelRatio(settings.ModelRatio, modelName)
-  const cacheRatio = lookupModelRatio(settings.CacheRatio, modelName)
-  const completionRatio = lookupModelRatio(settings.CompletionRatio, modelName)
-  const imageRatio = lookupModelRatio(settings.ImageRatio, modelName)
-  const audioRatio = lookupModelRatio(settings.AudioRatio, modelName)
-  const audioCompletionRatio = lookupModelRatio(
-    settings.AudioCompletionRatio,
-    modelName
-  )
-
-  // A fixed per-request price wins outright at billing time (see
-  // GetModelRatioOrPrice), so a name that has one is shown, and saved back, as
-  // price-only: the ratios alongside it are dead weight.
-  if (price !== undefined && price !== null) {
-    return {
-      ...EMPTY_PRICING_CONFIG,
-      mode: 'per-request',
-      fields: { ...EMPTY_PRICING_FIELDS, price: price.toString() },
-    }
-  }
-
-  let promptPrice = ''
-  let completionPrice = ''
-  if (ratio !== undefined && ratio !== null) {
-    const tokenPrice = ratio * 2
-    promptPrice = tokenPrice.toString()
-    if (completionRatio !== undefined && completionRatio !== null) {
-      completionPrice = (tokenPrice * completionRatio).toString()
-    }
-  }
-
-  return {
-    mode: 'per-token',
-    fields: {
-      price: '',
-      ratio: ratio?.toString() || '',
-      cacheRatio: cacheRatio?.toString() || '',
-      completionRatio: completionRatio?.toString() || '',
-      imageRatio: imageRatio?.toString() || '',
-      audioRatio: audioRatio?.toString() || '',
-      audioCompletionRatio: audioCompletionRatio?.toString() || '',
-    },
-    promptPrice,
-    completionPrice,
-    // Configured is not the same as non-zero: a 0 ratio (free cache reads, for
-    // instance) still has to be visible rather than hidden behind the collapse.
-    advancedOpen: [
-      cacheRatio,
-      imageRatio,
-      audioRatio,
-      audioCompletionRatio,
-    ].some((value) => value !== undefined && value !== null),
-  }
-}
-
 type ModelMutateDrawerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -321,18 +118,9 @@ export function ModelMutateDrawer({
   const currentModelId = currentRow?.id
   const isEditing = Boolean(currentModelId)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [pricingMode, setPricingMode] = useState<PricingMode>('per-token')
-  const [pricingSubMode, setPricingSubMode] = useState<PricingSubMode>('ratio')
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [promptPrice, setPromptPrice] = useState('')
-  const [completionPrice, setCompletionPrice] = useState('')
   const [channelBindings, setChannelBindings] = useState<ModelChannelBinding[]>(
     []
   )
-  // Keep a ref so the load effect can read the latest modelSettings without
-  // depending on it: modelSettings is a fresh object on every system-options
-  // refetch, and including it in the deps would reset the form under the user.
-  const modelSettingsRef = useRef<ModelSettings | null>(null)
 
   // Fetch vendors for dropdown
   const { data: vendorsData } = useQuery({
@@ -368,81 +156,6 @@ export function ModelMutateDrawer({
     enabled: open && isEditing,
   })
 
-  // Fetch system options for ratio configuration
-  const { data: systemOptionsData } = useSystemOptions()
-
-  // Get model settings from system options
-  const modelSettings = useMemo(() => {
-    if (!systemOptionsData?.data) return null
-    const defaultModelSettings: ModelSettings = {
-      'global.thinking_model_blacklist': '[]',
-      'general_setting.ping_interval_enabled': false,
-      'general_setting.ping_interval_seconds': 60,
-      'gemini.safety_settings': '',
-      'gemini.version_settings': '',
-      'gemini.supported_imagine_models': '',
-      'gemini.thinking_adapter_enabled': false,
-      'gemini.thinking_adapter_budget_tokens_percentage': 0.6,
-      'gemini.function_call_thought_signature_enabled': false,
-      'gemini.remove_function_response_id_enabled': true,
-      'claude.model_headers_settings': '',
-      'claude.default_max_tokens': '',
-      'claude.thinking_adapter_enabled': true,
-      'claude.thinking_adapter_budget_tokens_percentage': 0.8,
-      ModelPrice: '',
-      ModelRatio: '',
-      CacheRatio: '',
-      CompletionRatio: '',
-      ImageRatio: '',
-      AudioRatio: '',
-      AudioCompletionRatio: '',
-      ExposeRatioEnabled: false,
-      'billing_setting.billing_mode': '{}',
-      'billing_setting.billing_expr': '{}',
-      'tool_price_setting.prices': '{}',
-      TopupGroupRatio: '',
-      GroupRatio: '',
-      UserUsableGroups: '',
-      GroupInherit: '',
-      GroupGroupRatio: '',
-      AutoGroups: '',
-      MaxTokenAutoGroups: 5,
-      DefaultUseAutoGroup: false,
-      CreateCacheRatio: '',
-      'group_ratio_setting.group_special_usable_group': '{}',
-      'grok.violation_deduction_enabled': false,
-      'grok.violation_deduction_amount': 0,
-      RetryTimes: 0,
-      ChannelDisableThreshold: '',
-      AutomaticDisableChannelEnabled: false,
-      AutomaticEnableChannelEnabled: false,
-      AutomaticDisableKeywords: '',
-      AutomaticDisableStatusCodes: '401',
-      AutomaticRetryStatusCodes:
-        '100-199,300-399,401-407,409-499,500-503,505-523,525-599',
-      'monitor_setting.auto_test_channel_enabled': false,
-      'monitor_setting.auto_test_channel_minutes': 10,
-      'monitor_setting.channel_test_concurrency': 1,
-      'monitor_setting.channel_test_mode': 'scheduled_all',
-      'channel_affinity_setting.enabled': false,
-      'channel_affinity_setting.switch_on_success': true,
-      'channel_affinity_setting.keep_on_channel_disabled': false,
-      'channel_affinity_setting.max_entries': 100000,
-      'channel_affinity_setting.default_ttl_seconds': 3600,
-      'channel_affinity_setting.rules': '[]',
-    }
-    return getOptionValue(systemOptionsData.data, defaultModelSettings)
-  }, [systemOptionsData])
-
-  // The load effect keys off this boolean, not the object: it re-runs once
-  // when the settings first arrive (so a drawer opened before that still gets
-  // its pricing prefilled), while later refetches only produce a new object
-  // reference and must not reset a form the user may be editing.
-  const hasModelSettings = modelSettings !== null
-  useEffect(() => {
-    modelSettingsRef.current = modelSettings
-  })
-
   useEffect(() => {
     if (!open) return
     if (!isEditing) {
@@ -454,12 +167,11 @@ export function ModelMutateDrawer({
     }
   }, [open, isEditing, bindingsData])
 
-  const form = useForm<ExtendedModelFormValues>({
-    resolver: zodResolver(extendedModelFormSchema),
+  const form = useForm<ModelFormValues>({
+    resolver: zodResolver(modelFormSchema),
     defaultValues: {
       model_name: '',
       description: '',
-      icon: '',
       tags: [],
       input_modalities: [],
       output_modalities: [],
@@ -470,67 +182,26 @@ export function ModelMutateDrawer({
       endpoints: '',
       name_rule: 0,
       status: true,
-      sync_official: true,
-      price: '',
-      ratio: '',
-      cacheRatio: '',
-      completionRatio: '',
-      imageRatio: '',
-      audioRatio: '',
-      audioCompletionRatio: '',
     },
   })
 
-  const validateNumber = (value: string) => {
-    if (value === '') return true
-    return !Number.isNaN(Number.parseFloat(value))
-  }
+  const loadedFormKeyRef = useRef('')
 
-  const handlePromptPriceChange = (value: string) => {
-    setPromptPrice(value)
-    if (value && !Number.isNaN(Number.parseFloat(value))) {
-      const ratio = Number.parseFloat(value) / 2
-      form.setValue('ratio', ratio.toString())
-    } else {
-      form.setValue('ratio', '')
-    }
-  }
-
-  const handleCompletionPriceChange = (value: string) => {
-    setCompletionPrice(value)
-    if (
-      value &&
-      !Number.isNaN(Number.parseFloat(value)) &&
-      promptPrice &&
-      !Number.isNaN(Number.parseFloat(promptPrice)) &&
-      Number.parseFloat(promptPrice) > 0
-    ) {
-      const completionRatio =
-        Number.parseFloat(value) / Number.parseFloat(promptPrice)
-      form.setValue('completionRatio', completionRatio.toString())
-    } else {
-      form.setValue('completionRatio', '')
-    }
-  }
-
-  // Load model data for editing and ratio configuration
   useEffect(() => {
+    if (!open) {
+      loadedFormKeyRef.current = ''
+      return
+    }
+
     if (open && isEditing && modelData?.data) {
+      const loadKey = `edit-${currentModelId}`
+      if (loadedFormKeyRef.current === loadKey) return
+      loadedFormKeyRef.current = loadKey
       const model = modelData.data
-      const pricing = readPricingConfig(
-        modelSettingsRef.current,
-        model.model_name,
-        model
-      )
-      setPricingMode(pricing.mode)
-      setPromptPrice(pricing.promptPrice)
-      setCompletionPrice(pricing.completionPrice)
-      setAdvancedOpen(pricing.advancedOpen)
       form.reset({
         id: model.id,
         model_name: model.model_name,
         description: model.description || '',
-        icon: model.icon || '',
         tags: parseModelTags(model.tags),
         input_modalities: model.input_modalities || [],
         output_modalities: model.output_modalities || [],
@@ -541,23 +212,14 @@ export function ModelMutateDrawer({
         endpoints: model.endpoints || '',
         name_rule: model.name_rule || 0,
         status: model.status === 1,
-        sync_official: model.sync_official === 1,
-        ...pricing.fields,
       })
     } else if (open && !isEditing) {
-      // Pre-fill model name when creating from an existing name, along with
-      // any pricing that name already has.
-      const modelName = currentRow?.model_name || ''
-      const pricing = readPricingConfig(modelSettingsRef.current, modelName)
-      setPricingSubMode('ratio')
-      setPricingMode(pricing.mode)
-      setPromptPrice(pricing.promptPrice)
-      setCompletionPrice(pricing.completionPrice)
-      setAdvancedOpen(pricing.advancedOpen)
+      const loadKey = `create-${currentRow?.model_name ?? ''}`
+      if (loadedFormKeyRef.current === loadKey) return
+      loadedFormKeyRef.current = loadKey
       form.reset({
-        model_name: modelName,
+        model_name: currentRow?.model_name || '',
         description: '',
-        icon: '',
         tags: [],
         input_modalities: [],
         output_modalities: [],
@@ -568,14 +230,12 @@ export function ModelMutateDrawer({
         endpoints: '',
         name_rule: 0,
         status: true,
-        sync_official: true,
-        ...pricing.fields,
       })
     }
-  }, [open, isEditing, modelData, currentRow, form, hasModelSettings])
+  }, [open, isEditing, modelData, currentRow, form, currentModelId])
 
   const onSubmit = useCallback(
-    async (values: ExtendedModelFormValues): Promise<void> => {
+    async (values: ModelFormValues): Promise<void> => {
       if (values.name_rule !== 0 && channelBindings.length > 0) {
         toast.error(t('Only exact models can have channel bindings'))
         return
@@ -584,13 +244,17 @@ export function ModelMutateDrawer({
         toast.error(t('Select a channel for every binding'))
         return
       }
-      const bindingKeys = new Set<number>()
+      const bindingKeys = new Set<string>()
       for (const binding of channelBindings) {
-        if (bindingKeys.has(binding.channel_id)) {
-          toast.error(t('Duplicate channel bindings are not allowed'))
+        const upstreamModel = binding.upstream_model?.trim() ?? ''
+        const bindingKey = `${binding.channel_id}::${upstreamModel}`
+        if (bindingKeys.has(bindingKey)) {
+          toast.error(
+            t('Duplicate channel and upstream model bindings are not allowed')
+          )
           return
         }
-        bindingKeys.add(binding.channel_id)
+        bindingKeys.add(bindingKey)
         if (!binding.upstream_model?.trim()) {
           toast.error(t('Select a channel model for every binding'))
           return
@@ -598,74 +262,12 @@ export function ModelMutateDrawer({
       }
       setIsSubmitting(true)
       try {
-        const hasRatioConfig =
-          (pricingMode === 'per-request' &&
-            values.price &&
-            values.price !== '') ||
-          (pricingMode === 'per-token' &&
-            (values.ratio ||
-              values.cacheRatio ||
-              values.completionRatio ||
-              values.imageRatio ||
-              values.audioRatio ||
-              values.audioCompletionRatio))
-        let pricingModeValue: Model['pricing_mode'] = ''
-        if (hasRatioConfig) {
-          pricingModeValue =
-            pricingMode === 'per-request' ? 'per_request' : 'per_token'
-        }
-        const submitData = {
+        const modelPayload = {
           ...values,
           id: isEditing ? currentModelId : undefined,
           tags: Array.isArray(values.tags) ? values.tags.join(',') : '',
           status: values.status ? 1 : 0,
-          sync_official: values.sync_official ? 1 : 0,
-          pricing_mode: pricingModeValue,
-          model_price:
-            pricingMode === 'per-request' && values.price
-              ? Number.parseFloat(values.price)
-              : null,
-          model_ratio:
-            pricingMode === 'per-token' && values.ratio
-              ? Number.parseFloat(values.ratio)
-              : null,
-          completion_ratio:
-            pricingMode === 'per-token' && values.completionRatio
-              ? Number.parseFloat(values.completionRatio)
-              : null,
-          cache_ratio:
-            pricingMode === 'per-token' && values.cacheRatio
-              ? Number.parseFloat(values.cacheRatio)
-              : null,
-          create_cache_ratio:
-            pricingMode === 'per-token'
-              ? (modelData?.data?.create_cache_ratio ?? null)
-              : null,
-          image_ratio:
-            pricingMode === 'per-token' && values.imageRatio
-              ? Number.parseFloat(values.imageRatio)
-              : null,
-          audio_ratio:
-            pricingMode === 'per-token' && values.audioRatio
-              ? Number.parseFloat(values.audioRatio)
-              : null,
-          audio_completion_ratio:
-            pricingMode === 'per-token' && values.audioCompletionRatio
-              ? Number.parseFloat(values.audioCompletionRatio)
-              : null,
         }
-
-        // Remove ratio fields from model data (they're stored in system settings)
-        const {
-          price,
-          ratio,
-          cacheRatio,
-          completionRatio,
-          imageRatio,
-          audioRatio,
-          audioCompletionRatio,
-          ...modelPayload
-        } = submitData
 
         const response =
           isEditing && currentModelId
@@ -689,8 +291,6 @@ export function ModelMutateDrawer({
             })
           }
           queryClient.invalidateQueries({ queryKey: ['channels'] })
-          queryClient.invalidateQueries({ queryKey: ['system-options'] })
-          queryClient.invalidateQueries({ queryKey: ['pricing'] })
           onOpenChange(false)
         } else {
           toast.error(response.message || 'Operation failed')
@@ -701,16 +301,7 @@ export function ModelMutateDrawer({
         setIsSubmitting(false)
       }
     },
-    [
-      isEditing,
-      currentModelId,
-      queryClient,
-      onOpenChange,
-      pricingMode,
-      modelData?.data?.create_cache_ratio,
-      channelBindings,
-      t,
-    ]
+    [isEditing, currentModelId, queryClient, onOpenChange, channelBindings, t]
   )
 
   const handleFillEndpointTemplate = (templateKey: string) => {
@@ -784,26 +375,6 @@ export function ModelMutateDrawer({
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name='icon'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Icon')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder={t('OpenAI, Anthropic, etc.')}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription className='text-xs'>
-                      {t('@lobehub/icons key')}
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1058,7 +629,7 @@ export function ModelMutateDrawer({
                 </h3>
                 <p className='text-muted-foreground text-sm'>
                   {t(
-                    'Bind this public model to one upstream model on each channel. Channel groups control who can call it. Priority is tried first; weight splits traffic among bindings with the same priority.'
+                    'Priority is tried first (higher first). Weight splits traffic among bindings with the same priority.'
                   )}
                 </p>
               </div>
@@ -1134,352 +705,8 @@ export function ModelMutateDrawer({
               />
             </SideDrawerSection>
 
-            {/* Pricing Configuration */}
             <SideDrawerSection>
-              <h3 className='text-sm font-semibold'>
-                {t('Pricing Configuration')}
-              </h3>
-
-              <div className='space-y-4'>
-                <Label>{t('Pricing mode')}</Label>
-                <RadioGroup
-                  value={pricingMode}
-                  onValueChange={(value) =>
-                    setPricingMode(value as PricingMode)
-                  }
-                >
-                  <div className='flex items-center space-x-2'>
-                    <RadioGroupItem value='per-token' id='per-token' />
-                    <Label htmlFor='per-token' className='font-normal'>
-                      {t('Per-token (ratio based)')}
-                    </Label>
-                  </div>
-                  <div className='flex items-center space-x-2'>
-                    <RadioGroupItem value='per-request' id='per-request' />
-                    <Label htmlFor='per-request' className='font-normal'>
-                      {t('Per-request (fixed price)')}
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              {pricingMode === 'per-request' ? (
-                <FormField
-                  control={form.control}
-                  name='price'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Fixed price (USD)')}</FormLabel>
-                      <FormControl>
-                        <Input
-                          type='text'
-                          placeholder='0.01'
-                          {...field}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            if (validateNumber(value)) {
-                              field.onChange(value)
-                            }
-                          }}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        {t(
-                          'Cost in USD per request, regardless of tokens used.'
-                        )}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              ) : (
-                <>
-                  <div className='space-y-4'>
-                    <Label>{t('Input mode')}</Label>
-                    <RadioGroup
-                      value={pricingSubMode}
-                      onValueChange={(value) =>
-                        setPricingSubMode(value as PricingSubMode)
-                      }
-                    >
-                      <div className='flex items-center space-x-2'>
-                        <RadioGroupItem value='ratio' id='ratio' />
-                        <Label htmlFor='ratio' className='font-normal'>
-                          {t('Ratio mode')}
-                        </Label>
-                      </div>
-                      <div className='flex items-center space-x-2'>
-                        <RadioGroupItem value='price' id='price' />
-                        <Label htmlFor='price' className='font-normal'>
-                          {t('Price mode (USD per 1M tokens)')}
-                        </Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
-
-                  {pricingSubMode === 'ratio' ? (
-                    <>
-                      <FormField
-                        control={form.control}
-                        name='ratio'
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('Model ratio')}</FormLabel>
-                            <FormControl>
-                              <Input
-                                type='text'
-                                placeholder='1.0'
-                                {...field}
-                                onChange={(e) => {
-                                  const value = e.target.value
-                                  if (validateNumber(value)) {
-                                    field.onChange(value)
-                                    if (value) {
-                                      setPromptPrice(
-                                        (
-                                          Number.parseFloat(value) * 2
-                                        ).toString()
-                                      )
-                                    } else {
-                                      setPromptPrice('')
-                                    }
-                                  }
-                                }}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              {field.value &&
-                              !Number.isNaN(Number.parseFloat(field.value))
-                                ? `Calculated price: $${(Number.parseFloat(field.value) * 2).toFixed(4)} per 1M tokens`
-                                : t('Multiplier for prompt tokens.')}
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name='completionRatio'
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('Completion ratio')}</FormLabel>
-                            <FormControl>
-                              <Input
-                                type='text'
-                                placeholder='1.0'
-                                {...field}
-                                onChange={(e) => {
-                                  const value = e.target.value
-                                  if (validateNumber(value)) {
-                                    field.onChange(value)
-                                    const ratio = form.getValues('ratio')
-                                    if (value && ratio) {
-                                      const compPrice =
-                                        Number.parseFloat(ratio) *
-                                        2 *
-                                        Number.parseFloat(value)
-                                      setCompletionPrice(compPrice.toString())
-                                    } else {
-                                      setCompletionPrice('')
-                                    }
-                                  }
-                                }}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              {field.value &&
-                              !Number.isNaN(Number.parseFloat(field.value)) &&
-                              promptPrice &&
-                              !Number.isNaN(Number.parseFloat(promptPrice))
-                                ? `Calculated price: $${(Number.parseFloat(promptPrice) * Number.parseFloat(field.value)).toFixed(4)} per 1M tokens`
-                                : t('Multiplier for completion tokens.')}
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </>
-                  ) : (
-                    <div className='space-y-4'>
-                      <div className='space-y-2'>
-                        <Label>{t('Prompt price ($/1M tokens)')}</Label>
-                        <Input
-                          type='text'
-                          placeholder='2.0'
-                          value={promptPrice}
-                          onChange={(e) =>
-                            handlePromptPriceChange(e.target.value)
-                          }
-                        />
-                        <p className='text-muted-foreground text-sm'>
-                          {promptPrice &&
-                          !Number.isNaN(Number.parseFloat(promptPrice))
-                            ? `Calculated ratio: ${(Number.parseFloat(promptPrice) / 2).toFixed(4)}`
-                            : t('Enter Input price to calculate ratio')}
-                        </p>
-                      </div>
-
-                      <div className='space-y-2'>
-                        <Label>{t('Completion price ($/1M tokens)')}</Label>
-                        <Input
-                          type='text'
-                          placeholder='4.0'
-                          value={completionPrice}
-                          onChange={(e) =>
-                            handleCompletionPriceChange(e.target.value)
-                          }
-                        />
-                        <p className='text-muted-foreground text-sm'>
-                          {completionPrice &&
-                          !Number.isNaN(Number.parseFloat(completionPrice)) &&
-                          promptPrice &&
-                          !Number.isNaN(Number.parseFloat(promptPrice)) &&
-                          Number.parseFloat(promptPrice) > 0
-                            ? `Calculated ratio: ${(Number.parseFloat(completionPrice) / Number.parseFloat(promptPrice)).toFixed(4)}`
-                            : t('Enter Completion price to calculate ratio')}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  <Collapsible
-                    open={advancedOpen}
-                    onOpenChange={setAdvancedOpen}
-                  >
-                    <CollapsibleTrigger
-                      render={
-                        <Button
-                          type='button'
-                          variant='outline'
-                          className='flex w-full items-center justify-between'
-                        />
-                      }
-                    >
-                      {t('Advanced options')}
-                      <ChevronDown
-                        className={`h-4 w-4 transition-transform duration-200 ${
-                          advancedOpen ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className='flex flex-col gap-4 pt-4'>
-                      <FormField
-                        control={form.control}
-                        name='cacheRatio'
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('Cache ratio')}</FormLabel>
-                            <FormControl>
-                              <Input
-                                type='text'
-                                placeholder='0.1'
-                                {...field}
-                                onChange={(e) => {
-                                  const value = e.target.value
-                                  if (validateNumber(value)) {
-                                    field.onChange(value)
-                                  }
-                                }}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              {t('Discount ratio for cache hits.')}
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name='imageRatio'
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('Image ratio')}</FormLabel>
-                            <FormControl>
-                              <Input
-                                type='text'
-                                placeholder='1.0'
-                                {...field}
-                                onChange={(e) => {
-                                  const value = e.target.value
-                                  if (validateNumber(value)) {
-                                    field.onChange(value)
-                                  }
-                                }}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              {t('Multiplier for image processing.')}
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name='audioRatio'
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('Audio ratio')}</FormLabel>
-                            <FormControl>
-                              <Input
-                                type='text'
-                                placeholder='1.0'
-                                {...field}
-                                onChange={(e) => {
-                                  const value = e.target.value
-                                  if (validateNumber(value)) {
-                                    field.onChange(value)
-                                  }
-                                }}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              {t('Multiplier for audio inputs.')}
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name='audioCompletionRatio'
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('Audio completion ratio')}</FormLabel>
-                            <FormControl>
-                              <Input
-                                type='text'
-                                placeholder='1.0'
-                                {...field}
-                                onChange={(e) => {
-                                  const value = e.target.value
-                                  if (validateNumber(value)) {
-                                    field.onChange(value)
-                                  }
-                                }}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              {t('Multiplier for audio outputs.')}
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </CollapsibleContent>
-                  </Collapsible>
-                </>
-              )}
-            </SideDrawerSection>
-
-            {/* Status & Sync */}
-            <SideDrawerSection>
-              <h3 className='text-sm font-semibold'>{t('Status & Sync')}</h3>
+              <h3 className='text-sm font-semibold'>{t('Status')}</h3>
 
               <FormField
                 control={form.control}
@@ -1492,29 +719,6 @@ export function ModelMutateDrawer({
                       </FormLabel>
                       <FormDescription>
                         {t('Enable or disable this model')}
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name='sync_official'
-                render={({ field }) => (
-                  <FormItem className={sideDrawerSwitchItemClassName()}>
-                    <div className='flex flex-col gap-0.5'>
-                      <FormLabel className='text-base'>
-                        {t('Official Sync')}
-                      </FormLabel>
-                      <FormDescription>
-                        {t('Sync this model with official upstream')}
                       </FormDescription>
                     </div>
                     <FormControl>

@@ -44,7 +44,7 @@ export function HowItWorks() {
     <section className='bg-muted/35 border-y py-24 md:py-32'>
       <div className='mx-auto grid max-w-7xl gap-14 px-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-end lg:gap-24'>
         <div>
-          <h2 className='font-display text-foreground max-w-xl min-w-0 text-4xl font-bold tracking-[-0.035em] [overflow-wrap:anywhere] md:text-5xl'>
+          <h2 className='font-display text-foreground max-w-xl min-w-0 text-4xl font-bold tracking-[-0.03em] [overflow-wrap:anywhere] md:text-5xl'>
             {t('The bill should never be a surprise.')}
           </h2>
           <p className='text-muted-foreground mt-6 max-w-xl text-base leading-7 md:text-lg'>

@@ -56,18 +56,9 @@ export type NavCollapsible = BaseNavItem & {
 }
 
 /**
- * Dynamic chat presets type - dynamically loaded chat preset list from API
- */
-export type NavChatPresets = BaseNavItem & {
-  type: 'chat-presets'
-  url?: never
-  items?: never
-}
-
-/**
  * Navigation item union type
  */
-export type NavItem = NavCollapsible | NavLink | NavChatPresets
+export type NavItem = NavCollapsible | NavLink
 
 /**
  * Navigation group type - a group of navigation items in sidebar
@@ -76,6 +67,7 @@ export type NavGroup = {
   id?: string
   title: string
   items: NavItem[]
+  collapsible?: boolean
 }
 
 /**

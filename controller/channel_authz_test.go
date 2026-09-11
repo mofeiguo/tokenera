@@ -24,17 +24,14 @@ func TestChannelHasSensitiveChanges(t *testing.T) {
 		BaseURL:        &baseURL,
 		HeaderOverride: &headerOverride,
 		Models:         "gpt-4o",
-		Group:          "default",
 	}
 
 	t.Run("non-sensitive routing fields", func(t *testing.T) {
 		updated := PatchChannel{Channel: *origin}
 		updated.Models = "gpt-4o,gpt-4o-mini"
-		updated.Group = "vip"
 
 		assert.False(t, channelHasSensitiveChanges(&updated, origin, map[string]any{
 			"models": updated.Models,
-			"group":  updated.Group,
 		}))
 	})
 
@@ -64,9 +61,9 @@ func TestChannelHasSensitiveChanges(t *testing.T) {
 	t.Run("omitted sensitive fields do not use zero values", func(t *testing.T) {
 		updated := PatchChannel{}
 		updated.Id = origin.Id
-		updated.Priority = origin.Priority
+		updated.Remark = origin.Remark
 
-		assert.False(t, channelHasSensitiveChanges(&updated, origin, map[string]any{"priority": 10}))
+		assert.False(t, channelHasSensitiveChanges(&updated, origin, map[string]any{"remark": "ops note"}))
 	})
 
 	t.Run("unknown field fails closed", func(t *testing.T) {
@@ -105,7 +102,6 @@ func TestClearChannelReadOnlyFields(t *testing.T) {
 		BalanceUpdatedTime: 55,
 		UsedQuota:          66,
 		Models:             "gpt-4o",
-		Group:              "default",
 	}}
 
 	clearChannelReadOnlyFields(&channel, map[string]any{
@@ -116,7 +112,6 @@ func TestClearChannelReadOnlyFields(t *testing.T) {
 		"balance_updated_time": channel.BalanceUpdatedTime,
 		"used_quota":           channel.UsedQuota,
 		"models":               channel.Models,
-		"group":                channel.Group,
 	})
 
 	assert.Zero(t, channel.CreatedTime)
@@ -126,7 +121,6 @@ func TestClearChannelReadOnlyFields(t *testing.T) {
 	assert.Zero(t, channel.BalanceUpdatedTime)
 	assert.Zero(t, channel.UsedQuota)
 	assert.Equal(t, "gpt-4o", channel.Models)
-	assert.Equal(t, "default", channel.Group)
 }
 
 func TestUpdateChannelRejectsStatusField(t *testing.T) {

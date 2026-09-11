@@ -236,4 +236,45 @@ describe('latest-wins stream request coordination', () => {
 
     expect(updates).toEqual(['hello'])
   })
+
+  test('completes stream when receiving Gemini terminal message with finishReason', async () => {
+    const sources: FakeStreamSource[] = []
+    const updates: string[] = []
+    let completed = false
+    const streamingStates: boolean[] = []
+    const controller = createStreamRequestController({
+      getHeaders: () => Promise.resolve({ Authorization: 'Bearer current' }),
+      createSource: () => {
+        const source = new FakeStreamSource()
+        sources.push(source)
+        return source
+      },
+      setStreaming: (streaming) => streamingStates.push(streaming),
+    })
+
+    await controller.send(payload, {
+      onUpdate: (_type, chunk) => updates.push(chunk),
+      onComplete: () => {
+        completed = true
+      },
+      onError: () => undefined,
+    })
+
+    sources[0]?.emit(
+      'message',
+      JSON.stringify({
+        candidates: [
+          {
+            content: { parts: [{ text: 'final response' }] },
+            finishReason: 'STOP',
+          },
+        ],
+      })
+    )
+
+    expect(updates).toEqual(['final response'])
+    expect(completed).toBe(true)
+    expect(sources[0]?.closed).toBe(true)
+    expect(streamingStates).toEqual([false, true, false])
+  })
 })

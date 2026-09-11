@@ -16,12 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-@import '@fontsource-variable/inter';
+@import '../assets/fonts/satoshi/satoshi.css';
 @import '@fontsource-variable/geist-mono';
-@import '@fontsource/plus-jakarta-sans/500.css';
-@import '@fontsource/plus-jakarta-sans/600.css';
-@import '@fontsource/plus-jakarta-sans/700.css';
-@import '@fontsource/plus-jakarta-sans/800.css';
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
@@ -90,7 +86,7 @@ For commercial licensing, please contact support@quantumnous.com
     @apply bg-background text-foreground has-[div[data-variant='inset']]:bg-sidebar min-h-svh w-full overflow-x-clip;
     font-family: var(--font-body);
     line-height: 1.5;
-    letter-spacing: 0;
+    letter-spacing: -0.011em;
   }
   html.theme-transition body,
   html.theme-transition header,
@@ -105,8 +101,8 @@ For commercial licensing, please contact support@quantumnous.com
   }
   :where(h1, h2, h3) {
     text-wrap: balance;
-    letter-spacing: -0.025em;
-    line-height: 1.12;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
   }
 
   /* Keep sticky headers stable while primitives lock body scrolling. */
@@ -325,7 +321,7 @@ For commercial licensing, please contact support@quantumnous.com
     background:
       radial-gradient(
         ellipse 80% 55% at 50% -10%,
-        oklch(0.92 0.004 286.32 / 55%),
+        color-mix(in oklch, var(--muted) 55%, transparent),
         transparent 60%
       ),
       var(--background);
@@ -333,10 +329,10 @@ For commercial licensing, please contact support@quantumnous.com
 
   .zen-grid-fade {
     background-image:
-      linear-gradient(oklch(0.141 0.005 285.823 / 6%) 1px, transparent 1px),
+      linear-gradient(color-mix(in oklch, var(--foreground) 6%, transparent) 1px, transparent 1px),
       linear-gradient(
         90deg,
-        oklch(0.141 0.005 285.823 / 6%) 1px,
+        color-mix(in oklch, var(--foreground) 6%, transparent) 1px,
         transparent 1px
       );
     background-size: 56px 56px;
@@ -350,8 +346,8 @@ For commercial licensing, please contact support@quantumnous.com
   .zen-text-glow {
     background: linear-gradient(
       120deg,
-      oklch(0.21 0.006 285.885) 0%,
-      oklch(0.35 0.01 286) 100%
+      var(--foreground) 0%,
+      var(--muted-foreground) 100%
     );
     -webkit-background-clip: text;
     background-clip: text;
@@ -362,7 +358,7 @@ For commercial licensing, please contact support@quantumnous.com
     background:
       radial-gradient(
         ellipse 80% 55% at 50% -10%,
-        oklch(0.274 0.006 286.033 / 55%),
+        color-mix(in oklch, var(--muted) 55%, transparent),
         transparent 60%
       ),
       var(--background);
@@ -377,8 +373,8 @@ For commercial licensing, please contact support@quantumnous.com
   .dark .zen-text-glow {
     background: linear-gradient(
       120deg,
-      oklch(0.985 0 0) 0%,
-      oklch(0.705 0.015 286.067) 100%
+      var(--foreground) 0%,
+      var(--muted-foreground) 100%
     );
     -webkit-background-clip: text;
     background-clip: text;
@@ -806,4 +802,9 @@ For commercial licensing, please contact support@quantumnous.com
   .landing-shimmer-cta-spin {
     animation: none !important;
   }
+}
+
+/* Unlayered so it wins over InputGroup `shadow-xs`. */
+.playground-composer-elevated {
+  box-shadow: var(--playground-composer-shadow);
 }
